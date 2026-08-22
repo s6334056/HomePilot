@@ -32,9 +32,9 @@ export const FileTable: React.FC<FileTableProps> = ({
         <thead>
           <tr>
             <th>Name</th>
-            <th style={{ width: '110px' }}>Size</th>
-            <th style={{ width: '130px' }}>Type</th>
-            <th style={{ width: '160px' }}>Modified</th>
+            <th className="col-size" style={{ width: '110px' }}>Size</th>
+            <th className="col-type" style={{ width: '130px' }}>Type</th>
+            <th className="col-modified" style={{ width: '160px' }}>Modified</th>
           </tr>
         </thead>
         <tbody>
@@ -66,11 +66,11 @@ export const FileTable: React.FC<FileTableProps> = ({
                     {isFocused && <span className="focus-pill">G2 Focused</span>}
                   </div>
                 </td>
-                <td className="cell-muted">
+                <td className="cell-muted col-size">
                   {item.size !== undefined ? formatBytes(item.size) : (item.childrenCount ? `${item.childrenCount} items` : '-')}
                 </td>
-                <td className="cell-muted">{isDir ? 'Directory' : (item.mimeType || 'File')}</td>
-                <td className="cell-muted">
+                <td className="cell-muted col-type">{isDir ? 'Directory' : (item.mimeType || 'File')}</td>
+                <td className="cell-muted col-modified">
                   {item.modifiedAt ? new Date(item.modifiedAt).toLocaleDateString('ja-JP') : '-'}
                 </td>
               </tr>

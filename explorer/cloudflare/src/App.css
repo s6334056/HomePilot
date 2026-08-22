@@ -443,3 +443,23 @@
   color: var(--accent);
   border-color: rgba(88, 166, 255, 0.4);
 }
+
+/* Responsive: narrow phones */
+@media (max-width: 480px) {
+  .toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+/* Responsive: hide G2 Preview on narrow screens */
+@media (max-width: 640px) {
+  .main-content-container .g2-hud-sidebar {
+    display: none;
+  }
+
+  .file-table .col-size,
+  .file-table .col-type,
+  .file-table .col-modified {
+    display: none;
+  }
+}

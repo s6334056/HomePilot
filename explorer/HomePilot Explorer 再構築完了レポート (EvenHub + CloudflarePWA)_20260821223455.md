@@ -130,18 +130,60 @@ HomePilot/explorer/
 
 ### ステップ1: PWA Webアプリの起動 (Cloudflare側)
 ```bash
-cd c:\1\work\github\s6334056\private\work\projects\HomePilot\explorer\cloudflare
+cd C:\1\work\github\s6334056\HomePilot\explorer\cloudflare
 npm install
 npm run dev
 ```
 起動後、ブラウザで `http://localhost:5174` を開きます。
 （PC/スマホ向けExplorer、および画面右側にG2 HUD Display Previewが表示され、同期動作を確認できます）
 
-### ステップ2: EvenHubアプリの起動・シミュレータ (EvenHub側)
+Cloudflare想定のみで実機テスト
+上記のローカルホスト起動した際に表示されるNetworkのipが必要
 ```bash
-cd c:\1\work\github\s6334056\private\work\projects\HomePilot\explorer\evenhub
+cd C:\1\work\github\s6334056\HomePilot\explorer\evenhub
+npx evenhub qr --url "http://192.168.0.2:5174/"
+```
+
+### ステップ2: EvenHubアプリの起動
+```bash
+cd C:\1\work\github\s6334056\HomePilot\explorer\evenhub
 npm install
 npm run dev
 ```
 起動後、`http://localhost:5173` からEvenHubのブートストラップが動作し、PWA（`http://localhost:5174`）へとシームレスに接続されます。
-また、実機転送用のパッケージング（`npm run pack`）や EvenHubシミュレータ起動（`npm run simulator`）も準備されています。
+
+### ステップ3: シミュレータテスト (EvenHub側)
+別のターミナルでEvenHubシミュレータ起動する
+```bash
+cd C:\1\work\github\s6334056\HomePilot\explorer\evenhub
+npm run simulator
+```
+
+## 5. 本番デプロイに向けて
+
+#### ステップ1: 本体ビルド (Cloudflare側)
+```bash
+cd C:\1\work\github\s6334056\HomePilot\explorer\cloudflare
+npm run build
+```
+
+`dist` フォルダを Cloudflare Pages 等にデプロイしてください。
+
+https://dash.cloudflare.com/login  
+
+[参考]QRコードの作成方法
+以下を背景が黒いターミナルで実行
+```
+npx evenhub qr --url "https://homepilot.s6334056.workers.dev/"
+```
+
+### ステップ2: 実機転送用のパッケージング (EvenHub側)
+```bash
+cd C:\1\work\github\s6334056\HomePilot\explorer\evenhub
+npm run pack
+```
+
+`xxx.ehpk` が生成されます。
+`.ehpk` ファイルを [EvenHub Portal](https://hub.evenrealities.com) にアップロードします。
+
+
