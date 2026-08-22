@@ -1,0 +1,12 @@
+{
+  "package_id": "com.evenrealities.homepilot.explorer",
+  "name": "HomePilot Explorer",
+  "edition": "202601",
+  "version": "0.1.0",
+  "min_app_version": "1.0.0",
+  "min_sdk_version": "0.0.14",
+  "tagline": "Explore Home PC Files on Even Realities G2",
+  "description": "Browse your home PC file system and launch AI Agent contexts seamlessly on your smart glasses.",
+  "author": "HomePilot Team",
+  "icon": "icon.png"
+}
