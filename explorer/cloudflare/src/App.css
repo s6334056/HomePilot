@@ -137,6 +137,10 @@
     grid-template-rows: minmax(0, 1fr) auto;
     overflow: hidden;
   }
+
+  .g2-hud-sidebar {
+    max-height: 50vh;
+  }
 }
 
 .content-view {

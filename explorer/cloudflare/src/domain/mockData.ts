@@ -195,6 +195,63 @@ A lightweight application designed to test file system navigation and G2 display
 - Line 3: Deployment instructions
 - Line 4: Debug tips`
               }
+            },
+            {
+              item: {
+                id: 'file-sample-readme',
+                name: 'README1.md',
+                type: 'file',
+                path: '/home/projects/sample-app/README.md',
+                size: 380,
+                mimeType: 'text/markdown',
+                modifiedAt: '2026-08-21T07:35:00Z',
+                content: `# Sample App
+
+A lightweight application designed to test file system navigation and G2 display.
+
+- Line 1: Quick start guide
+- Line 2: Build scripts
+- Line 3: Deployment instructions
+- Line 4: Debug tips`
+              }
+            },
+            {
+              item: {
+                id: 'file-sample-readme',
+                name: 'README2.md',
+                type: 'file',
+                path: '/home/projects/sample-app/README.md',
+                size: 380,
+                mimeType: 'text/markdown',
+                modifiedAt: '2026-08-21T07:35:00Z',
+                content: `# Sample App
+
+A lightweight application designed to test file system navigation and G2 display.
+
+- Line 1: Quick start guide
+- Line 2: Build scripts
+- Line 3: Deployment instructions
+- Line 4: Debug tips`
+              }
+            },
+            {
+              item: {
+                id: 'file-sample-readme',
+                name: 'README3.md',
+                type: 'file',
+                path: '/home/projects/sample-app/README.md',
+                size: 380,
+                mimeType: 'text/markdown',
+                modifiedAt: '2026-08-21T07:35:00Z',
+                content: `# Sample App
+
+A lightweight application designed to test file system navigation and G2 display.
+
+- Line 1: Quick start guide
+- Line 2: Build scripts
+- Line 3: Deployment instructions
+- Line 4: Debug tips`
+              }
             }
           ]
         }
