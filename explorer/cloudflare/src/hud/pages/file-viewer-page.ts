@@ -1,6 +1,6 @@
 import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../page-manager";
-import { FileSystemItem } from "../../domain/types";
+import { FileSystemItem, AgentContext } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
 import { AgentService } from "../../services/AgentService";
 import { AgentPlaceholderPage } from "./agent-placeholder-page";
@@ -15,6 +15,7 @@ export class FileViewerPage extends BasePage {
   private agentService: AgentService;
   private onBackToExplorer: () => Promise<boolean>;
   private onStateChange?: (file: FileSystemItem, content: string) => void;
+  private onAgentStateChange?: (context: AgentContext) => void;
   private content: string = "";
   private lines: string[] = [];
   private scrollLine: number = 0;
@@ -25,7 +26,8 @@ export class FileViewerPage extends BasePage {
     fileService: FileSystemService,
     agentService: AgentService,
     onBackToExplorer: () => Promise<boolean>,
-    onStateChange?: (file: FileSystemItem, content: string) => void
+    onStateChange?: (file: FileSystemItem, content: string) => void,
+    onAgentStateChange?: (context: AgentContext) => void
   ) {
     super();
     this.pageType = "FileViewerPage";
@@ -35,11 +37,14 @@ export class FileViewerPage extends BasePage {
     this.agentService = agentService;
     this.onBackToExplorer = onBackToExplorer;
     this.onStateChange = onStateChange;
+    this.onAgentStateChange = onAgentStateChange;
   }
 
   public async afterRender(): Promise<void> {
     if (this.lines.length === 0) {
       await this.loadFileContent();
+    } else {
+      this.notifyState();
     }
   }
 
@@ -140,6 +145,9 @@ export class FileViewerPage extends BasePage {
 
     const agentPage = new AgentPlaceholderPage(context, () => this.navigate(this));
     await this.navigate(agentPage);
+    if (this.onAgentStateChange) {
+      this.onAgentStateChange(context);
+    }
   }
 
   public async onMenuItemClick(menuId: string) {

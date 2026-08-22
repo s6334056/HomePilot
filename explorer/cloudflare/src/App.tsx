@@ -126,6 +126,11 @@ export function App() {
           setFileContent(c);
           setCurrentScreen('file_viewer');
           setHudPreviewText(pageManager.getLastRenderedText());
+        },
+        (context) => {
+          setAgentContext(context);
+          setCurrentScreen('agent_placeholder');
+          setHudPreviewText(pageManager.getLastRenderedText());
         }
       );
       await pageManager.navigateTo(viewerPage);

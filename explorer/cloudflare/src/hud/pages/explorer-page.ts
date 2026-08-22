@@ -159,7 +159,8 @@ export class ExplorerPage extends BasePage {
         this.fileService,
         this.agentService,
         () => this.navigate(this),
-        this.onFileViewerStateChange
+        this.onFileViewerStateChange,
+        this.onAgentStateChange
       );
       await this.navigate(viewerPage);
     }
