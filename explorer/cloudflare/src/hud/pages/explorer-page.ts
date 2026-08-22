@@ -6,13 +6,14 @@ import { AgentService } from "../../services/AgentService";
 import { FileViewerPage } from "./file-viewer-page";
 import { AgentPlaceholderPage } from "./agent-placeholder-page";
 
-export const G2_MAX_LIST_LINES = 8;
+export const G2_MAX_LIST_LINES = 9;
 export const G2_MAX_LINE_WIDTH = 56;
 
 export class ExplorerPage extends BasePage {
   private currentPath: string;
   private items: FileSystemItem[] = [];
   private selectedIndex: number = 0;
+  private pendingRestoreIndex?: number;
   private fileService: FileSystemService;
   private agentService: AgentService;
   private onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void;
@@ -37,20 +38,28 @@ export class ExplorerPage extends BasePage {
     this.onAgentStateChange = onAgentStateChange;
   }
 
+  public setPendingRestoreIndex(index: number) {
+    this.pendingRestoreIndex = index;
+  }
+
   public async afterRender(): Promise<void> {
     if (this.items.length === 0) {
-      await this.loadDirectory(this.currentPath);
+      const restoreIndex = this.pendingRestoreIndex;
+      this.pendingRestoreIndex = undefined;
+      await this.loadDirectory(this.currentPath, restoreIndex);
     } else {
       this.notifyState();
     }
   }
 
-  public async loadDirectory(path: string) {
+  public async loadDirectory(path: string, restoreIndex?: number) {
     try {
       this.notifyStatus(`Loading ${path}...`);
       this.currentPath = path;
       this.items = await this.fileService.getDirectory(path);
-      this.selectedIndex = 0;
+      this.selectedIndex = restoreIndex != null
+        ? Math.max(0, Math.min(restoreIndex, this.items.length - 1))
+        : 0;
       this.notifyStatus(`Loaded ${this.items.length} items`);
       // Push updated content to G2 glasses immediately after data is ready
       if (this.renderPage) {
@@ -62,6 +71,10 @@ export class ExplorerPage extends BasePage {
     }
   }
 
+  public getSelectedIndex(): number {
+    return this.selectedIndex;
+  }
+
   private notifyState() {
     if (this.onStateChange) {
       this.onStateChange(this.currentPath, this.items, this.selectedIndex);
@@ -70,8 +83,8 @@ export class ExplorerPage extends BasePage {
 
   public render(): PageRenderResult {
     const total = this.items.length;
-    const headerPath = this.truncateName(this.currentPath, 20);
     const pageIndicator = total > 0 ? `[${this.selectedIndex + 1}/${total}]` : "[0/0]";
+    const headerContent = this.buildHeaderLine(this.currentPath, pageIndicator, G2_MAX_LINE_WIDTH);
 
     let bodyText = "";
 
@@ -93,7 +106,7 @@ export class ExplorerPage extends BasePage {
         const actualIdx = start + idx;
         const isFocused = actualIdx === selected;
         const pointer = isFocused ? "> " : "  ";
-        const icon = item.type === "directory" ? "DIR " : "DOC ";
+        const icon = item.type === "directory" ? "[D] " : "[F] ";
         const overhead = this.getStringWidth(pointer) + this.getStringWidth(icon);
         const name = this.truncateName(item.name, G2_MAX_LINE_WIDTH - overhead);
         return `${pointer}${icon}${name}`;
@@ -102,22 +115,36 @@ export class ExplorerPage extends BasePage {
       bodyText = lines.join("\n");
     }
 
-    const fullContent = `${headerPath} ${pageIndicator}\n────────────────────────\n${bodyText}`;
-
-    const textProp = new TextContainerProperty({
+    const headerProp = new TextContainerProperty({
       containerID: 1,
+      containerName: "explorer_header",
+      content: headerContent,
+      xPosition: 4,
+      yPosition: 2,
+      width: 572,
+      height: 28,
+      borderWidth: 0,
+      isEventCapture: 0,
+    });
+
+    const bodyProp = new TextContainerProperty({
+      containerID: 2,
       containerName: "explorer_body",
-      content: fullContent,
-      xPosition: 0,
-      yPosition: 0,
-      width: 576,
-      height: 288,
+      content: bodyText,
+      xPosition: 4,
+      yPosition: 30,
+      width: 572,
+      height: 256,
+      borderWidth: 1,
+      borderColor: 0xFFFFFFFF,
+      borderRadius: 8,
+      paddingLength: 2,
       isEventCapture: 1,
     });
 
     return {
-      containerTotalNum: 1,
-      textObject: [textProp],
+      containerTotalNum: 2,
+      textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
           { id: "refresh", title: "Refresh" },
@@ -177,7 +204,8 @@ export class ExplorerPage extends BasePage {
     // Double tap = Go to parent directory
     const parentPath = this.fileService.getParentPath(this.currentPath);
     if (parentPath !== this.currentPath) {
-      await this.loadDirectory(parentPath);
+      const previousIndex = this.selectedIndex;
+      await this.loadDirectory(parentPath, previousIndex);
       await this.navigate(this);
     }
   }

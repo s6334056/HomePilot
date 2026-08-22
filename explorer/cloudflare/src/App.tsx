@@ -76,7 +76,7 @@ export function App() {
   };
 
   // Web UI Actions
-  const handleNavigate = async (path: string) => {
+  const handleNavigate = async (path: string, restoreIndex?: number) => {
     const page = new ExplorerPage(
       path,
       fileService,
@@ -101,6 +101,9 @@ export function App() {
         setHudPreviewText(pageManager.getLastRenderedText());
       }
     );
+    if (restoreIndex != null) {
+      page.setPendingRestoreIndex(restoreIndex);
+    }
     await pageManager.navigateTo(page);
     refreshHudPreview();
   };
@@ -214,7 +217,7 @@ export function App() {
         g2Status={g2Status}
         onNavigate={handleNavigate}
         onNavigateHome={() => handleNavigate('/home')}
-        onNavigateParent={() => handleNavigate(fileService.getParentPath(currentPath))}
+        onNavigateParent={() => handleNavigate(fileService.getParentPath(currentPath), selectedIndex)}
         onRefresh={() => handleNavigate(currentPath)}
         onOpenAgent={handleOpenAgent}
       />

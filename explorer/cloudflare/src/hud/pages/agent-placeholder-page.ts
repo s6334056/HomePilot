@@ -15,31 +15,56 @@ export class AgentPlaceholderPage extends BasePage {
 
   public render(): PageRenderResult {
     const target = this.context.selectedFile?.name || this.context.selectedItem?.name || this.context.currentPath;
-    const targetTruncated = this.truncateName(target, 22);
+    const targetTruncated = this.truncateName(target, 52);
 
     const bodyText = [
-      "🤖 [HomePilot Agent Ready]",
       "Target:",
       ` ${targetTruncated}`,
       `Source: ${this.context.sourceScreen}`,
-      "────────────────────────",
-      "Double-tap: Return",
     ].join("\n");
 
-    const textProp = new TextContainerProperty({
+    const headerProp = new TextContainerProperty({
       containerID: 1,
+      containerName: "agent_header",
+      content: "🤖 Agent Mode",
+      xPosition: 4,
+      yPosition: 2,
+      width: 572,
+      height: 28,
+      borderWidth: 0,
+      isEventCapture: 0,
+    });
+
+    const bodyProp = new TextContainerProperty({
+      containerID: 2,
       containerName: "agent_body",
-      content: `🤖 Agent Mode\n────────────────────────\n${bodyText}`,
-      xPosition: 0,
-      yPosition: 0,
-      width: 576,
-      height: 288,
+      content: bodyText,
+      xPosition: 4,
+      yPosition: 30,
+      width: 572,
+      height: 228,
+      borderWidth: 1,
+      borderColor: 0xFFFFFFFF,
+      borderRadius: 8,
+      paddingLength: 2,
       isEventCapture: 1,
     });
 
+    const footerProp = new TextContainerProperty({
+      containerID: 3,
+      containerName: "agent_footer",
+      content: "Double-tap: Return",
+      xPosition: 4,
+      yPosition: 262,
+      width: 572,
+      height: 28,
+      borderWidth: 0,
+      isEventCapture: 0,
+    });
+
     return {
-      containerTotalNum: 1,
-      textObject: [textProp],
+      containerTotalNum: 3,
+      textObject: [headerProp, bodyProp, footerProp],
       menuObject: {
         menuList: [{ id: "return", title: "Return to App" }],
       },

@@ -96,6 +96,20 @@ export abstract class BasePage {
     return total;
   }
 
+  /**
+   * Build a header line by combining a prefix (path/filename) and a suffix
+   * (page indicator). The suffix width is measured first, and the remaining
+   * width is used for the prefix (with truncation if needed).
+   */
+  protected buildHeaderLine(prefix: string, suffix: string, maxWidth: number): string {
+    if (!suffix) return this.truncateName(prefix, maxWidth);
+    const suffixWidth = this.getStringWidth(suffix);
+    const spaceWidth = this.getCharWidth(" ");
+    const availableWidth = maxWidth - suffixWidth - spaceWidth;
+    const truncatedPrefix = this.truncateName(prefix, availableWidth);
+    return `${truncatedPrefix} ${suffix}`;
+  }
+
   public truncateName(name: string, maxWidth: number): string {
     let totalWidth = 0;
     for (const char of name) totalWidth += this.getCharWidth(char);

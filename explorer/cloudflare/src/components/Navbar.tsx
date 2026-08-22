@@ -6,7 +6,7 @@ interface NavbarProps {
   g2Status: string;
   onNavigate: (path: string) => void;
   onNavigateHome: () => void;
-  onNavigateParent: () => void;
+  onNavigateParent: (restoreIndex?: number) => void;
   onRefresh: () => void;
   onOpenAgent: () => void;
 }

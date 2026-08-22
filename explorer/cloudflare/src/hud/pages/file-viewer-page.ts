@@ -5,7 +5,7 @@ import { FileSystemService } from "../../services/FileSystemService";
 import { AgentService } from "../../services/AgentService";
 import { AgentPlaceholderPage } from "./agent-placeholder-page";
 
-export const G2_VIEWER_LINES = 6;
+export const G2_VIEWER_LINES = 9;
 export const G2_VIEWER_MAX_WIDTH = 56;
 
 interface WrappedLine {
@@ -159,9 +159,8 @@ export class FileViewerPage extends BasePage {
    */
   private buildWrappedLines(): void {
     this.wrappedLines = [];
-    const textWidth = G2_VIEWER_MAX_WIDTH - 4;
     for (let i = 0; i < this.lines.length; i++) {
-      const visualParts = this.wrapLine(this.lines[i] || " ", textWidth);
+      const visualParts = this.wrapLine(this.lines[i] || " ", G2_VIEWER_MAX_WIDTH);
       for (let j = 0; j < visualParts.length; j++) {
         this.wrappedLines.push({
           text: visualParts[j],
@@ -188,37 +187,44 @@ export class FileViewerPage extends BasePage {
   }
 
   public render(): PageRenderResult {
-    const headerTitle = this.truncateName(this.file.name, 18);
     const range = this.getVisibleLogicalRange();
     const pageIndicator = `[L${range.min}-${range.max}/${range.total}]`;
+    const headerContent = this.buildHeaderLine(this.file.name, pageIndicator, G2_VIEWER_MAX_WIDTH);
 
     const end = Math.min(this.scrollPosition + G2_VIEWER_LINES, this.wrappedLines.length);
     const visibleLines = this.wrappedLines.slice(this.scrollPosition, end);
+    const bodyText = visibleLines.map((wl) => wl.text).join("\n");
 
-    const formattedLines = visibleLines.map((wl) => {
-      const lineNum = wl.isFirstOfLogical
-        ? String(wl.logicalLineIndex + 1).padStart(2, " ")
-        : "  ";
-      return `${lineNum}| ${wl.text}`;
+    const headerProp = new TextContainerProperty({
+      containerID: 1,
+      containerName: "viewer_header",
+      content: headerContent,
+      xPosition: 4,
+      yPosition: 2,
+      width: 572,
+      height: 28,
+      borderWidth: 0,
+      isEventCapture: 0,
     });
 
-    const bodyText = formattedLines.join("\n");
-    const fullContent = `${headerTitle} ${pageIndicator}\n────────────────────────\n${bodyText}`;
-
-    const textProp = new TextContainerProperty({
-      containerID: 1,
-      containerName: "file_viewer_body",
-      content: fullContent,
-      xPosition: 0,
-      yPosition: 0,
-      width: 576,
-      height: 288,
+    const bodyProp = new TextContainerProperty({
+      containerID: 2,
+      containerName: "viewer_body",
+      content: bodyText,
+      xPosition: 4,
+      yPosition: 30,
+      width: 572,
+      height: 256,
+      borderWidth: 1,
+      borderColor: 0xFFFFFFFF,
+      borderRadius: 8,
+      paddingLength: 2,
       isEventCapture: 1,
     });
 
     return {
-      containerTotalNum: 1,
-      textObject: [textProp],
+      containerTotalNum: 2,
+      textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
           { id: "back", title: "Back to Explorer" },
