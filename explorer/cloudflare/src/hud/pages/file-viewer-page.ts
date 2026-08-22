@@ -14,6 +14,7 @@ export class FileViewerPage extends BasePage {
   private fileService: FileSystemService;
   private agentService: AgentService;
   private onBackToExplorer: () => Promise<boolean>;
+  private onStateChange?: (file: FileSystemItem, content: string) => void;
   private content: string = "";
   private lines: string[] = [];
   private scrollLine: number = 0;
@@ -23,7 +24,8 @@ export class FileViewerPage extends BasePage {
     parentPath: string,
     fileService: FileSystemService,
     agentService: AgentService,
-    onBackToExplorer: () => Promise<boolean>
+    onBackToExplorer: () => Promise<boolean>,
+    onStateChange?: (file: FileSystemItem, content: string) => void
   ) {
     super();
     this.pageType = "FileViewerPage";
@@ -32,6 +34,7 @@ export class FileViewerPage extends BasePage {
     this.fileService = fileService;
     this.agentService = agentService;
     this.onBackToExplorer = onBackToExplorer;
+    this.onStateChange = onStateChange;
   }
 
   public async afterRender(): Promise<void> {
@@ -51,12 +54,20 @@ export class FileViewerPage extends BasePage {
       if (this.renderPage) {
         await this.renderPage();
       }
+      this.notifyState();
     } catch (e: any) {
       this.content = `Error reading file: ${e.message}`;
       this.lines = [this.content];
       if (this.renderPage) {
         await this.renderPage();
       }
+      this.notifyState();
+    }
+  }
+
+  private notifyState() {
+    if (this.onStateChange) {
+      this.onStateChange(this.file, this.content);
     }
   }
 

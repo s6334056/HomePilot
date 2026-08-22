@@ -49,6 +49,17 @@ export function App() {
           setCurrentScreen('explorer');
           setSelectedFile(null);
           setHudPreviewText(pageManager.getLastRenderedText());
+        },
+        (file, content) => {
+          setSelectedFile(file);
+          setFileContent(content);
+          setCurrentScreen('file_viewer');
+          setHudPreviewText(pageManager.getLastRenderedText());
+        },
+        (context) => {
+          setAgentContext(context);
+          setCurrentScreen('agent_placeholder');
+          setHudPreviewText(pageManager.getLastRenderedText());
         }
       );
 
@@ -77,6 +88,17 @@ export function App() {
         setCurrentScreen('explorer');
         setSelectedFile(null);
         refreshHudPreview();
+      },
+      (file, content) => {
+        setSelectedFile(file);
+        setFileContent(content);
+        setCurrentScreen('file_viewer');
+        setHudPreviewText(pageManager.getLastRenderedText());
+      },
+      (context) => {
+        setAgentContext(context);
+        setCurrentScreen('agent_placeholder');
+        setHudPreviewText(pageManager.getLastRenderedText());
       }
     );
     await pageManager.navigateTo(page);
@@ -98,6 +120,12 @@ export function App() {
         async () => {
           await handleNavigate(currentPath);
           return true;
+        },
+        (f, c) => {
+          setSelectedFile(f);
+          setFileContent(c);
+          setCurrentScreen('file_viewer');
+          setHudPreviewText(pageManager.getLastRenderedText());
         }
       );
       await pageManager.navigateTo(viewerPage);

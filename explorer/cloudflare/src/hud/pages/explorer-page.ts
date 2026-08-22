@@ -1,6 +1,6 @@
 import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../page-manager";
-import { FileSystemItem } from "../../domain/types";
+import { FileSystemItem, AgentContext } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
 import { AgentService } from "../../services/AgentService";
 import { FileViewerPage } from "./file-viewer-page";
@@ -16,12 +16,16 @@ export class ExplorerPage extends BasePage {
   private fileService: FileSystemService;
   private agentService: AgentService;
   private onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void;
+  private onFileViewerStateChange?: (file: FileSystemItem, content: string) => void;
+  private onAgentStateChange?: (context: AgentContext) => void;
 
   constructor(
     currentPath: string,
     fileService: FileSystemService,
     agentService: AgentService,
-    onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void
+    onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void,
+    onFileViewerStateChange?: (file: FileSystemItem, content: string) => void,
+    onAgentStateChange?: (context: AgentContext) => void
   ) {
     super();
     this.pageType = "ExplorerPage";
@@ -29,11 +33,15 @@ export class ExplorerPage extends BasePage {
     this.fileService = fileService;
     this.agentService = agentService;
     this.onStateChange = onStateChange;
+    this.onFileViewerStateChange = onFileViewerStateChange;
+    this.onAgentStateChange = onAgentStateChange;
   }
 
   public async afterRender(): Promise<void> {
     if (this.items.length === 0) {
       await this.loadDirectory(this.currentPath);
+    } else {
+      this.notifyState();
     }
   }
 
@@ -150,7 +158,8 @@ export class ExplorerPage extends BasePage {
         this.currentPath,
         this.fileService,
         this.agentService,
-        () => this.navigate(this)
+        () => this.navigate(this),
+        this.onFileViewerStateChange
       );
       await this.navigate(viewerPage);
     }
@@ -176,7 +185,9 @@ export class ExplorerPage extends BasePage {
 
     const agentPage = new AgentPlaceholderPage(context, () => this.navigate(this));
     await this.navigate(agentPage);
-    this.notifyState();
+    if (this.onAgentStateChange) {
+      this.onAgentStateChange(context);
+    }
   }
 
   public async onMenuItemClick(menuId: string) {
