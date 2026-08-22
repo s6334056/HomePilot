@@ -90,12 +90,18 @@ export abstract class BasePage {
     return CHAR_WIDTHS[char] ?? 1.0;
   }
 
+  public getStringWidth(str: string): number {
+    let total = 0;
+    for (const char of str) total += this.getCharWidth(char);
+    return total;
+  }
+
   public truncateName(name: string, maxWidth: number): string {
     let totalWidth = 0;
     for (const char of name) totalWidth += this.getCharWidth(char);
     if (totalWidth <= maxWidth) return name;
 
-    const SUFFIX_LEN = 6;
+    const SUFFIX_LEN = 8;
     const suffix = name.substring(Math.max(0, name.length - SUFFIX_LEN));
     let suffixWidth = 0;
     for (const char of suffix) suffixWidth += this.getCharWidth(char);

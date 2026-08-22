@@ -12,7 +12,7 @@ export const MOCK_FILE_SYSTEM_ROOT: MockFileSystemNode = {
     type: 'directory',
     path: '/home',
     modifiedAt: '2026-08-21T10:00:00Z',
-    childrenCount: 3
+    childrenCount: 4
   },
   children: [
     {
@@ -198,10 +198,10 @@ A lightweight application designed to test file system navigation and G2 display
             },
             {
               item: {
-                id: 'file-sample-readme',
+                id: 'file-sample-readme1',
                 name: 'README1.md',
                 type: 'file',
-                path: '/home/projects/sample-app/README.md',
+                path: '/home/projects/sample-app/README1.md',
                 size: 380,
                 mimeType: 'text/markdown',
                 modifiedAt: '2026-08-21T07:35:00Z',
@@ -217,10 +217,10 @@ A lightweight application designed to test file system navigation and G2 display
             },
             {
               item: {
-                id: 'file-sample-readme',
+                id: 'file-sample-readme2',
                 name: 'README2.md',
                 type: 'file',
-                path: '/home/projects/sample-app/README.md',
+                path: '/home/projects/sample-app/README2.md',
                 size: 380,
                 mimeType: 'text/markdown',
                 modifiedAt: '2026-08-21T07:35:00Z',
@@ -236,10 +236,10 @@ A lightweight application designed to test file system navigation and G2 display
             },
             {
               item: {
-                id: 'file-sample-readme',
+                id: 'file-sample-readme3',
                 name: 'README3.md',
                 type: 'file',
-                path: '/home/projects/sample-app/README.md',
+                path: '/home/projects/sample-app/README3.md',
                 size: 380,
                 mimeType: 'text/markdown',
                 modifiedAt: '2026-08-21T07:35:00Z',
@@ -254,6 +254,110 @@ A lightweight application designed to test file system navigation and G2 display
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      item: {
+        id: 'dir-test-names',
+        name: 'test-names',
+        type: 'directory',
+        path: '/home/test-names',
+        modifiedAt: '2026-08-22T10:00:00Z',
+        childrenCount: 8
+      },
+      children: [
+        {
+          item: {
+            id: 'file-short',
+            name: 'readme.md',
+            type: 'file',
+            path: '/home/test-names/readme.md',
+            size: 120,
+            mimeType: 'text/markdown',
+            modifiedAt: '2026-08-22T09:00:00Z',
+            content: '# Short file name test'
+          }
+        },
+        {
+          item: {
+            id: 'file-medium',
+            name: 'project-settings.json',
+            type: 'file',
+            path: '/home/test-names/project-settings.json',
+            size: 340,
+            mimeType: 'application/json',
+            modifiedAt: '2026-08-22T09:01:00Z',
+            content: '{"theme":"dark","lang":"en"}'
+          }
+        },
+        {
+          item: {
+            id: 'file-long',
+            name: 'very-long-project-configuration-file.json',
+            type: 'file',
+            path: '/home/test-names/very-long-project-configuration-file.json',
+            size: 560,
+            mimeType: 'application/json',
+            modifiedAt: '2026-08-22T09:02:00Z',
+            content: '{"config":"long-name-test"}'
+          }
+        },
+        {
+          item: {
+            id: 'dir-medium-name',
+            name: 'development-environment',
+            type: 'directory',
+            path: '/home/test-names/development-environment',
+            modifiedAt: '2026-08-22T09:03:00Z',
+            childrenCount: 0
+          }
+        },
+        {
+          item: {
+            id: 'dir-long-name',
+            name: 'very-long-development-project-directory1-very-long-development-project-directory2-very-long-development-project-directory3',
+            type: 'directory',
+            path: '/home/test-names/very-long-development-project-directory1-very-long-development-project-directory2-very-long-development-project-directory3',
+            modifiedAt: '2026-08-22T09:04:00Z',
+            childrenCount: 0
+          }
+        },
+        {
+          item: {
+            id: 'file-jp-medium',
+            name: '開発環境設定ファイルサンプル.json',
+            type: 'file',
+            path: '/home/test-names/開発環境設定ファイルサンプル.json',
+            size: 400,
+            mimeType: 'application/json',
+            modifiedAt: '2026-08-22T09:05:00Z',
+            content: '{"日本語テスト":"成功"}'
+          }
+        },
+        {
+          item: {
+            id: 'file-jp-long',
+            name: 'とても長いプロジェクトファイル名１とても長いプロジェクトファイル名２とても長いプロジェクトファイル名３.txt',
+            type: 'file',
+            path: '/home/test-names/とても長いプロジェクトファイル名１とても長いプロジェクトファイル名２とても長いプロジェクトファイル名３.txt',
+            size: 200,
+            mimeType: 'text/plain',
+            modifiedAt: '2026-08-22T09:06:00Z',
+            content: 'Japanese long name test'
+          }
+        },
+        {
+          item: {
+            id: 'file-short2',
+            name: 'a.md',
+            type: 'file',
+            path: '/home/test-names/a.md',
+            size: 50,
+            mimeType: 'text/markdown',
+            modifiedAt: '2026-08-22T09:07:00Z',
+            content: 'Minimal name'
+          }
         }
       ]
     },

@@ -7,7 +7,7 @@ import { FileViewerPage } from "./file-viewer-page";
 import { AgentPlaceholderPage } from "./agent-placeholder-page";
 
 export const G2_MAX_LIST_LINES = 6;
-export const G2_MAX_LINE_WIDTH = 26;
+export const G2_MAX_LINE_WIDTH = 56;
 
 export class ExplorerPage extends BasePage {
   private currentPath: string;
@@ -94,7 +94,8 @@ export class ExplorerPage extends BasePage {
         const isFocused = actualIdx === selected;
         const pointer = isFocused ? "> " : "  ";
         const icon = item.type === "directory" ? "DIR " : "DOC ";
-        const name = this.truncateName(item.name, G2_MAX_LINE_WIDTH - 8);
+        const overhead = this.getStringWidth(pointer) + this.getStringWidth(icon);
+        const name = this.truncateName(item.name, G2_MAX_LINE_WIDTH - overhead);
         return `${pointer}${icon}${name}`;
       });
 
