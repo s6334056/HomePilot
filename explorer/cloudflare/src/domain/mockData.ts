@@ -12,7 +12,7 @@ export const MOCK_FILE_SYSTEM_ROOT: MockFileSystemNode = {
     type: 'directory',
     path: '/home',
     modifiedAt: '2026-08-21T10:00:00Z',
-    childrenCount: 5
+    childrenCount: 6
   },
   children: [
     {
@@ -521,6 +521,162 @@ line three
             mimeType: 'image/jpeg',
             modifiedAt: '2026-08-18T14:15:00Z',
             content: '[Binary Image Data: image.jpg (2.0 MB)]'
+          }
+        }
+      ]
+    },
+    {
+      item: {
+        id: 'dir-many-files',
+        name: 'many-files',
+        type: 'directory',
+        path: '/home/many-files',
+        modifiedAt: '2026-08-22T12:00:00Z',
+        childrenCount: 12
+      },
+      children: [
+        {
+          item: {
+            id: 'file-mf-01',
+            name: 'alpha-config.json',
+            type: 'file',
+            path: '/home/many-files/alpha-config.json',
+            size: 200,
+            mimeType: 'application/json',
+            modifiedAt: '2026-08-22T12:01:00Z',
+            content: '{"key":"alpha"}'
+          }
+        },
+        {
+          item: {
+            id: 'file-mf-02',
+            name: 'beta-settings.json',
+            type: 'file',
+            path: '/home/many-files/beta-settings.json',
+            size: 220,
+            mimeType: 'application/json',
+            modifiedAt: '2026-08-22T12:02:00Z',
+            content: '{"key":"beta"}'
+          }
+        },
+        {
+          item: {
+            id: 'file-mf-03',
+            name: 'gamma-log.txt',
+            type: 'file',
+            path: '/home/many-files/gamma-log.txt',
+            size: 340,
+            mimeType: 'text/plain',
+            modifiedAt: '2026-08-22T12:03:00Z',
+            content: 'gamma log entry'
+          }
+        },
+        {
+          item: {
+            id: 'file-mf-04',
+            name: 'delta-notes.md',
+            type: 'file',
+            path: '/home/many-files/delta-notes.md',
+            size: 180,
+            mimeType: 'text/markdown',
+            modifiedAt: '2026-08-22T12:04:00Z',
+            content: '# Delta Notes'
+          }
+        },
+        {
+          item: {
+            id: 'file-mf-05',
+            name: 'epsilon-data.csv',
+            type: 'file',
+            path: '/home/many-files/epsilon-data.csv',
+            size: 560,
+            mimeType: 'text/csv',
+            modifiedAt: '2026-08-22T12:05:00Z',
+            content: 'id,name,value\n1,alpha,100\n2,beta,200'
+          }
+        },
+        {
+          item: {
+            id: 'file-mf-06',
+            name: 'zeta-backup.zip',
+            type: 'file',
+            path: '/home/many-files/zeta-backup.zip',
+            size: 4096,
+            mimeType: 'application/zip',
+            modifiedAt: '2026-08-22T12:06:00Z',
+            content: '[Binary Data: zeta-backup.zip]'
+          }
+        },
+        {
+          item: {
+            id: 'file-mf-07',
+            name: 'eta-script.sh',
+            type: 'file',
+            path: '/home/many-files/eta-script.sh',
+            size: 290,
+            mimeType: 'application/x-sh',
+            modifiedAt: '2026-08-22T12:07:00Z',
+            content: '#!/bin/bash\necho "Hello from eta"'
+          }
+        },
+        {
+          item: {
+            id: 'file-mf-08',
+            name: 'theta-image.png',
+            type: 'file',
+            path: '/home/many-files/theta-image.png',
+            size: 8192,
+            mimeType: 'image/png',
+            modifiedAt: '2026-08-22T12:08:00Z',
+            content: '[Binary Data: theta-image.png]'
+          }
+        },
+        {
+          item: {
+            id: 'file-mf-09',
+            name: 'iota-readme.txt',
+            type: 'file',
+            path: '/home/many-files/iota-readme.txt',
+            size: 150,
+            mimeType: 'text/plain',
+            modifiedAt: '2026-08-22T12:09:00Z',
+            content: 'Iota project readme'
+          }
+        },
+        {
+          item: {
+            id: 'file-mf-10',
+            name: 'kappa-report.pdf',
+            type: 'file',
+            path: '/home/many-files/kappa-report.pdf',
+            size: 16384,
+            mimeType: 'application/pdf',
+            modifiedAt: '2026-08-22T12:10:00Z',
+            content: '[Binary Data: kappa-report.pdf]'
+          }
+        },
+        {
+          item: {
+            id: 'file-mf-11',
+            name: 'lambda-source.go',
+            type: 'file',
+            path: '/home/many-files/lambda-source.go',
+            size: 440,
+            mimeType: 'text/x-go',
+            modifiedAt: '2026-08-22T12:11:00Z',
+            content: 'package main\n\nfunc main() {\n\tfmt.Println("lambda")\n}'
+          }
+        },
+        {
+          item: {
+            id: 'file-mf-12',
+            name: 'mu-archive.tar.gz',
+            type: 'file',
+            path: '/home/many-files/mu-archive.tar.gz',
+            size: 32768,
+            mimeType: 'application/gzip',
+            modifiedAt: '2026-08-22T12:12:00Z',
+            content: '[Binary Data: mu-archive.tar.gz]'
           }
         }
       ]

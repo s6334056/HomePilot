@@ -6,7 +6,7 @@ import { AgentService } from "../../services/AgentService";
 import { FileViewerPage } from "./file-viewer-page";
 import { AgentPlaceholderPage } from "./agent-placeholder-page";
 
-export const G2_MAX_LIST_LINES = 6;
+export const G2_MAX_LIST_LINES = 8;
 export const G2_MAX_LINE_WIDTH = 56;
 
 export class ExplorerPage extends BasePage {
@@ -130,19 +130,25 @@ export class ExplorerPage extends BasePage {
   }
 
   public async onScrollUp() {
+    if (this.items.length === 0) return;
     if (this.selectedIndex > 0) {
       this.selectedIndex--;
-      await this.renderPage();
-      this.notifyState();
+    } else {
+      this.selectedIndex = this.items.length - 1;
     }
+    await this.renderPage();
+    this.notifyState();
   }
 
   public async onScrollDown() {
+    if (this.items.length === 0) return;
     if (this.selectedIndex < this.items.length - 1) {
       this.selectedIndex++;
-      await this.renderPage();
-      this.notifyState();
+    } else {
+      this.selectedIndex = 0;
     }
+    await this.renderPage();
+    this.notifyState();
   }
 
   public async onClick() {
