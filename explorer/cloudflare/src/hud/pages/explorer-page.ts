@@ -13,7 +13,7 @@ export class ExplorerPage extends BasePage {
   private currentPath: string;
   private items: FileSystemItem[] = [];
   private selectedIndex: number = 0;
-  private pendingRestoreIndex?: number;
+  private parentSelectedIndex?: number;
   private fileService: FileSystemService;
   private agentService: AgentService;
   private onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void;
@@ -38,15 +38,9 @@ export class ExplorerPage extends BasePage {
     this.onAgentStateChange = onAgentStateChange;
   }
 
-  public setPendingRestoreIndex(index: number) {
-    this.pendingRestoreIndex = index;
-  }
-
   public async afterRender(): Promise<void> {
     if (this.items.length === 0) {
-      const restoreIndex = this.pendingRestoreIndex;
-      this.pendingRestoreIndex = undefined;
-      await this.loadDirectory(this.currentPath, restoreIndex);
+      await this.loadDirectory(this.currentPath);
     } else {
       this.notifyState();
     }
@@ -69,10 +63,6 @@ export class ExplorerPage extends BasePage {
     } catch (e: any) {
       this.notifyStatus(`Error: ${e.message}`);
     }
-  }
-
-  public getSelectedIndex(): number {
-    return this.selectedIndex;
   }
 
   private notifyState() {
@@ -183,6 +173,7 @@ export class ExplorerPage extends BasePage {
     if (!item) return;
 
     if (item.type === "directory") {
+      this.parentSelectedIndex = this.selectedIndex;
       await this.loadDirectory(item.path);
       await this.navigate(this);
     } else {
@@ -204,8 +195,9 @@ export class ExplorerPage extends BasePage {
     // Double tap = Go to parent directory
     const parentPath = this.fileService.getParentPath(this.currentPath);
     if (parentPath !== this.currentPath) {
-      const previousIndex = this.selectedIndex;
-      await this.loadDirectory(parentPath, previousIndex);
+      const restoreIndex = this.parentSelectedIndex;
+      this.parentSelectedIndex = undefined;
+      await this.loadDirectory(parentPath, restoreIndex);
       await this.navigate(this);
     }
   }

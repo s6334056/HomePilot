@@ -122,7 +122,7 @@ export class FileViewerPage extends BasePage {
           const finishedLine = currentLine.substring(0, splitPos);
           const remaining = currentLine.substring(splitPos);
           result.push(finishedLine.replace(/ +$/, ""));
-          currentLine = (remaining + char).replace(/^ +/, "");
+          currentLine = remaining + char;
           currentWidth = 0;
           for (const c of currentLine) {
             currentWidth += this.getCharWidth(c);
@@ -144,7 +144,7 @@ export class FileViewerPage extends BasePage {
     }
 
     if (currentLine) {
-      const finalLine = currentLine.replace(/^ +/, "").replace(/ +$/, "");
+      const finalLine = currentLine.replace(/ +$/, "");
       if (finalLine) {
         result.push(finalLine);
       }
