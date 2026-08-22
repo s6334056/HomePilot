@@ -6,7 +6,13 @@ import { AgentService } from "../../services/AgentService";
 import { AgentPlaceholderPage } from "./agent-placeholder-page";
 
 export const G2_VIEWER_LINES = 6;
-export const G2_VIEWER_MAX_WIDTH = 26;
+export const G2_VIEWER_MAX_WIDTH = 56;
+
+interface WrappedLine {
+  text: string;
+  logicalLineIndex: number;
+  isFirstOfLogical: boolean;
+}
 
 export class FileViewerPage extends BasePage {
   private file: FileSystemItem;
@@ -18,7 +24,8 @@ export class FileViewerPage extends BasePage {
   private onAgentStateChange?: (context: AgentContext) => void;
   private content: string = "";
   private lines: string[] = [];
-  private scrollLine: number = 0;
+  private wrappedLines: WrappedLine[] = [];
+  private scrollPosition: number = 0;
 
   constructor(
     file: FileSystemItem,
@@ -52,10 +59,10 @@ export class FileViewerPage extends BasePage {
     try {
       this.notifyStatus(`Reading ${this.file.name}...`);
       this.content = await this.fileService.readFile(this.file.path);
-      this.lines = this.content.split("\n");
-      this.scrollLine = 0;
+      this.lines = this.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+      this.scrollPosition = 0;
+      this.buildWrappedLines();
       this.notifyStatus(`Loaded ${this.lines.length} lines`);
-      // Push updated content to G2 glasses immediately after data is ready
       if (this.renderPage) {
         await this.renderPage();
       }
@@ -63,6 +70,8 @@ export class FileViewerPage extends BasePage {
     } catch (e: any) {
       this.content = `Error reading file: ${e.message}`;
       this.lines = [this.content];
+      this.scrollPosition = 0;
+      this.buildWrappedLines();
       if (this.renderPage) {
         await this.renderPage();
       }
@@ -76,16 +85,121 @@ export class FileViewerPage extends BasePage {
     }
   }
 
-  public render(): PageRenderResult {
-    const totalLines = this.lines.length;
-    const headerTitle = this.truncateName(this.file.name, 18);
-    const pageIndicator = `[L${this.scrollLine + 1}-${Math.min(this.scrollLine + G2_VIEWER_LINES, totalLines)}/${totalLines}]`;
+  /**
+   * Wrap a single text line to fit within maxWidth using getCharWidth() for
+   * proportional character width calculation. Tries to break at word boundaries
+   * (half-width alphanumeric/symbol sequences) to avoid splitting words.
+   */
+  private wrapLine(text: string, maxWidth: number): string[] {
+    if (!text) return [""];
+    const result: string[] = [];
+    let currentLine = "";
+    let currentWidth = 0;
 
-    const visibleLines = this.lines.slice(this.scrollLine, this.scrollLine + G2_VIEWER_LINES);
-    const formattedLines = visibleLines.map((line, idx) => {
-      const lineNum = String(this.scrollLine + idx + 1).padStart(2, " ");
-      const text = this.truncateName(line || " ", G2_VIEWER_MAX_WIDTH - 4);
-      return `${lineNum}| ${text}`;
+    const isHalfWidthAlphaSym = (char: string) => {
+      return char >= "\u0021" && char <= "\u007e";
+    };
+
+    for (const char of text) {
+      const w = this.getCharWidth(char);
+      if (currentWidth + w > maxWidth + 0.01) {
+        let splitPos = currentLine.length;
+
+        if (
+          currentLine.length > 0 &&
+          isHalfWidthAlphaSym(currentLine[currentLine.length - 1]) &&
+          isHalfWidthAlphaSym(char)
+        ) {
+          for (let j = currentLine.length - 1; j >= 0; j--) {
+            if (!isHalfWidthAlphaSym(currentLine[j])) {
+              splitPos = j + 1;
+              break;
+            }
+          }
+        }
+
+        if (splitPos > 0 && splitPos < currentLine.length) {
+          const finishedLine = currentLine.substring(0, splitPos);
+          const remaining = currentLine.substring(splitPos);
+          result.push(finishedLine.replace(/ +$/, ""));
+          currentLine = (remaining + char).replace(/^ +/, "");
+          currentWidth = 0;
+          for (const c of currentLine) {
+            currentWidth += this.getCharWidth(c);
+          }
+        } else {
+          result.push(currentLine.replace(/ +$/, ""));
+          if (char === " ") {
+            currentLine = "";
+            currentWidth = 0;
+          } else {
+            currentLine = char;
+            currentWidth = w;
+          }
+        }
+      } else {
+        currentLine += char;
+        currentWidth += w;
+      }
+    }
+
+    if (currentLine) {
+      const finalLine = currentLine.replace(/^ +/, "").replace(/ +$/, "");
+      if (finalLine) {
+        result.push(finalLine);
+      }
+    }
+    return result.length > 0 ? result : [""];
+  }
+
+  /**
+   * Convert logical lines to visual lines with wrapping.
+   * Each WrappedLine knows which logical line it belongs to and whether it is
+   * the first visual line of that logical line (for line number display).
+   */
+  private buildWrappedLines(): void {
+    this.wrappedLines = [];
+    const textWidth = G2_VIEWER_MAX_WIDTH - 4;
+    for (let i = 0; i < this.lines.length; i++) {
+      const visualParts = this.wrapLine(this.lines[i] || " ", textWidth);
+      for (let j = 0; j < visualParts.length; j++) {
+        this.wrappedLines.push({
+          text: visualParts[j],
+          logicalLineIndex: i,
+          isFirstOfLogical: j === 0,
+        });
+      }
+    }
+  }
+
+  /**
+   * Get the range of logical line numbers visible on the current screen.
+   * Returns 1-indexed values for display.
+   */
+  private getVisibleLogicalRange(): { min: number; max: number; total: number } {
+    const end = Math.min(this.scrollPosition + G2_VIEWER_LINES, this.wrappedLines.length);
+    const minLogical = this.wrappedLines.length > 0
+      ? this.wrappedLines[this.scrollPosition].logicalLineIndex + 1
+      : 1;
+    const maxLogical = this.wrappedLines.length > 0
+      ? this.wrappedLines[end - 1].logicalLineIndex + 1
+      : 1;
+    return { min: minLogical, max: maxLogical, total: this.lines.length };
+  }
+
+  public render(): PageRenderResult {
+    const headerTitle = this.truncateName(this.file.name, 18);
+    const range = this.getVisibleLogicalRange();
+    const pageIndicator = `[L${range.min}-${range.max}/${range.total}]`;
+
+    const end = Math.min(this.scrollPosition + G2_VIEWER_LINES, this.wrappedLines.length);
+    const visibleLines = this.wrappedLines.slice(this.scrollPosition, end);
+
+    const formattedLines = visibleLines.map((wl) => {
+      const lineNum = wl.isFirstOfLogical
+        ? String(wl.logicalLineIndex + 1).padStart(2, " ")
+        : "  ";
+      return `${lineNum}| ${wl.text}`;
     });
 
     const bodyText = formattedLines.join("\n");
@@ -110,32 +224,37 @@ export class FileViewerPage extends BasePage {
           { id: "back", title: "Back to Explorer" },
           { id: "agent", title: "Ask Agent" },
           { id: "top", title: "Scroll to Top" },
+          { id: "bottom", title: "Scroll to Bottom" },
         ],
       },
     };
   }
 
+  /**
+   * Scroll up by one visual line.
+   */
   public async onScrollUp() {
-    if (this.scrollLine > 0) {
-      this.scrollLine = Math.max(0, this.scrollLine - 2);
+    if (this.scrollPosition > 0) {
+      this.scrollPosition--;
       if (this.renderPage) await this.renderPage();
     }
   }
 
+  /**
+   * Scroll down by one visual line.
+   */
   public async onScrollDown() {
-    if (this.scrollLine < this.lines.length - 1) {
-      this.scrollLine = Math.min(this.lines.length - 1, this.scrollLine + 2);
+    if (this.scrollPosition < this.wrappedLines.length - G2_VIEWER_LINES) {
+      this.scrollPosition++;
       if (this.renderPage) await this.renderPage();
     }
   }
 
   public async onDoubleClick() {
-    // Double tap = Return to Explorer
     await this.onBackToExplorer();
   }
 
   public async onLongPress() {
-    // Long press = Launch Agent with file context
     const context = this.agentService.open({
       path: this.parentPath,
       selectedFile: this.file,
@@ -159,7 +278,11 @@ export class FileViewerPage extends BasePage {
         await this.onLongPress();
         break;
       case "top":
-        this.scrollLine = 0;
+        this.scrollPosition = 0;
+        if (this.renderPage) await this.renderPage();
+        break;
+      case "bottom":
+        this.scrollPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
         if (this.renderPage) await this.renderPage();
         break;
     }

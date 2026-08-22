@@ -12,7 +12,7 @@ export const MOCK_FILE_SYSTEM_ROOT: MockFileSystemNode = {
     type: 'directory',
     path: '/home',
     modifiedAt: '2026-08-21T10:00:00Z',
-    childrenCount: 4
+    childrenCount: 5
   },
   children: [
     {
@@ -357,6 +357,146 @@ A lightweight application designed to test file system navigation and G2 display
             mimeType: 'text/markdown',
             modifiedAt: '2026-08-22T09:07:00Z',
             content: 'Minimal name'
+          }
+        }
+      ]
+    },
+    {
+      item: {
+        id: 'dir-test-viewer',
+        name: 'test-viewer',
+        type: 'directory',
+        path: '/home/test-viewer',
+        modifiedAt: '2026-08-22T11:00:00Z',
+        childrenCount: 8
+      },
+      children: [
+        {
+          item: {
+            id: 'file-v-short',
+            name: 'short-lines.txt',
+            type: 'file',
+            path: '/home/test-viewer/short-lines.txt',
+            size: 80,
+            mimeType: 'text/plain',
+            modifiedAt: '2026-08-22T11:01:00Z',
+            content: `hello world
+foo bar
+short line
+another line
+done`
+          }
+        },
+        {
+          item: {
+            id: 'file-v-long',
+            name: 'long-code-lines.js',
+            type: 'file',
+            path: '/home/test-viewer/long-code-lines.js',
+            size: 620,
+            mimeType: 'text/javascript',
+            modifiedAt: '2026-08-22T11:02:00Z',
+            content: `const veryVeryVeryVeryVeryVeryVeryLongFunctionName = require('some-very-long-module-name-that-goes-on');
+function calculateTotalPriceWithDiscountAndTax(basePrice, discountRate, taxRate, shippingCost) { return basePrice * (1 - discountRate) * (1 + taxRate) + shippingCost; }
+const result = calculateTotalPriceWithDiscountAndTax(100, 0.15, 0.08, 12.50);
+console.log('Total:', result);`
+          }
+        },
+        {
+          item: {
+            id: 'file-v-japanese',
+            name: 'japanese-text.txt',
+            type: 'file',
+            path: '/home/test-viewer/japanese-text.txt',
+            size: 400,
+            mimeType: 'text/plain',
+            modifiedAt: '2026-08-22T11:03:00Z',
+            content: `短い行
+この文章は非常に長いため、G2のHUD上では複数の視覚行に折り返されることになります。折り返しの動作を確認するために作成したテストデータです。
+次の行は短いです。
+日本語とEnglishと12345の混在行。記号 !@#$% も含みます。
+完了`
+          }
+        },
+        {
+          item: {
+            id: 'file-v-empty',
+            name: 'empty-and-blank.txt',
+            type: 'file',
+            path: '/home/test-viewer/empty-and-blank.txt',
+            size: 120,
+            mimeType: 'text/plain',
+            modifiedAt: '2026-08-22T11:04:00Z',
+            content: `line before empty
+
+
+line after two empties
+
+final line`
+          }
+        },
+        {
+          item: {
+            id: 'file-v-mixed',
+            name: 'mixed-length-lines.md',
+            type: 'file',
+            path: '/home/test-viewer/mixed-length-lines.md',
+            size: 580,
+            mimeType: 'text/markdown',
+            modifiedAt: '2026-08-22T11:05:00Z',
+            content: `# Title
+short
+This is a medium length line that should fit on a single visual line without wrapping
+x
+This is another extremely long line that will definitely need to be wrapped across multiple visual lines because it exceeds the maximum display width of the G2 HUD viewer
+y
+done`
+          }
+        },
+        {
+          item: {
+            id: 'file-v-verylong',
+            name: 'single-extremely-long-line.txt',
+            type: 'file',
+            path: '/home/test-viewer/single-extremely-long-line.txt',
+            size: 450,
+            mimeType: 'text/plain',
+            modifiedAt: '2026-08-22T11:06:00Z',
+            content: `This is a single extremely long line that has no line breaks at all and will need to be wrapped across many many visual lines to fit within the G2 HUD display width of approximately 56 character width units which should result in roughly 3 to 5 visual lines depending on the character widths of the specific characters used in this line of text`
+          }
+        },
+        {
+          item: {
+            id: 'file-v-tabs',
+            name: 'code-with-indentation.py',
+            type: 'file',
+            path: '/home/test-viewer/code-with-indentation.py',
+            size: 340,
+            mimeType: 'text/x-python',
+            modifiedAt: '2026-08-22T11:07:00Z',
+            content: `def greet(name):
+    if name:
+        print(f"Hello, {name}!")
+    else:
+        print("Hello, World!")
+
+greet("HomePilot")
+greet("")`
+          }
+        },
+        {
+          item: {
+            id: 'file-v-crlf',
+            name: 'trailing-newlines.txt',
+            type: 'file',
+            path: '/home/test-viewer/trailing-newlines.txt',
+            size: 100,
+            mimeType: 'text/plain',
+            modifiedAt: '2026-08-22T11:08:00Z',
+            content: `line one
+line two
+line three
+`
           }
         }
       ]
