@@ -60,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={() => onNavigate('/home')}
           title="Root"
         >
-          📁 /
+          📁
         </span>
         {segments.map((seg, idx) => {
           accumulatedPath += '/' + seg;

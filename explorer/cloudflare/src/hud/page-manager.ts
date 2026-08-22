@@ -1,6 +1,8 @@
 import {
   CreateStartUpPageContainer,
   type EvenAppBridge,
+  MenuContainerProperty,
+  MenuItemProperty,
   OsEventTypeList,
   StartUpPageCreateResult,
   RebuildPageContainer,
@@ -122,6 +124,7 @@ export class PageManager {
   private isStartupCreated: boolean = false;
   private onStatusUpdate?: (status: string) => void;
   private lastRenderedText: string = '';
+  private menuItemIdMap: Map<number, string> = new Map();
 
   constructor(onStatusUpdate?: (status: string) => void) {
     this.onStatusUpdate = onStatusUpdate;
@@ -186,6 +189,20 @@ export class PageManager {
       return;
     }
 
+    // Build MenuContainerProperty from page's menuList
+    let menuContainer: MenuContainerProperty | undefined;
+    if (renderResult.menuObject?.menuList?.length) {
+      this.menuItemIdMap.clear();
+      const menuItems = renderResult.menuObject.menuList.map((item, index) => {
+        const numericId = index + 1;
+        this.menuItemIdMap.set(numericId, item.id);
+        return new MenuItemProperty({ itemID: numericId, itemName: item.title });
+      });
+      menuContainer = new MenuContainerProperty({ menuItems });
+    } else {
+      this.menuItemIdMap.clear();
+    }
+
     try {
       if (!this.isStartupCreated) {
         const startupConfig = new CreateStartUpPageContainer({
@@ -193,6 +210,7 @@ export class PageManager {
           textObject: textContainers as any,
           listObject: renderResult.listObject as any,
           imageObject: renderResult.imageObject as any,
+          menuObject: menuContainer,
         });
         const result: StartUpPageCreateResult = await this.bridge.createStartUpPageContainer(startupConfig);
         if (result === StartUpPageCreateResult.success) {
@@ -204,6 +222,7 @@ export class PageManager {
           textObject: textContainers as any,
           listObject: renderResult.listObject as any,
           imageObject: renderResult.imageObject as any,
+          menuObject: menuContainer,
         });
         await this.bridge.rebuildPageContainer(rebuildConfig);
       }
@@ -232,8 +251,11 @@ export class PageManager {
 
       // Menu item click (context menu on G2)
       if (event.menuItemClickEvent) {
-        const menuId = event.menuItemClickEvent.itemID;
-        this.currentPage.onMenuItemClick(String(menuId), event);
+        const numericId = event.menuItemClickEvent.itemID;
+        const stringId = numericId != null ? this.menuItemIdMap.get(numericId) ?? String(numericId) : undefined;
+        if (stringId) {
+          this.currentPage.onMenuItemClick(stringId, event);
+        }
         return;
       }
 
