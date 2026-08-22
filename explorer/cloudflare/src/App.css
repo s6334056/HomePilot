@@ -127,14 +127,15 @@
   display: grid;
   grid-template-columns: 1fr 340px;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
 @media (max-width: 900px) {
   .main-content-container {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
-    overflow-y: auto;
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow: hidden;
   }
 }
 
