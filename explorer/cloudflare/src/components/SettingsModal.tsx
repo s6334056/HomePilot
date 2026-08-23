@@ -22,8 +22,6 @@ import {
 } from '../services/ConnectionConfig';
 import { QRScanner } from './QRScanner';
 import { CameraTest } from './CameraTest';
-import { QRDecodeTest } from './QRDecodeTest';
-import { QRLibraryTest } from './QRLibraryTest';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -51,8 +49,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [copied, setCopied] = useState<boolean>(false);
   const [connected, setConnected] = useState<boolean>(false);
   const [showCameraTest, setShowCameraTest] = useState<boolean>(false);
-  const [showQRDecodeTest, setShowQRDecodeTest] = useState<boolean>(false);
-  const [showQRLibraryTest, setShowQRLibraryTest] = useState<boolean>(false);
   const pasteInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -65,8 +61,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setCopied(false);
       setShowQRScanner(false);
       setShowCameraTest(false);
-      setShowQRDecodeTest(false);
-      setShowQRLibraryTest(false);
     }
   }, [isOpen]);
 
@@ -208,20 +202,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <Camera size={14} />
                 カメラテスト
               </button>
-              <button
-                className="btn"
-                onClick={() => setShowQRDecodeTest(true)}
-              >
-                <Camera size={14} />
-                QRデコードテスト
-              </button>
-              <button
-                className="btn"
-                onClick={() => setShowQRLibraryTest(true)}
-              >
-                <Camera size={14} />
-                jsQRテスト
-              </button>
               {config && (
                 <button className="btn btn-danger" onClick={handleClearConnection}>
                   <Trash2 size={14} />
@@ -248,22 +228,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <section className="settings-section">
               <h3>カメラテスト (デバッグ)</h3>
               <CameraTest onClose={() => setShowCameraTest(false)} />
-            </section>
-          )}
-
-          {/* QR Decode Test (Debug) */}
-          {showQRDecodeTest && (
-            <section className="settings-section">
-              <h3>QRデコードテスト (デバッグ)</h3>
-              <QRDecodeTest onClose={() => setShowQRDecodeTest(false)} />
-            </section>
-          )}
-
-          {/* jsQR Library Test (Debug) */}
-          {showQRLibraryTest && (
-            <section className="settings-section">
-              <h3>jsQRテスト (デバッグ)</h3>
-              <QRLibraryTest onClose={() => setShowQRLibraryTest(false)} />
             </section>
           )}
 

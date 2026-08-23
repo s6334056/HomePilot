@@ -84,6 +84,17 @@ cd C:\1\work\github\s6334056\HomePilot\explorer\evenhub
 npx evenhub qr --url "http://192.168.0.2:5174/"
 ```
 
+カメラ起動をテストするときのノウハウメモ（PCブラウザ、スマホブラウザでカメラを使うためにhttps化する方法）
+上記でcloudflare相当の開発サーバを起動したあとに別ターミナルで以下を実施
+```
+cd C:\1\work\github\s6334056\HomePilot\tools
+cloudflared.exe tunnel --url http://192.168.0.2:5174/
+```
+これで以下のような一時的にhttpsでアクセスできるurlをランダムにつくることができる
+https://xxxxxxxxxxxxxxxxxxxxxxxxxx.trycloudflare.com
+
+このURLを何らかの手段でスマホに渡せばok
+
 ### ステップ2: EvenHubアプリの起動
 ```bash
 cd C:\1\work\github\s6334056\HomePilot\explorer\evenhub
