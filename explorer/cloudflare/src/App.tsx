@@ -4,7 +4,9 @@ import { ExplorerPage } from './hud/pages/explorer-page';
 import { FileViewerPage } from './hud/pages/file-viewer-page';
 import { AgentPlaceholderPage } from './hud/pages/agent-placeholder-page';
 import { MockFileSystemService } from './services/MockFileSystemService';
+import { GatewayFileSystemService } from './services/GatewayFileSystemService';
 import { AgentService } from './services/AgentService';
+import { FileSystemService } from './services/FileSystemService';
 import { FileSystemItem, ScreenType, AgentContext } from './domain/types';
 import { Navbar } from './components/Navbar';
 import { FileTable } from './components/FileTable';
@@ -13,12 +15,29 @@ import { AgentPanel } from './components/AgentPanel';
 import { Glasses, ChevronUp, ChevronDown, MousePointer, CornerUpLeft, Bot, RefreshCw, Home } from 'lucide-react';
 import './App.css';
 
+function createFileService(): FileSystemService {
+  const mode = import.meta.env.VITE_FILE_SERVICE_MODE || 'mock';
+  const gatewayUrl = import.meta.env.VITE_GATEWAY_URL || 'http://127.0.0.1:51887';
+  const token = import.meta.env.VITE_GATEWAY_TOKEN || '';
+
+  if (mode === 'gateway' && token) {
+    return new GatewayFileSystemService(gatewayUrl, token);
+  }
+  return new MockFileSystemService();
+}
+
+function isGatewayService(s: FileSystemService): s is GatewayFileSystemService {
+  return s instanceof GatewayFileSystemService;
+}
+
 export function App() {
-  const [fileService] = useState(() => new MockFileSystemService());
+  const [fileService] = useState<FileSystemService>(() => createFileService());
   const [agentService] = useState(() => new AgentService());
   const [pageManager] = useState(() => new PageManager((status) => setG2Status(status)));
 
-  const [currentPath, setCurrentPath] = useState<string>('/home');
+  const [currentPath, setCurrentPath] = useState<string>(() =>
+    isGatewayService(fileService) ? '' : '/home'
+  );
   const [items, setItems] = useState<FileSystemItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('explorer');
@@ -30,16 +49,29 @@ export function App() {
 
   const isInitializedRef = useRef(false);
 
-  // Initialize G2 SDK and Explorer Page
+  const getRootPath = () => {
+    if (isGatewayService(fileService)) {
+      return (fileService as GatewayFileSystemService).getRootPath();
+    }
+    return '/home';
+  };
+
   useEffect(() => {
     if (isInitializedRef.current) return;
     isInitializedRef.current = true;
 
     const init = async () => {
+      if (isGatewayService(fileService)) {
+        await (fileService as GatewayFileSystemService).initialize();
+      }
+
+      const rootPath = getRootPath();
+      setCurrentPath(rootPath);
+
       await pageManager.initialize();
 
       const explorerPage = new ExplorerPage(
-        '/home',
+        rootPath,
         fileService,
         agentService,
         (path, loadedItems, selected) => {
@@ -213,7 +245,7 @@ export function App() {
         currentPath={currentPath}
         g2Status={g2Status}
         onNavigate={handleNavigate}
-        onNavigateHome={() => handleNavigate('/home')}
+        onNavigateHome={() => handleNavigate(getRootPath())}
         onNavigateParent={() => handleNavigate(fileService.getParentPath(currentPath))}
         onRefresh={() => handleNavigate(currentPath)}
         onOpenAgent={handleOpenAgent}
