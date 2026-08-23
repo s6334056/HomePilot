@@ -1,5 +1,5 @@
 import { resolve, normalize, relative, isAbsolute } from 'node:path';
-import { realPathSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 
 export function validatePath(requestedPath, rootPath) {
   if (!requestedPath || typeof requestedPath !== 'string') {
@@ -19,7 +19,7 @@ export function validatePath(requestedPath, rootPath) {
   const rel = relative(rootResolved, resolved);
   if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) {
     try {
-      const real = realPathSync(resolved);
+      const real = realpathSync(resolved);
       const realRel = relative(rootResolved, real);
       if (realRel === '' || (!realRel.startsWith('..') && !isAbsolute(realRel))) {
         return { valid: true, resolvedPath: real };
