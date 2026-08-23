@@ -1,65 +1,7 @@
-# HomePilot Explorer 再構築完了レポート (EvenHub + Cloudflare/PWA)
 
-最重要参考資料である **[DocsReader4EH](https://github.com/sYamcsPublic/DocsReader4EH)** のアーキテクチャテンプレートに完全準拠し、EvenHubアプリ（`evenhub/`）と Cloudflare/PWAアプリ（`cloudflare/`）を明確に分離した実動構成への再構築を完了しました。
+# readme_HomePilot-Explorer (EvenHub + Cloudflare/PWA)
 
----
-
-## 1. DocsReader4EHの構造適用と役割分担
-
-```mermaid
-graph TD
-    subgraph EvenHub Application ["evenhub/ (Port 5173 / .ehpk)"]
-        EH_Config["app.json (com.evenrealities.homepilot.explorer)"]
-        EH_Boot["src/App.tsx (PWA Launcher & Bridge Sync)"]
-        EH_Pack["evenhub pack -> HomePilotExplorer.ehpk"]
-    end
-
-    subgraph Cloudflare PWA Application ["cloudflare/ (Port 5174 / PWA Web App)"]
-        subgraph G2 HUD Layer ["G2 HUD Engine (src/hud/)"]
-            PageMgr["PageManager (EvenAppBridge & Event Dispatcher)"]
-            ExpPage["ExplorerPage (List, Focus '>', Double-Tap Parent)"]
-            ViewPage["FileViewerPage (Text Paging & Scroll)"]
-            AgentPage["AgentPlaceholderPage (Context Preview)"]
-        end
-
-        subgraph Service & Domain Layer ["Core Domain & Services"]
-            FSService["FileSystemService (Gateway Interface)"]
-            MockFS["MockFileSystemService (/home, /documents, /projects, /photos)"]
-            AgentSvc["AgentService (Context Forwarding)"]
-        end
-
-        subgraph Web UI Layer ["PC & Mobile Web UI (src/components/)"]
-            Navbar["Navbar & Breadcrumbs"]
-            FileTable["FileTable (Multi-device view)"]
-            FileViewer["FileViewer (Web text view)"]
-            AgentPanel["AgentPanel (Agent status)"]
-        end
-    end
-
-    subgraph Hardware
-        G2Glasses["Even Realities G2 Smart Glasses"]
-    end
-
-    EH_Boot -->|Redirects / Loads in WebView| Cloudflare PWA Application
-    PageMgr <-->|Bridge & onEvenHubEvent| G2Glasses
-    ExpPage --> Service & Domain Layer
-    ViewPage --> Service & Domain Layer
-    AgentPage --> Service & Domain Layer
-    Web UI Layer --> Service & Domain Layer
-```
-
-### DocsReader4EHから継承・適用した具体的な設計
-1. **`evenhub/` と `cloudflare/` の分離**:
-   - `evenhub/`: EvenHubスマートフォンアプリ内にインストールされるネイティブパッケージ（`app.json`, `dist/`, `.ehpk`）。
-   - `cloudflare/`: G2グラス向けHUDエンジン（`src/hud/`）とPC/スマホ向けWeb UI（`src/components/`）を併せ持つPWA本体。
-2. **`PageManager` / `BasePage` パターンの採用**:
-   - DocsReader4EHの `cloudflare/src/hud/page-manager.ts` をベースに、`waitForEvenAppBridge()`、`CreateStartUpPageContainer` / `RebuildPageContainer` によるコンテナ描画、`onEvenHubEvent`（スクロール、タップ、ダブルタップ、長押し、メニュー選択）の安全なルーティング機構を実装。
-3. **G2ハードウェア向け文字幅テーブル (`getCharWidth` / `truncateName`)**:
-   - 全角2.0、半角文字種別の計測テーブルに基づき、G2グラス上での文字列はみ出しを確実に防止。
-
----
-
-## 2. ディレクトリ構成と作成ファイル一覧
+## 2. ディレクトリ構成とファイル一覧ざっくり
 
 ```text
 HomePilot/explorer/
@@ -108,7 +50,7 @@ HomePilot/explorer/
 
 ---
 
-## 3. 操作体系
+## 2. 操作体系
 
 | 画面 | 操作 | G2グラス / シミュレータでの動作 |
 | :--- | :--- | :--- |
@@ -124,9 +66,7 @@ HomePilot/explorer/
 
 ---
 
-## 4. 動作確認コマンド（人間が実行）
-
-開発環境の制約に基づき、AI側でのコマンド実行は行っておりません。以下の手順で各サーバーを起動して確認してください。
+## 3. 動作確認コマンド（人間が実行）
 
 ### ステップ1: PWA Webアプリの起動 (Cloudflare側)
 ```bash

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { PageManager } from './hud/page-manager';
 import { ExplorerPage } from './hud/pages/explorer-page';
 import { FileViewerPage } from './hud/pages/file-viewer-page';
@@ -61,14 +61,14 @@ export function App() {
     isInitializedRef.current = true;
 
     const init = async () => {
+      await pageManager.initialize();
+
       if (isGatewayService(fileService)) {
         await (fileService as GatewayFileSystemService).initialize();
       }
 
       const rootPath = getRootPath();
       setCurrentPath(rootPath);
-
-      await pageManager.initialize();
 
       const explorerPage = new ExplorerPage(
         rootPath,

@@ -5,6 +5,7 @@ export class GatewayFileSystemService implements FileSystemService {
   private baseUrl: string;
   private token: string;
   private rootPath: string;
+  private _isAvailable: boolean = false;
 
   constructor(baseUrl: string, token: string) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
@@ -13,10 +14,21 @@ export class GatewayFileSystemService implements FileSystemService {
   }
 
   async initialize(): Promise<void> {
-    const res = await this.request('/api/fs/root');
-    if (!res.ok) throw new Error(`Failed to initialize gateway: ${res.status}`);
-    const data = await res.json();
-    this.rootPath = data.path;
+    try {
+      const res = await this.request('/api/fs/root');
+      if (!res.ok) throw new Error(`Failed to initialize gateway: ${res.status}`);
+      const data = await res.json();
+      this.rootPath = data.path;
+      this._isAvailable = true;
+    } catch (e) {
+      console.warn('[GatewayFileSystemService] Gateway unavailable:', e);
+      this.rootPath = '';
+      this._isAvailable = false;
+    }
+  }
+
+  get isAvailable(): boolean {
+    return this._isAvailable;
   }
 
   getRootPath(): string {
@@ -86,6 +98,15 @@ export class GatewayFileSystemService implements FileSystemService {
 
       const fileRes = await this.request(`/api/fs/file?path=${encoded}`);
       if (fileRes.ok) {
+        return {
+          id: path,
+          name: path.split(/[\/\\]/).pop() || '',
+          type: 'file',
+          path,
+        };
+      }
+
+      if (fileRes.status === 413 || fileRes.status === 415) {
         return {
           id: path,
           name: path.split(/[\/\\]/).pop() || '',
