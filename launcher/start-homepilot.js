@@ -1,0 +1,266 @@
+import { spawn } from 'node:child_process';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const HOME_ROOT = resolve(__dirname, '..');
+
+const GATEWAY_DIR = join(HOME_ROOT, 'gateway');
+const GATEWAY_SCRIPT = join(GATEWAY_DIR, 'src', 'index.js');
+const CLOUDFLARED_PATH = join(HOME_ROOT, 'tools', 'cloudflared.exe');
+
+const GATEWAY_HOST = '127.0.0.1';
+const GATEWAY_PORT = 51887;
+const GATEWAY_URL = `http://${GATEWAY_HOST}:${GATEWAY_PORT}`;
+
+const GATEWAY_STARTUP_TIMEOUT = 10_000;
+const TUNNEL_URL_TIMEOUT = 30_000;
+
+let gatewayToken = null;
+let tunnelUrl = null;
+let gatewayListenAddress = null;
+let gatewayReady = false;
+let tunnelReady = false;
+let gatewayProcess = null;
+let cloudflaredProcess = null;
+let shuttingDown = false;
+let gatewayTimeout = null;
+let tunnelTimeout = null;
+
+// --- Validate cloudflared ---
+if (!existsSync(CLOUDFLARED_PATH)) {
+  console.error('');
+  console.error('cloudflared.exe was not found.');
+  console.error('');
+  console.error('Expected:');
+  console.error(`  ${CLOUDFLARED_PATH}`);
+  process.exit(1);
+}
+
+// --- Start Gateway ---
+function startGateway() {
+  console.log('Starting HomePilot Gateway...');
+
+  gatewayProcess = spawn('node', [GATEWAY_SCRIPT], {
+    cwd: GATEWAY_DIR,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  gatewayProcess.stdout.on('data', onGatewayOutput);
+  gatewayProcess.stderr.on('data', onGatewayOutput);
+
+  gatewayProcess.on('close', (code) => {
+    if (!shuttingDown) {
+      console.error('');
+      console.error(`HomePilot Gateway could not start.`);
+      if (code !== 0 && code !== null) {
+        console.error(`Process exited with code ${code}.`);
+      }
+      console.error('Port 51887 may already be in use.');
+      shutdown();
+    }
+  });
+
+  gatewayProcess.on('error', (err) => {
+    if (!shuttingDown) {
+      console.error('');
+      console.error('HomePilot Gateway could not start.');
+      console.error(err.message);
+      shutdown();
+    }
+  });
+
+  gatewayTimeout = setTimeout(() => {
+    if (!gatewayReady) {
+      console.error('');
+      console.error('HomePilot Gateway failed to start within 10 seconds.');
+      console.error('Port 51887 may already be in use.');
+      shutdown();
+    }
+  }, GATEWAY_STARTUP_TIMEOUT);
+}
+
+function onGatewayOutput(data) {
+  const text = data.toString();
+
+  const listenMatch = text.match(/HomePilot Gateway listening on (http:\/\/\S+)/);
+  if (listenMatch) {
+    gatewayListenAddress = listenMatch[1];
+  }
+
+  const tokenMatch = text.match(/^Token:\s*(\S+)/m);
+  if (tokenMatch) {
+    gatewayToken = tokenMatch[1];
+  }
+
+  checkGatewayReady();
+}
+
+function checkGatewayReady() {
+  if (!gatewayReady && gatewayToken && gatewayListenAddress) {
+    gatewayReady = true;
+    if (gatewayTimeout) {
+      clearTimeout(gatewayTimeout);
+      gatewayTimeout = null;
+    }
+    console.log('Gateway is ready. Starting Quick Tunnel...');
+    startCloudflared();
+  }
+}
+
+// --- Start cloudflared ---
+function startCloudflared() {
+  cloudflaredProcess = spawn(CLOUDFLARED_PATH, ['tunnel', '--url', GATEWAY_URL], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  cloudflaredProcess.stdout.on('data', onCloudflaredOutput);
+  cloudflaredProcess.stderr.on('data', onCloudflaredOutput);
+
+  cloudflaredProcess.on('close', (code) => {
+    if (!shuttingDown) {
+      console.error('');
+      console.error('cloudflared process exited unexpectedly.');
+      if (code !== 0 && code !== null) {
+        console.error(`Exit code: ${code}`);
+      }
+      shutdown();
+    }
+  });
+
+  cloudflaredProcess.on('error', (err) => {
+    if (!shuttingDown) {
+      console.error('');
+      console.error('Failed to start cloudflared.');
+      console.error(err.message);
+      shutdown();
+    }
+  });
+
+  tunnelTimeout = setTimeout(() => {
+    if (!tunnelReady) {
+      console.error('');
+      console.error('HomePilot Quick Tunnel URL could not be detected within 30 seconds.');
+      console.error('Please check your Internet connection.');
+      shutdown();
+    }
+  }, TUNNEL_URL_TIMEOUT);
+}
+
+function onCloudflaredOutput(data) {
+  if (tunnelReady) return;
+
+  const text = data.toString();
+  const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+  if (match) {
+    tunnelUrl = match[0];
+    tunnelReady = true;
+    if (tunnelTimeout) {
+      clearTimeout(tunnelTimeout);
+      tunnelTimeout = null;
+    }
+    showReady();
+  }
+}
+
+// --- Display ---
+function showReady() {
+  const address = gatewayListenAddress || GATEWAY_URL;
+  console.log('');
+  console.log('========================================');
+  console.log('        HomePilot');
+  console.log('========================================');
+  console.log('');
+  console.log('Gateway');
+  console.log('  Status : READY');
+  console.log(`  Address: ${address}`);
+  console.log('');
+  console.log('Quick Tunnel');
+  console.log('  Status : READY');
+  console.log(`  URL    : ${tunnelUrl}`);
+  console.log('');
+  console.log('Authentication');
+  console.log(`  Token  : ${gatewayToken}`);
+  console.log('');
+  console.log('----------------------------------------');
+  console.log('HomePilot is ready.');
+  console.log('----------------------------------------');
+  console.log('');
+  console.log('Keep this window open while using HomePilot.');
+  console.log('');
+  console.log('Press Ctrl+C to stop HomePilot.');
+}
+
+// --- Shutdown ---
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  if (gatewayTimeout) {
+    clearTimeout(gatewayTimeout);
+    gatewayTimeout = null;
+  }
+  if (tunnelTimeout) {
+    clearTimeout(tunnelTimeout);
+    tunnelTimeout = null;
+  }
+
+  console.log('');
+  console.log('Stopping HomePilot...');
+
+  if (cloudflaredProcess && !cloudflaredProcess.killed) {
+    console.log('Stopping Quick Tunnel...');
+    cloudflaredProcess.kill();
+  }
+
+  if (gatewayProcess && !gatewayProcess.killed) {
+    console.log('Stopping Gateway...');
+    gatewayProcess.kill();
+  }
+
+  let pending = 0;
+  const onChildExit = () => {
+    pending--;
+    if (pending <= 0) {
+      console.log('HomePilot stopped.');
+      process.exit(0);
+    }
+  };
+
+  if (cloudflaredProcess && !cloudflaredProcess.killed) {
+    pending++;
+    cloudflaredProcess.on('close', onChildExit);
+  }
+  if (gatewayProcess && !gatewayProcess.killed) {
+    pending++;
+    gatewayProcess.on('close', onChildExit);
+  }
+
+  if (pending === 0) {
+    console.log('HomePilot stopped.');
+    process.exit(0);
+  }
+
+  setTimeout(() => {
+    process.exit(0);
+  }, 3000);
+}
+
+// --- Signal handling ---
+process.on('SIGINT', () => {
+  shutdown();
+});
+
+process.on('SIGTERM', () => {
+  shutdown();
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Unexpected error:', err.message);
+  shutdown();
+});
+
+// --- Start ---
+startGateway();
