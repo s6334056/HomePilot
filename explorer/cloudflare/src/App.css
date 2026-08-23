@@ -871,3 +871,16 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+.qr-decode-result {
+  background: var(--bg-sub);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--g2-green);
+  word-break: break-all;
+  white-space: pre-wrap;
+  margin: 0;
+}
