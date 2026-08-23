@@ -7,7 +7,7 @@ const token = generateToken();
 
 function parseUrl(requestUrl) {
   try {
-    return new URL(requestUrl, `http://${request.headers.host || 'localhost'}`);
+    return new URL(requestUrl, `http://localhost:${CONFIG.PORT}`);
   } catch {
     return null;
   }
