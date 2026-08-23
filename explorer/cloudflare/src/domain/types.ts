@@ -12,7 +12,7 @@ export interface FileSystemItem {
   childrenCount?: number;
 }
 
-export type ScreenType = 'explorer' | 'file_viewer' | 'agent_placeholder';
+export type ScreenType = 'explorer' | 'file_viewer' | 'agent';
 
 export interface AgentContext {
   currentPath: string;
@@ -37,3 +37,24 @@ export interface ExplorerState {
 }
 
 export type G2MenuAction = 'refresh' | 'home' | 'parent' | 'info' | 'agent';
+
+export interface AgentMessage {
+  id: string;
+  role: 'user' | 'agent';
+  content: string;
+  timestamp: string;
+}
+
+export interface AgentSession {
+  id: string;
+  title: string;
+  messages: AgentMessage[];
+  contextPath: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentSettings {
+  selectedProject: string;
+  selectedModel: string;
+}

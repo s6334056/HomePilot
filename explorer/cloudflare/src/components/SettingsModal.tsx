@@ -8,10 +8,6 @@ import {
   Clipboard,
   Check,
   AlertCircle,
-  Home,
-  ArrowUp,
-  RefreshCw,
-  Bot,
   Trash2,
 } from 'lucide-react';
 import {
@@ -21,26 +17,17 @@ import {
   ConnectionConfig,
 } from '../services/ConnectionConfig';
 import { QRScanner } from './QRScanner';
-import { CameraTest } from './CameraTest';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onReconnect: () => void;
-  onOpenAgent: () => void;
-  onNavigateHome: () => void;
-  onNavigateParent: () => void;
-  onRefresh: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   onReconnect,
-  onOpenAgent,
-  onNavigateHome,
-  onNavigateParent,
-  onRefresh,
 }) => {
   const [config, setConfig] = useState<ConnectionConfig | null>(null);
   const [showQRScanner, setShowQRScanner] = useState<boolean>(false);
@@ -48,7 +35,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
   const [connected, setConnected] = useState<boolean>(false);
-  const [showCameraTest, setShowCameraTest] = useState<boolean>(false);
   const pasteInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -60,7 +46,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setPasteText('');
       setCopied(false);
       setShowQRScanner(false);
-      setShowCameraTest(false);
     }
   }, [isOpen]);
 
@@ -195,13 +180,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <Camera size={14} />
                 QRコードを読み取る
               </button>
-              <button
-                className="btn"
-                onClick={() => setShowCameraTest(true)}
-              >
-                <Camera size={14} />
-                カメラテスト
-              </button>
               {config && (
                 <button className="btn btn-danger" onClick={handleClearConnection}>
                   <Trash2 size={14} />
@@ -220,14 +198,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onError={(err) => setError(err)}
                 onClose={() => setShowQRScanner(false)}
               />
-            </section>
-          )}
-
-          {/* Camera Test (Debug) */}
-          {showCameraTest && (
-            <section className="settings-section">
-              <h3>カメラテスト (デバッグ)</h3>
-              <CameraTest onClose={() => setShowCameraTest(false)} />
             </section>
           )}
 
@@ -289,29 +259,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               >
                 <Clipboard size={14} />
                 適用
-              </button>
-            </div>
-          </section>
-
-          {/* Quick Actions */}
-          <section className="settings-section">
-            <h3>Quick Actions</h3>
-            <div className="quick-actions">
-              <button className="btn btn-sm" onClick={() => { onNavigateHome(); onClose(); }}>
-                <Home size={14} />
-                Home
-              </button>
-              <button className="btn btn-sm" onClick={() => { onNavigateParent(); onClose(); }}>
-                <ArrowUp size={14} />
-                Parent
-              </button>
-              <button className="btn btn-sm" onClick={() => { onRefresh(); onClose(); }}>
-                <RefreshCw size={14} />
-                Refresh
-              </button>
-              <button className="btn btn-sm btn-primary" onClick={() => { onOpenAgent(); onClose(); }}>
-                <Bot size={14} />
-                Agent
               </button>
             </div>
           </section>

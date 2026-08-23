@@ -1,64 +1,100 @@
 import React from 'react';
-import { Settings, Smartphone } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Home, Settings, Bot, PanelLeft } from 'lucide-react';
+import { truncatePath } from '../utils/pathUtils';
 
-interface NavbarProps {
+export type NavbarMode = 'explorer' | 'agent';
+
+interface NavbarBaseProps {
   currentPath: string;
-  g2Status: string;
-  onNavigate: (path: string) => void;
-  onOpenSettings: () => void;
+  mode: NavbarMode;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({
-  currentPath,
-  g2Status,
-  onNavigate,
-  onOpenSettings,
-}) => {
-  const segments = currentPath.split('/').filter(Boolean);
-  let accumulatedPath = '';
+interface ExplorerNavbarProps extends NavbarBaseProps {
+  mode: 'explorer';
+  onBack: () => void;
+  canGoBack: boolean;
+  onReload: () => void;
+  onHome: () => void;
+  onOpenSettings: () => void;
+  onOpenAgent: () => void;
+}
 
+interface AgentNavbarProps extends NavbarBaseProps {
+  mode: 'agent';
+  onOpenSessionList: () => void;
+  onOpenSettings: () => void;
+  onOpenExplorer: () => void;
+}
+
+type NavbarProps = ExplorerNavbarProps | AgentNavbarProps;
+
+export const Navbar: React.FC<NavbarProps> = (props) => {
+  const displayPath = truncatePath(props.currentPath);
+
+  if (props.mode === 'explorer') {
+    return (
+      <div className="navbar-container">
+        <header className="app-header app-header--explorer">
+          <div className="navbar-left">
+            <button
+              className="btn-icon"
+              onClick={props.onBack}
+              disabled={!props.canGoBack}
+              title="Back (Parent)"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <button className="btn-icon" onClick={props.onReload} title="Reload">
+              <RefreshCw size={18} />
+            </button>
+            <button className="btn-icon" onClick={props.onHome} title="Home">
+              <Home size={18} />
+            </button>
+          </div>
+          <div className="navbar-right">
+            <button className="btn-icon" onClick={props.onOpenSettings} title="Settings">
+              <Settings size={18} />
+            </button>
+            <button className="btn-icon btn-icon--agent" onClick={props.onOpenAgent} title="Agent">
+              <Bot size={18} />
+            </button>
+          </div>
+        </header>
+        <nav className="path-bar">
+          <span className="path-bar-text" title={props.currentPath}>
+            {displayPath}
+          </span>
+        </nav>
+      </div>
+    );
+  }
+
+  // Agent mode
   return (
     <div className="navbar-container">
-      <header className="app-header">
-        <div className="brand-group">
-          <span className="brand-title">🏠 HomePilot Explorer</span>
-          <span className="g2-badge" title="Even Realities G2 Connection Status">
-            <Smartphone size={12} />
-            <span>{g2Status}</span>
-          </span>
+      <header className="app-header app-header--agent">
+        <div className="navbar-left">
+          <button
+            className="btn-icon"
+            onClick={props.onOpenSessionList}
+            title="Sessions"
+          >
+            <PanelLeft size={18} />
+          </button>
         </div>
-
-        <div className="toolbar">
-          <button className="btn btn-icon" onClick={onOpenSettings} title="Settings">
+        <div className="navbar-right">
+          <button className="btn-icon" onClick={props.onOpenSettings} title="Agent Settings">
             <Settings size={18} />
+          </button>
+          <button className="btn-icon" onClick={props.onOpenExplorer} title="Explorer">
+            <Home size={18} />
           </button>
         </div>
       </header>
-
-      <nav className="breadcrumb-bar">
-        <span
-          className={`breadcrumb-item ${segments.length === 0 ? 'active' : ''}`}
-          onClick={() => onNavigate('/home')}
-          title="Root"
-        >
-          📁
+      <nav className="path-bar">
+        <span className="path-bar-text" title={props.currentPath}>
+          {displayPath}
         </span>
-        {segments.map((seg, idx) => {
-          accumulatedPath += '/' + seg;
-          const target = accumulatedPath;
-          const isLast = idx === segments.length - 1;
-          return (
-            <React.Fragment key={target}>
-              <span className="breadcrumb-sep">/</span>
-              <span
-                className={`breadcrumb-item ${isLast ? 'active' : ''}`}
-                onClick={() => !isLast && onNavigate(target)}
-              >
-                {seg}
-              </span>
-            </React.Fragment>
-          );
-        })}
       </nav>
     </div>
   );
