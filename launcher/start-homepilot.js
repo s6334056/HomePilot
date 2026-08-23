@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
+import qrcode from 'qrcode-terminal';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -168,6 +169,14 @@ function onCloudflaredOutput(data) {
 // --- Display ---
 function showReady() {
   const address = gatewayListenAddress || GATEWAY_URL;
+
+  const qrData = JSON.stringify({
+    type: 'homepilot-connection',
+    version: 1,
+    url: tunnelUrl,
+    token: gatewayToken,
+  });
+
   console.log('');
   console.log('========================================');
   console.log('        HomePilot');
@@ -184,13 +193,21 @@ function showReady() {
   console.log('Authentication');
   console.log(`  Token  : ${gatewayToken}`);
   console.log('');
-  console.log('----------------------------------------');
-  console.log('HomePilot is ready.');
-  console.log('----------------------------------------');
+  console.log('Connection QR');
   console.log('');
-  console.log('Keep this window open while using HomePilot.');
-  console.log('');
-  console.log('Press Ctrl+C to stop HomePilot.');
+
+  qrcode.generate(qrData, { small: true }, (qr) => {
+    console.log(qr);
+    console.log('');
+    console.log('----------------------------------------');
+    console.log('HomePilot is ready.');
+    console.log('----------------------------------------');
+    console.log('');
+    console.log('Scan the QR code with your phone to connect.');
+    console.log('Keep this window open while using HomePilot.');
+    console.log('');
+    console.log('Press Ctrl+C to stop HomePilot.');
+  });
 }
 
 // --- Shutdown ---

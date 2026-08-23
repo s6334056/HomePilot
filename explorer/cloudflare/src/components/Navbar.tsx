@@ -1,24 +1,18 @@
 import React from 'react';
-import { Home, ArrowUp, RefreshCw, Bot, Smartphone } from 'lucide-react';
+import { Settings, Smartphone } from 'lucide-react';
 
 interface NavbarProps {
   currentPath: string;
   g2Status: string;
   onNavigate: (path: string) => void;
-  onNavigateHome: () => void;
-  onNavigateParent: () => void;
-  onRefresh: () => void;
-  onOpenAgent: () => void;
+  onOpenSettings: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentPath,
   g2Status,
   onNavigate,
-  onNavigateHome,
-  onNavigateParent,
-  onRefresh,
-  onOpenAgent,
+  onOpenSettings,
 }) => {
   const segments = currentPath.split('/').filter(Boolean);
   let accumulatedPath = '';
@@ -35,21 +29,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         <div className="toolbar">
-          <button className="btn btn-sm" onClick={onNavigateHome} title="Home">
-            <Home size={14} />
-            <span>Home</span>
-          </button>
-          <button className="btn btn-sm" onClick={onNavigateParent} title="Parent">
-            <ArrowUp size={14} />
-            <span>Up</span>
-          </button>
-          <button className="btn btn-sm" onClick={onRefresh} title="Refresh">
-            <RefreshCw size={14} />
-            <span>Refresh</span>
-          </button>
-          <button className="btn btn-sm btn-primary" onClick={onOpenAgent} title="Agent Context">
-            <Bot size={14} />
-            <span>Agent</span>
+          <button className="btn btn-icon" onClick={onOpenSettings} title="Settings">
+            <Settings size={18} />
           </button>
         </div>
       </header>

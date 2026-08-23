@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { PageManager } from './hud/page-manager';
 import { ExplorerPage } from './hud/pages/explorer-page';
 import { FileViewerPage } from './hud/pages/file-viewer-page';
@@ -7,21 +7,20 @@ import { MockFileSystemService } from './services/MockFileSystemService';
 import { GatewayFileSystemService } from './services/GatewayFileSystemService';
 import { AgentService } from './services/AgentService';
 import { FileSystemService } from './services/FileSystemService';
+import { resolveConfig } from './services/ConnectionConfig';
 import { FileSystemItem, ScreenType, AgentContext } from './domain/types';
 import { Navbar } from './components/Navbar';
 import { FileTable } from './components/FileTable';
 import { FileViewer } from './components/FileViewer';
 import { AgentPanel } from './components/AgentPanel';
+import { SettingsModal } from './components/SettingsModal';
 import { Glasses, ChevronUp, ChevronDown, MousePointer, CornerUpLeft, Bot, RefreshCw, Home } from 'lucide-react';
 import './App.css';
 
 function createFileService(): FileSystemService {
-  const mode = import.meta.env.VITE_FILE_SERVICE_MODE || 'mock';
-  const gatewayUrl = import.meta.env.VITE_GATEWAY_URL || 'http://127.0.0.1:51887';
-  const token = import.meta.env.VITE_GATEWAY_TOKEN || '';
-
-  if (mode === 'gateway' && token) {
-    return new GatewayFileSystemService(gatewayUrl, token);
+  const config = resolveConfig();
+  if (config.mode === 'gateway' && config.gatewayToken) {
+    return new GatewayFileSystemService(config.gatewayUrl, config.gatewayToken);
   }
   return new MockFileSystemService();
 }
@@ -31,7 +30,7 @@ function isGatewayService(s: FileSystemService): s is GatewayFileSystemService {
 }
 
 export function App() {
-  const [fileService] = useState<FileSystemService>(() => createFileService());
+  const [fileService, setFileService] = useState<FileSystemService>(() => createFileService());
   const [agentService] = useState(() => new AgentService());
   const [pageManager] = useState(() => new PageManager((status) => setG2Status(status)));
 
@@ -46,6 +45,7 @@ export function App() {
   const [agentContext, setAgentContext] = useState<AgentContext | null>(null);
   const [g2Status, setG2Status] = useState<string>('Initializing G2 SDK...');
   const [hudPreviewText, setHudPreviewText] = useState<string>('');
+  const [showSettings, setShowSettings] = useState<boolean>(false);
 
   const isInitializedRef = useRef(false);
 
@@ -207,6 +207,49 @@ export function App() {
     }
   };
 
+  const handleReconnect = useCallback(async () => {
+    const newService = createFileService();
+    setFileService(newService);
+
+    if (isGatewayService(newService)) {
+      await (newService as GatewayFileSystemService).initialize();
+    }
+
+    const rootPath = isGatewayService(newService)
+      ? (newService as GatewayFileSystemService).getRootPath()
+      : '/home';
+    setCurrentPath(rootPath);
+    setCurrentScreen('explorer');
+    setSelectedFile(null);
+
+    const explorerPage = new ExplorerPage(
+      rootPath,
+      newService,
+      agentService,
+      (path, loadedItems, selected) => {
+        setCurrentPath(path);
+        setItems(loadedItems);
+        setSelectedIndex(selected);
+        setCurrentScreen('explorer');
+        setSelectedFile(null);
+        setHudPreviewText(pageManager.getLastRenderedText());
+      },
+      (file, content) => {
+        setSelectedFile(file);
+        setFileContent(content);
+        setCurrentScreen('file_viewer');
+        setHudPreviewText(pageManager.getLastRenderedText());
+      },
+      (context) => {
+        setAgentContext(context);
+        setCurrentScreen('agent_placeholder');
+        setHudPreviewText(pageManager.getLastRenderedText());
+      }
+    );
+    await pageManager.navigateTo(explorerPage);
+    setHudPreviewText(pageManager.getLastRenderedText());
+  }, [agentService, pageManager]);
+
   // Keyboard Navigation for PC testing
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
@@ -245,10 +288,7 @@ export function App() {
         currentPath={currentPath}
         g2Status={g2Status}
         onNavigate={handleNavigate}
-        onNavigateHome={() => handleNavigate(getRootPath())}
-        onNavigateParent={() => handleNavigate(fileService.getParentPath(currentPath))}
-        onRefresh={() => handleNavigate(currentPath)}
-        onOpenAgent={handleOpenAgent}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       <div className="main-content-container">
@@ -275,8 +315,6 @@ export function App() {
             <FileViewer
               file={selectedFile}
               content={fileContent}
-              onBack={() => handleNavigate(currentPath)}
-              onOpenAgent={handleOpenAgent}
             />
           )}
 
@@ -398,6 +436,16 @@ export function App() {
           </div>
         </aside>
       </div>
+
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        onReconnect={handleReconnect}
+        onOpenAgent={handleOpenAgent}
+        onNavigateHome={() => handleNavigate(getRootPath())}
+        onNavigateParent={() => handleNavigate(fileService.getParentPath(currentPath))}
+        onRefresh={() => handleNavigate(currentPath)}
+      />
     </div>
   );
 }

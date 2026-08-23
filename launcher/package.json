@@ -1,0 +1,12 @@
+{
+  "name": "homepilot-launcher",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node start-homepilot.js"
+  },
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0"
+  }
+}

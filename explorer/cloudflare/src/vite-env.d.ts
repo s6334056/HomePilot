@@ -9,3 +9,17 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface BarcodeDetectorOptions {
+  formats: string[];
+}
+
+interface DetectedBarcode {
+  rawValue: string;
+  format: string;
+}
+
+declare class BarcodeDetector {
+  constructor(options?: BarcodeDetectorOptions);
+  detect(source: CanvasImageSource | HTMLCanvasElement): Promise<DetectedBarcode[]>;
+}
