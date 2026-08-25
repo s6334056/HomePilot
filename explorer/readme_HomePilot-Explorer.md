@@ -120,7 +120,7 @@ npm run build
 
 `dist` フォルダを Cloudflare Pages 等にデプロイしてください。
 
-https://dash.cloudflare.com/login  
+https://dash.cloudflare.com/login
 
 [参考]QRコードの作成方法
 以下を背景が黒いターミナルで実行
