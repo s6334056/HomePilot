@@ -275,12 +275,29 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       error: null,
     }));
     try {
-      const messages = await client.getMessages(sessionID);
-      const msgWithParts: OpenCodeMessageWithParts[] = messages.map((m) => ({
-        ...m,
-        parts: [],
-        contentText: '',
-      }));
+      const apiMessages = await client.getMessages(sessionID);
+      const msgWithParts: OpenCodeMessageWithParts[] = apiMessages.map((m) => {
+        const parts: OpenCodeMessagePart[] = m.parts.map((p) => ({
+          id: p.id,
+          type: p.type,
+          messageID: p.messageID || m.info.id,
+          sessionID: p.sessionID || sessionID,
+          text: p.text,
+          tool: p.tool,
+          callID: p.callID,
+          state: p.state,
+          time: p.time,
+        }));
+        const contentText = parts
+          .filter((p) => p.type === 'text' && p.text)
+          .map((p) => p.text)
+          .join('');
+        return {
+          ...m.info,
+          parts,
+          contentText,
+        };
+      });
       setState((prev) => ({
         ...prev,
         messages: msgWithParts,

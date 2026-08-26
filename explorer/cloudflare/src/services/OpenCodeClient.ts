@@ -1,7 +1,13 @@
 import {
   OpenCodeSessionInfo,
   OpenCodeMessageInfo,
+  OpenCodeMessagePart,
 } from '../domain/types';
+
+export interface OpenCodeClientMessage {
+  info: OpenCodeMessageInfo;
+  parts: OpenCodeMessagePart[];
+}
 
 export interface OpenCodeClientConfig {
   baseUrl: string;
@@ -56,15 +62,73 @@ export class OpenCodeClient {
     return this.request<OpenCodeSessionInfo>('GET', `/session/${sessionID}`);
   }
 
-  async getMessages(sessionID: string): Promise<OpenCodeMessageInfo[]> {
+  async getMessages(sessionID: string): Promise<OpenCodeClientMessage[]> {
     const data = await this.request<unknown>('GET', `/session/${sessionID}/message`);
+
+    // { value: [{ info: {...}, parts: [...] }, ...] }
+    if (data && typeof data === 'object' && 'value' in data && Array.isArray((data as Record<string, unknown>).value)) {
+      const raw = (data as { value: Array<{ info: unknown; parts: unknown }> }).value;
+      return raw.map((item) => ({
+        info: this.normalizeMessageInfo(item.info, sessionID),
+        parts: this.normalizeParts(item.parts, sessionID, item.info),
+      }));
+    }
+
+    // fallback: array of items with info/parts
     if (Array.isArray(data)) {
-      return data as OpenCodeMessageInfo[];
+      return data.map((item: Record<string, unknown>) => ({
+        info: this.normalizeMessageInfo(item.info, sessionID),
+        parts: this.normalizeParts(item.parts, sessionID, item.info),
+      }));
     }
+
+    // fallback: { messages: [...] }
     if (data && typeof data === 'object' && 'messages' in data) {
-      return (data as { messages: OpenCodeMessageInfo[] }).messages;
+      const raw = (data as { messages: Array<{ info: unknown; parts: unknown }> }).messages;
+      return raw.map((item) => ({
+        info: this.normalizeMessageInfo(item.info, sessionID),
+        parts: this.normalizeParts(item.parts, sessionID, item.info),
+      }));
     }
+
     return [];
+  }
+
+  private normalizeMessageInfo(raw: unknown, sessionID: string): OpenCodeMessageInfo {
+    if (!raw || typeof raw !== 'object') {
+      return { id: '', role: 'user', sessionID };
+    }
+    const r = raw as Record<string, unknown>;
+    return {
+      id: (r.id as string) || '',
+      role: (r.role as OpenCodeMessageInfo['role']) || 'user',
+      sessionID: (r.sessionID as string) || sessionID,
+      agent: r.agent as string | undefined,
+      model: r.model as OpenCodeMessageInfo['model'],
+      time: r.time as OpenCodeMessageInfo['time'],
+      mode: r.mode as string | undefined,
+      path: r.path as OpenCodeMessageInfo['path'],
+      modelID: r.modelID as string | undefined,
+      providerID: r.providerID as string | undefined,
+    };
+  }
+
+  private normalizeParts(raw: unknown, sessionID: string, infoRaw: unknown): OpenCodeMessagePart[] {
+    if (!Array.isArray(raw)) return [];
+    const messageID = (infoRaw && typeof infoRaw === 'object')
+      ? ((infoRaw as Record<string, unknown>).id as string) || ''
+      : '';
+    return raw.map((p: Record<string, unknown>, idx: number) => ({
+      id: (p.id as string) || `part-${idx}`,
+      type: (p.type as string) || 'text',
+      messageID: (p.messageID as string) || messageID,
+      sessionID: (p.sessionID as string) || sessionID,
+      text: p.text as string | undefined,
+      tool: p.tool as string | undefined,
+      callID: p.callID as string | undefined,
+      state: p.state as OpenCodeMessagePart['state'],
+      time: p.time as OpenCodeMessagePart['time'],
+    }));
   }
 
   async createSession(options?: { title?: string; path?: string }): Promise<OpenCodeSessionInfo> {
@@ -72,7 +136,14 @@ export class OpenCodeClient {
   }
 
   async sendMessage(sessionID: string, content: string): Promise<void> {
-    await this.request<void>('POST', `/session/${sessionID}/message`, { content });
+    await this.request<void>('POST', `/session/${sessionID}/message`, {
+      parts: [
+        {
+          type: 'text',
+          text: content,
+        },
+      ],
+    });
   }
 
   async respondPermission(permissionID: string, response: 'grant' | 'deny' | 'always'): Promise<void> {
