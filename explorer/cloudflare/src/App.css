@@ -1216,3 +1216,419 @@
   margin-left: auto;
   color: var(--g2-green);
 }
+
+/* Settings Input Group */
+.settings-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.settings-input {
+  width: 100%;
+  padding: 8px 12px;
+  background-color: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ============================================================
+   OpenCode Integration Styles
+   ============================================================ */
+
+/* Connection Status */
+.oc-session-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--bg-card);
+  min-height: 36px;
+}
+
+.oc-connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.oc-status-connected {
+  color: #3fb950;
+}
+
+.oc-status-connecting {
+  color: #d29922;
+  animation: oc-spin 1s linear infinite;
+}
+
+.oc-status-error {
+  color: #f85149;
+}
+
+.oc-status-disconnected {
+  color: #8b949e;
+}
+
+.oc-session-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.oc-session-status--busy {
+  background-color: rgba(210, 153, 34, 0.15);
+  color: #d29922;
+}
+
+/* Connecting Screen */
+.oc-connecting-screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.oc-connecting-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+.oc-connecting-url {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+/* Error Banner */
+.oc-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: rgba(248, 81, 73, 0.1);
+  border-bottom: 1px solid rgba(248, 81, 73, 0.3);
+  color: #f85149;
+  font-size: 12px;
+}
+
+/* Loading */
+.oc-loading {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 24px;
+  font-size: 13px;
+}
+
+/* Message Parts */
+.oc-message-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.oc-message-part {
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.oc-message-part--reasoning {
+  padding: 8px 12px;
+  background-color: rgba(139, 148, 158, 0.08);
+  border-left: 3px solid #8b949e;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-style: italic;
+}
+
+.oc-part-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.oc-reasoning-text {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.oc-message-part--tool {
+  padding: 8px 12px;
+  background-color: rgba(56, 139, 253, 0.06);
+  border: 1px solid rgba(56, 139, 253, 0.15);
+  border-radius: var(--radius);
+}
+
+.oc-tool-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.oc-tool-status {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.oc-tool-status--pending {
+  background-color: rgba(139, 148, 158, 0.15);
+  color: #8b949e;
+}
+
+.oc-tool-status--running {
+  background-color: rgba(210, 153, 34, 0.15);
+  color: #d29922;
+}
+
+.oc-tool-status--completed {
+  background-color: rgba(63, 185, 80, 0.15);
+  color: #3fb950;
+}
+
+.oc-tool-status--error {
+  background-color: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+}
+
+.oc-tool-input {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background-color: var(--bg-main);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  overflow-x: auto;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* Streaming Indicator */
+.oc-message-streaming {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.oc-spinning {
+  animation: oc-spin 1s linear infinite;
+}
+
+@keyframes oc-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Agent Message Role Extension */
+.oc-msg-agent {
+  font-weight: 400;
+  color: var(--text-dim);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Permission Dialog */
+.oc-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.oc-dialog {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.oc-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.oc-dialog-header svg {
+  color: #d29922;
+}
+
+.oc-dialog-body {
+  padding: 16px 20px;
+}
+
+.oc-dialog-permission-type {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.oc-dialog-patterns {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.oc-dialog-patterns code {
+  font-size: 12px;
+  padding: 4px 8px;
+  background-color: var(--bg-main);
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.oc-dialog-metadata {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.oc-dialog-metadata-item {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.oc-dialog-metadata-key {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.oc-dialog-metadata-value {
+  color: var(--text);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.oc-dialog-actions {
+  display: flex;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+}
+
+.oc-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background-color: var(--bg-main);
+  color: var(--text);
+  transition: all 0.15s ease;
+}
+
+.oc-btn:hover {
+  background-color: var(--bg-sub);
+}
+
+.oc-btn-deny {
+  border-color: rgba(248, 81, 73, 0.3);
+}
+
+.oc-btn-deny:hover {
+  background-color: rgba(248, 81, 73, 0.1);
+  border-color: #f85149;
+  color: #f85149;
+}
+
+.oc-btn-grant {
+  border-color: rgba(63, 185, 80, 0.3);
+}
+
+.oc-btn-grant:hover {
+  background-color: rgba(63, 185, 80, 0.1);
+  border-color: #3fb950;
+  color: #3fb950;
+}
+
+.oc-btn-always {
+  border-color: rgba(56, 139, 253, 0.3);
+}
+
+.oc-btn-always:hover {
+  background-color: rgba(56, 139, 253, 0.1);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.oc-btn-connect {
+  border-color: var(--accent);
+  color: var(--accent);
+  margin-top: 8px;
+}
+
+.oc-btn-connect:hover {
+  background-color: rgba(56, 139, 253, 0.1);
+}
+
+/* Assistant message with accent */
+.agent-message--assistant .agent-message-role {
+  color: var(--accent);
+}
+
+/* New Session button disabled state */
+.agent-session-new:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

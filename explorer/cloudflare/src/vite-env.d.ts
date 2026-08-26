@@ -4,6 +4,7 @@ interface ImportMetaEnv {
   readonly VITE_FILE_SERVICE_MODE: 'mock' | 'gateway';
   readonly VITE_GATEWAY_URL: string;
   readonly VITE_GATEWAY_TOKEN: string;
+  readonly VITE_OPENCODE_URL: string;
 }
 
 interface ImportMeta {

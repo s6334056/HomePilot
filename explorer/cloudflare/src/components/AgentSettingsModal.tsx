@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, Folder, Cpu } from 'lucide-react';
+import { X, Check, Folder, Cpu, Globe } from 'lucide-react';
 import { AgentSettings } from '../domain/types';
 import { SessionService } from '../services/SessionService';
+
+const OPENCODE_URL_KEY = 'homepilot-opencode-url';
+const DEFAULT_OPENCODE_URL = 'http://localhost:4096';
 
 interface AgentSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   sessionService: SessionService;
+  onOpenCodeUrlChange?: (url: string) => void;
 }
 
 const AVAILABLE_PROJECTS = ['HomePilot', 'Other Project'];
@@ -16,12 +20,25 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
   isOpen,
   onClose,
   sessionService,
+  onOpenCodeUrlChange,
 }) => {
   const [settings, setSettings] = useState<AgentSettings>(() => sessionService.getSettings());
+  const [openCodeUrl, setOpenCodeUrl] = useState<string>(() => {
+    try {
+      return localStorage.getItem(OPENCODE_URL_KEY) || DEFAULT_OPENCODE_URL;
+    } catch {
+      return DEFAULT_OPENCODE_URL;
+    }
+  });
 
   useEffect(() => {
     if (isOpen) {
       setSettings(sessionService.getSettings());
+      try {
+        setOpenCodeUrl(localStorage.getItem(OPENCODE_URL_KEY) || DEFAULT_OPENCODE_URL);
+      } catch {
+        setOpenCodeUrl(DEFAULT_OPENCODE_URL);
+      }
     }
   }, [isOpen, sessionService]);
 
@@ -37,6 +54,18 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
     sessionService.updateSettings({ selectedModel: model });
   };
 
+  const handleOpenCodeUrlChange = (url: string) => {
+    setOpenCodeUrl(url);
+    try {
+      localStorage.setItem(OPENCODE_URL_KEY, url);
+    } catch {
+      // localStorage unavailable
+    }
+    if (onOpenCodeUrlChange) {
+      onOpenCodeUrlChange(url);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -50,6 +79,26 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
         </div>
 
         <div className="settings-body">
+          <section className="settings-section">
+            <h3>OpenCode Server</h3>
+            <div className="settings-input-group">
+              <label className="settings-label">
+                <Globe size={14} />
+                <span>Server URL</span>
+              </label>
+              <input
+                type="text"
+                className="settings-input"
+                value={openCodeUrl}
+                onChange={(e) => handleOpenCodeUrlChange(e.target.value)}
+                placeholder="http://localhost:4096"
+              />
+              <p className="settings-hint">
+                URL of the OpenCode Server (default: http://localhost:4096)
+              </p>
+            </div>
+          </section>
+
           <section className="settings-section">
             <h3>Project Select</h3>
             <div className="settings-select-list">
