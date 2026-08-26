@@ -110,8 +110,11 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
   const getProjectDisplayName = (project: OpenCodeProject): string => {
     const worktree = project.worktree || '';
     const parts = worktree.split(/[/\\]/).filter(Boolean);
-    const name = parts[parts.length - 1] || worktree || project.id;
-    return name;
+    const folderName = parts[parts.length - 1] || worktree || project.id;
+    if (project.id === 'global') {
+      return `global/${folderName}`;
+    }
+    return folderName;
   };
 
   const getModelDisplayName = (model: OpenCodeProviderModel): string => {
@@ -181,7 +184,6 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {getProjectDisplayName(project)}
-                  {project.vcs ? ` (${project.vcs})` : ''}
                 </option>
               ))}
             </select>

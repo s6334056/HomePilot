@@ -135,7 +135,7 @@ export class OpenCodeClient {
     }));
   }
 
-  async createSession(options?: { title?: string; path?: string; projectID?: string }): Promise<OpenCodeSessionInfo> {
+  async createSession(options?: { title?: string; path?: string; projectID?: string; model?: { id: string; providerID: string } }): Promise<OpenCodeSessionInfo> {
     return this.request<OpenCodeSessionInfo>('POST', '/session', options || {});
   }
 
@@ -182,8 +182,8 @@ export class OpenCodeClient {
     }
     if (data && typeof data === 'object') {
       const obj = data as Record<string, unknown>;
-      if ('providers' in obj && Array.isArray(obj.providers)) {
-        return (obj.providers as Array<Record<string, unknown>>).map((item) => ({
+      if (Array.isArray(obj.all)) {
+        return (obj.all as Array<Record<string, unknown>>).map((item) => ({
           id: (item.id as string) || '',
           name: (item.name as string) || (item.id as string) || '',
           models: item.models as Record<string, { name?: string; cost?: OpenCodeModelCost }> | undefined,

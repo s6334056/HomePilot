@@ -43,6 +43,7 @@ export interface OpenCodeState {
   pendingQuestions: OpenCodeQuestionRequest[];
   isLoadingSessions: boolean;
   isLoadingMessages: boolean;
+  isSending: boolean;
   error: string | null;
 }
 
@@ -50,6 +51,7 @@ export interface OpenCodeActions {
   connect: (url: string) => void;
   disconnect: () => void;
   refreshSessions: () => Promise<void>;
+  refreshMessages: () => Promise<void>;
   selectSession: (sessionID: string) => Promise<void>;
   createSession: (title?: string) => Promise<string | null>;
   sendMessage: (content: string) => Promise<void>;
@@ -69,6 +71,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     pendingQuestions: [],
     isLoadingSessions: false,
     isLoadingMessages: false,
+    isSending: false,
     error: null,
   });
 
@@ -142,9 +145,23 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           if (!props?.sessionID || !props?.messageID) return prev;
           if (prev.selectedSessionID !== props.sessionID) return prev;
 
-          const existingIdx = prev.messages.findIndex((m) => m.id === props.messageID);
+          // Remove optimistic messages when real ones arrive
+          let filteredMessages = prev.messages;
+          if (props.info?.role === 'user') {
+            // Remove optimistic user messages
+            filteredMessages = filteredMessages.filter(
+              (m) => !(m.id.startsWith('temp-user-') && m.sessionID === props.sessionID)
+            );
+          } else if (props.info?.role === 'assistant') {
+            // Remove optimistic assistant messages (processing placeholders)
+            filteredMessages = filteredMessages.filter(
+              (m) => !(m.id.startsWith('temp-assistant-') && m.sessionID === props.sessionID)
+            );
+          }
+
+          const existingIdx = filteredMessages.findIndex((m) => m.id === props.messageID);
           if (existingIdx >= 0) {
-            const updated = [...prev.messages];
+            const updated = [...filteredMessages];
             updated[existingIdx] = {
               ...updated[existingIdx],
               ...props.info,
@@ -160,7 +177,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
             parts: [],
             contentText: '',
           };
-          return { ...prev, messages: [...prev.messages, newMsg] };
+          return { ...prev, messages: [...filteredMessages, newMsg] };
         }
 
         case 'message.part.updated': {
@@ -277,6 +294,47 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     }
   }, []);
 
+  const refreshMessages = useCallback(async () => {
+    const client = clientRef.current;
+    const sessionID = stateRef.current.selectedSessionID;
+    if (!client || !sessionID) return;
+    setState((prev) => ({ ...prev, isLoadingMessages: true, error: null }));
+    try {
+      const apiMessages = await client.getMessages(sessionID);
+      const msgWithParts: OpenCodeMessageWithParts[] = apiMessages.map((m) => {
+        const parts: OpenCodeMessagePart[] = m.parts.map((p) => ({
+          id: p.id,
+          type: p.type,
+          messageID: p.messageID || m.info.id,
+          sessionID: p.sessionID || sessionID,
+          text: p.text,
+          tool: p.tool,
+          callID: p.callID,
+          state: p.state,
+          time: p.time,
+        }));
+        const contentText = parts
+          .filter((p) => p.type === 'text' && p.text)
+          .map((p) => p.text)
+          .join('');
+        return {
+          ...m.info,
+          parts,
+          contentText,
+        };
+      });
+      setState((prev) => ({
+        ...prev,
+        messages: msgWithParts,
+        isLoadingMessages: false,
+        isSending: false,
+      }));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to load messages';
+      setState((prev) => ({ ...prev, isLoadingMessages: false, isSending: false, error: msg }));
+    }
+  }, []);
+
   const selectSession = useCallback(async (sessionID: string) => {
     const client = clientRef.current;
     if (!client) return;
@@ -332,6 +390,10 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       const session = await client.createSession({
         title,
         projectID: settings.selectedProjectID,
+        model: {
+          id: settings.selectedModelID,
+          providerID: settings.selectedProviderID,
+        },
       });
       setState((prev) => ({
         ...prev,
@@ -349,11 +411,49 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     const client = clientRef.current;
     const sessionID = stateRef.current.selectedSessionID;
     if (!client || !sessionID) return;
+
+    // Optimistically add user message and processing placeholder
+    const tempUserMsgId = `temp-user-${Date.now()}`;
+    const tempAssistantMsgId = `temp-assistant-${Date.now()}`;
+
+    const userMessage: OpenCodeMessageWithParts = {
+      id: tempUserMsgId,
+      role: 'user',
+      sessionID,
+      parts: [],
+      contentText: content,
+    };
+
+    const processingMessage: OpenCodeMessageWithParts = {
+      id: tempAssistantMsgId,
+      role: 'assistant',
+      sessionID,
+      parts: [],
+      contentText: '',
+    };
+
+    setState((prev) => ({
+      ...prev,
+      messages: [...prev.messages, userMessage, processingMessage],
+      isSending: true,
+      error: null,
+    }));
+
     try {
       await client.sendMessage(sessionID, content);
+      // Success: SSE events will update the real messages
+      // The optimistic messages will be replaced when real ones arrive
     } catch (e: unknown) {
+      // On error: remove the processing placeholder and optimistic user message
       const msg = e instanceof Error ? e.message : 'Failed to send message';
-      setState((prev) => ({ ...prev, error: msg }));
+      setState((prev) => ({
+        ...prev,
+        messages: prev.messages.filter(
+          (m) => m.id !== tempUserMsgId && m.id !== tempAssistantMsgId
+        ),
+        isSending: false,
+        error: msg,
+      }));
     }
   }, []);
 
@@ -450,6 +550,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     connect,
     disconnect,
     refreshSessions,
+    refreshMessages,
     selectSession,
     createSession,
     sendMessage,

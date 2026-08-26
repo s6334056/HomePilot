@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, Send, Wifi, WifiOff, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, Mic, Send, Wifi, WifiOff, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import { OpenCodeSessionInfo } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
 import { Navbar } from './Navbar';
@@ -34,6 +34,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     pendingPermissions,
     isLoadingSessions,
     isLoadingMessages,
+    isSending,
     error,
   } = state;
 
@@ -98,6 +99,10 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const handleReconnect = () => {
     setConnected(false);
     actions.disconnect();
+  };
+
+  const handleRefreshMessages = () => {
+    actions.refreshMessages();
   };
 
   const getConnectionStatusIcon = () => {
@@ -201,6 +206,26 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   };
 
   const renderMessageContent = (msg: OpenCodeMessageWithParts) => {
+    // Handle optimistic processing placeholder
+    if (msg.id.startsWith('temp-assistant-')) {
+      return (
+        <div className="oc-message-content oc-message-streaming">
+          <Loader2 size={14} className="oc-spinning" />
+          <span>Processing...</span>
+        </div>
+      );
+    }
+
+    // Handle real assistant messages that are still processing (no content yet)
+    if (msg.role === 'assistant' && !msg.contentText && msg.parts.length === 0 && isSending) {
+      return (
+        <div className="oc-message-content oc-message-streaming">
+          <Loader2 size={14} className="oc-spinning" />
+          <span>Processing...</span>
+        </div>
+      );
+    }
+
     if (msg.contentText) {
       return <div className="oc-message-content">{msg.contentText}</div>;
     }
@@ -388,11 +413,21 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           {getConnectionStatusIcon()}
           <span>{getConnectionStatusText()}</span>
         </div>
-        {sessionStatus && (
-          <div className={`oc-session-status oc-session-status--${sessionStatus.type}`}>
-            {sessionStatus.type}
-          </div>
-        )}
+        <div className="oc-session-header-right">
+          {sessionStatus && (
+            <div className={`oc-session-status oc-session-status--${sessionStatus.type}`}>
+              {sessionStatus.type}
+            </div>
+          )}
+          <button
+            className="oc-refresh-btn"
+            onClick={handleRefreshMessages}
+            disabled={isLoadingMessages}
+            title="Refresh messages"
+          >
+            <RefreshCw size={14} className={isLoadingMessages ? 'oc-spinning' : ''} />
+          </button>
+        </div>
       </div>
       {error && (
         <div className="oc-error-banner">
@@ -444,7 +479,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           <button
             className="btn-icon agent-send-btn"
             onClick={handleSendMessage}
-            disabled={!inputValue.trim() || !selectedSessionID}
+            disabled={!inputValue.trim() || !selectedSessionID || isSending}
             title="Send"
           >
             <Send size={18} />

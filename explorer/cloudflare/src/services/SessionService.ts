@@ -73,7 +73,12 @@ export class SessionService {
     try {
       const settingsRaw = localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (settingsRaw) {
-        this.settings = JSON.parse(settingsRaw);
+        const parsed = JSON.parse(settingsRaw);
+        this.settings = {
+          selectedProjectID: parsed.selectedProjectID || 'global',
+          selectedProviderID: parsed.selectedProviderID || 'opencode',
+          selectedModelID: parsed.selectedModelID || 'mimo-v2.5-free',
+        };
       }
     } catch {
       // keep defaults
