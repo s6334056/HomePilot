@@ -8,9 +8,24 @@ import {
   OpenCodePermissionRequest,
   OpenCodeQuestionRequest,
   OpenCodeSSEEvent,
+  AgentSettings,
 } from '../domain/types';
 import { OpenCodeClient } from '../services/OpenCodeClient';
 import { OpenCodeEventService } from '../services/OpenCodeEventService';
+
+const SETTINGS_STORAGE_KEY = 'homepilot-agent-settings';
+
+function loadSettings(): AgentSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch {
+    // ignore
+  }
+  return { selectedProjectID: 'global', selectedProviderID: 'opencode', selectedModelID: 'mimo-v2.5-free' };
+}
 
 export interface OpenCodeMessageWithParts extends OpenCodeMessageInfo {
   parts: OpenCodeMessagePart[];
@@ -313,7 +328,11 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     const client = clientRef.current;
     if (!client) return null;
     try {
-      const session = await client.createSession({ title });
+      const settings = loadSettings();
+      const session = await client.createSession({
+        title,
+        projectID: settings.selectedProjectID,
+      });
       setState((prev) => ({
         ...prev,
         sessions: [session, ...prev.sessions],

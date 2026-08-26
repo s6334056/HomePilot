@@ -51,7 +51,7 @@ const MOCK_SESSIONS: AgentSession[] = [
 
 export class SessionService {
   private sessions: AgentSession[] = [];
-  private settings: AgentSettings = { selectedProject: 'HomePilot', selectedModel: 'MiMo V2.5 Free' };
+  private settings: AgentSettings = { selectedProjectID: 'global', selectedProviderID: 'opencode', selectedModelID: 'mimo-v2.5-free' };
 
   constructor() {
     this.loadFromStorage();

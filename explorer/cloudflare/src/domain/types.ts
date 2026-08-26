@@ -55,8 +55,9 @@ export interface AgentSession {
 }
 
 export interface AgentSettings {
-  selectedProject: string;
-  selectedModel: string;
+  selectedProjectID: string;
+  selectedProviderID: string;
+  selectedModelID: string;
 }
 
 // ============================================================
@@ -273,3 +274,34 @@ export type OpenCodeEventType =
   | 'message.part.delta'
   | 'permission.asked'
   | string; // unknown events handled gracefully
+
+// ============================================================
+// OpenCode Project / Provider / Model Types
+// ============================================================
+
+export interface OpenCodeProject {
+  id: string;
+  worktree: string;
+  vcs?: string;
+  name?: string;
+}
+
+export interface OpenCodeModelCost {
+  input?: number;
+  output?: number;
+  cache?: number;
+  reasoning?: number;
+}
+
+export interface OpenCodeProviderModel {
+  providerID: string;
+  modelID: string;
+  name: string;
+  cost?: OpenCodeModelCost;
+}
+
+export interface OpenCodeProvider {
+  id: string;
+  name: string;
+  models?: Record<string, { name?: string; cost?: OpenCodeModelCost }>;
+}

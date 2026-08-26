@@ -1253,6 +1253,77 @@
   font-size: 11px;
   color: var(--text-muted);
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Settings Section Header */
+.settings-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-section-header h3 {
+  margin: 0;
+}
+
+/* Settings Refresh Button */
+.settings-refresh-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s ease;
+}
+
+.settings-refresh-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.settings-refresh-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Settings Select */
+.settings-select {
+  width: 100%;
+  padding: 8px 12px;
+  background-color: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  appearance: auto;
+}
+
+.settings-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Settings Error */
+.settings-error {
+  font-size: 11px;
+  color: #f85149;
+  margin: 0 0 8px 0;
+  padding: 6px 8px;
+  background-color: rgba(248, 81, 73, 0.1);
+  border-radius: 4px;
 }
 
 /* ============================================================

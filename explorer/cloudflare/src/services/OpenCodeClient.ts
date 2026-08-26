@@ -2,6 +2,10 @@ import {
   OpenCodeSessionInfo,
   OpenCodeMessageInfo,
   OpenCodeMessagePart,
+  OpenCodeProject,
+  OpenCodeProvider,
+  OpenCodeProviderModel,
+  OpenCodeModelCost,
 } from '../domain/types';
 
 export interface OpenCodeClientMessage {
@@ -131,7 +135,7 @@ export class OpenCodeClient {
     }));
   }
 
-  async createSession(options?: { title?: string; path?: string }): Promise<OpenCodeSessionInfo> {
+  async createSession(options?: { title?: string; path?: string; projectID?: string }): Promise<OpenCodeSessionInfo> {
     return this.request<OpenCodeSessionInfo>('POST', '/session', options || {});
   }
 
@@ -152,6 +156,63 @@ export class OpenCodeClient {
 
   async respondQuestion(questionID: string, answer: string | string[]): Promise<void> {
     await this.request<void>('POST', `/question/${questionID}`, { answer });
+  }
+
+  async getProjects(): Promise<OpenCodeProject[]> {
+    const data = await this.request<unknown>('GET', '/project');
+    if (Array.isArray(data)) {
+      return data.map((item: Record<string, unknown>) => ({
+        id: (item.id as string) || '',
+        worktree: (item.worktree as string) || '',
+        vcs: item.vcs as string | undefined,
+        name: item.name as string | undefined,
+      }));
+    }
+    return [];
+  }
+
+  async getProviders(): Promise<OpenCodeProvider[]> {
+    const data = await this.request<unknown>('GET', '/provider');
+    if (Array.isArray(data)) {
+      return data.map((item: Record<string, unknown>) => ({
+        id: (item.id as string) || '',
+        name: (item.name as string) || (item.id as string) || '',
+        models: item.models as Record<string, { name?: string; cost?: OpenCodeModelCost }> | undefined,
+      }));
+    }
+    if (data && typeof data === 'object') {
+      const obj = data as Record<string, unknown>;
+      if ('providers' in obj && Array.isArray(obj.providers)) {
+        return (obj.providers as Array<Record<string, unknown>>).map((item) => ({
+          id: (item.id as string) || '',
+          name: (item.name as string) || (item.id as string) || '',
+          models: item.models as Record<string, { name?: string; cost?: OpenCodeModelCost }> | undefined,
+        }));
+      }
+    }
+    return [];
+  }
+
+  extractFreeModels(providers: OpenCodeProvider[]): OpenCodeProviderModel[] {
+    const result: OpenCodeProviderModel[] = [];
+    for (const provider of providers) {
+      if (provider.id !== 'opencode') continue;
+      if (!provider.models) continue;
+      for (const [modelID, modelInfo] of Object.entries(provider.models)) {
+        const cost = modelInfo.cost;
+        const isFree =
+          (cost?.input === undefined || cost?.input === 0) &&
+          (cost?.output === undefined || cost?.output === 0);
+        if (!isFree) continue;
+        result.push({
+          providerID: provider.id,
+          modelID,
+          name: modelInfo.name || modelID,
+          cost,
+        });
+      }
+    }
+    return result;
   }
 
   getEventSource(): EventSource {
