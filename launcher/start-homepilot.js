@@ -19,6 +19,11 @@ const GATEWAY_URL = `http://${GATEWAY_HOST}:${GATEWAY_PORT}`;
 const GATEWAY_STARTUP_TIMEOUT = 10_000;
 const TUNNEL_URL_TIMEOUT = 30_000;
 
+// Parse command-line arguments for root folder
+// Usage: node start-homepilot.js [root-folder]
+// Example: node start-homepilot.js C:\hp1
+const ROOT_FOLDER = process.argv[2] || process.env.HOMEPILOT_ROOT || 'C:\\hp1';
+
 let gatewayToken = null;
 let tunnelUrl = null;
 let gatewayListenAddress = null;
@@ -43,10 +48,15 @@ if (!existsSync(CLOUDFLARED_PATH)) {
 // --- Start Gateway ---
 function startGateway() {
   console.log('Starting HomePilot Gateway...');
+  console.log(`Root: ${ROOT_FOLDER}`);
 
   gatewayProcess = spawn('node', [GATEWAY_SCRIPT], {
     cwd: GATEWAY_DIR,
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      HOMEPILOT_ROOT: ROOT_FOLDER,
+    },
   });
 
   gatewayProcess.stdout.on('data', onGatewayOutput);
@@ -182,16 +192,16 @@ function showReady() {
   console.log('        HomePilot');
   console.log('========================================');
   console.log('');
-  console.log('Gateway');
-  console.log('  Status : READY');
-  console.log(`  Address: ${address}`);
+  console.log('HomePilot Gateway');
+  console.log('-----------------');
+  console.log(`  Root    : ${ROOT_FOLDER}`);
+  console.log(`  Gateway : ${address}`);
+  console.log(`  OpenCode: http://localhost:4096`);
+  console.log(`  Token   : ${gatewayToken}`);
   console.log('');
   console.log('Quick Tunnel');
   console.log('  Status : READY');
   console.log(`  URL    : ${tunnelUrl}`);
-  console.log('');
-  console.log('Authentication');
-  console.log(`  Token  : ${gatewayToken}`);
   console.log('');
   console.log('Connection QR');
   console.log('');

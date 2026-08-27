@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Globe, Folder, Cpu, Loader2, RefreshCw } from 'lucide-react';
-import { AgentSettings, OpenCodeProject, OpenCodeProviderModel } from '../domain/types';
+import { X, Globe, Cpu, Loader2, RefreshCw } from 'lucide-react';
+import { AgentSettings, OpenCodeProviderModel } from '../domain/types';
 import { SessionService } from '../services/SessionService';
 import { OpenCodeClient } from '../services/OpenCodeClient';
 
@@ -29,27 +29,12 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
     }
   });
 
-  const [projects, setProjects] = useState<OpenCodeProject[]>([]);
   const [models, setModels] = useState<OpenCodeProviderModel[]>([]);
-  const [isLoadingProjects, setIsLoadingProjects] = useState<boolean>(false);
   const [isLoadingModels, setIsLoadingModels] = useState<boolean>(false);
-  const [errorProjects, setErrorProjects] = useState<string | null>(null);
   const [errorModels, setErrorModels] = useState<string | null>(null);
 
   const fetchData = useCallback(async (url: string) => {
     const client = new OpenCodeClient({ baseUrl: url });
-
-    setIsLoadingProjects(true);
-    setErrorProjects(null);
-    try {
-      const fetchedProjects = await client.getProjects();
-      setProjects(fetchedProjects);
-    } catch (e: unknown) {
-      setErrorProjects(e instanceof Error ? e.message : 'Failed to load projects');
-      setProjects([]);
-    } finally {
-      setIsLoadingProjects(false);
-    }
 
     setIsLoadingModels(true);
     setErrorModels(null);
@@ -77,12 +62,6 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
     }
   }, [isOpen, sessionService, openCodeUrl, fetchData]);
 
-  const handleSelectProject = (projectID: string) => {
-    const updated = { ...settings, selectedProjectID: projectID };
-    setSettings(updated);
-    sessionService.updateSettings({ selectedProjectID: projectID });
-  };
-
   const handleSelectModel = (providerID: string, modelID: string) => {
     const updated = { ...settings, selectedProviderID: providerID, selectedModelID: modelID };
     setSettings(updated);
@@ -107,21 +86,10 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const getProjectDisplayName = (project: OpenCodeProject): string => {
-    const worktree = project.worktree || '';
-    const parts = worktree.split(/[/\\]/).filter(Boolean);
-    const folderName = parts[parts.length - 1] || worktree || project.id;
-    if (project.id === 'global') {
-      return `global/${folderName}`;
-    }
-    return folderName;
-  };
-
   const getModelDisplayName = (model: OpenCodeProviderModel): string => {
     return model.name || model.modelID;
   };
 
-  const selectedProject = projects.find((p) => p.id === settings.selectedProjectID);
   const selectedModel = models.find(
     (m) => m.providerID === settings.selectedProviderID && m.modelID === settings.selectedModelID
   );
@@ -155,43 +123,6 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
                 URL of the OpenCode Server (default: http://localhost:4096)
               </p>
             </div>
-          </section>
-
-          <section className="settings-section">
-            <div className="settings-section-header">
-              <h3>Project</h3>
-              <button
-                className="settings-refresh-btn"
-                onClick={handleRefresh}
-                disabled={isLoadingProjects}
-                title="Refresh projects"
-              >
-                <RefreshCw size={12} className={isLoadingProjects ? 'oc-spinning' : ''} />
-              </button>
-            </div>
-            {errorProjects && (
-              <p className="settings-error">{errorProjects}</p>
-            )}
-            <select
-              className="settings-select"
-              value={settings.selectedProjectID}
-              onChange={(e) => handleSelectProject(e.target.value)}
-              disabled={isLoadingProjects || projects.length === 0}
-            >
-              {projects.length === 0 && !isLoadingProjects && (
-                <option value="">No projects available</option>
-              )}
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {getProjectDisplayName(project)}
-                </option>
-              ))}
-            </select>
-            {selectedProject && (
-              <p className="settings-hint">
-                <Folder size={10} /> {selectedProject.worktree}
-              </p>
-            )}
           </section>
 
           <section className="settings-section">

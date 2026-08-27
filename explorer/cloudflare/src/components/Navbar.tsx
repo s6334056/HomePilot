@@ -7,6 +7,7 @@ export type NavbarMode = 'explorer' | 'agent';
 interface NavbarBaseProps {
   currentPath: string;
   mode: NavbarMode;
+  rootPath?: string;
 }
 
 interface ExplorerNavbarProps extends NavbarBaseProps {
@@ -61,6 +62,11 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
           </div>
         </header>
         <nav className="path-bar">
+          {props.rootPath && (
+            <span className="path-bar-root" title={`Root: ${props.rootPath}`}>
+              Root: {truncatePath(props.rootPath)}
+            </span>
+          )}
           <span className="path-bar-text" title={props.currentPath}>
             {displayPath}
           </span>
@@ -92,6 +98,11 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
         </div>
       </header>
       <nav className="path-bar">
+        {props.rootPath && (
+          <span className="path-bar-root" title={`Root: ${props.rootPath}`}>
+            Root: {truncatePath(props.rootPath)}
+          </span>
+        )}
         <span className="path-bar-text" title={props.currentPath}>
           {displayPath}
         </span>

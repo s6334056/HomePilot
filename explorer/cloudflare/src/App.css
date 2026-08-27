@@ -85,6 +85,18 @@
   max-width: 100%;
 }
 
+.path-bar-root {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background-color: var(--bg-sub);
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  margin-right: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .btn {
   background-color: var(--bg-sub);
   color: var(--text);

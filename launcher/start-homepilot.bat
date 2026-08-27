@@ -1,2 +1,2 @@
 @echo off
-node "%~dp0start-homepilot.js"
+node "%~dp0start-homepilot.js" %*

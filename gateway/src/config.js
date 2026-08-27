@@ -1,7 +1,7 @@
 export const CONFIG = {
   HOST: '127.0.0.1',
   PORT: 51887,
-  ROOT_PATH: 'C:\\HomePilotTest',
+  ROOT_PATH: process.env.HOMEPILOT_ROOT || 'C:\\hp1',
   MAX_FILE_SIZE: 10 * 1024 * 1024,
   TEXT_EXTENSIONS: new Set([
     '.txt', '.md', '.json', '.js', '.ts', '.jsx', '.tsx', '.css', '.html',

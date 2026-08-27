@@ -334,6 +334,7 @@ export function App() {
         <Navbar
           currentPath={getNavbarPath()}
           mode="explorer"
+          rootPath={isGatewayService(fileService) ? getRootPath() : undefined}
           onBack={handleExplorerBack}
           canGoBack={canExplorerGoBack()}
           onReload={handleExplorerReload}
