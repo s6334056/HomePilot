@@ -14,20 +14,24 @@ export interface OpenCodeClientMessage {
 }
 
 export interface OpenCodeClientConfig {
-  baseUrl: string;
+  gatewayUrl: string;
+  gatewayToken: string;
 }
 
 export class OpenCodeClient {
-  private baseUrl: string;
+  private gatewayUrl: string;
+  private gatewayToken: string;
 
   constructor(config: OpenCodeClientConfig) {
-    this.baseUrl = config.baseUrl.replace(/\/+$/, '');
+    this.gatewayUrl = config.gatewayUrl.replace(/\/+$/, '');
+    this.gatewayToken = config.gatewayToken;
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const url = `${this.baseUrl}${path}`;
+    const url = `${this.gatewayUrl}/api/opencode${path}`;
     const headers: Record<string, string> = {
       'Accept': 'application/json',
+      'Authorization': `Bearer ${this.gatewayToken}`,
     };
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json';
@@ -216,10 +220,14 @@ export class OpenCodeClient {
   }
 
   getEventSource(): EventSource {
-    return new EventSource(`${this.baseUrl}/event`);
+    return new EventSource(`${this.gatewayUrl}/api/opencode/event?token=${encodeURIComponent(this.gatewayToken)}`);
   }
 
-  getBaseUrl(): string {
-    return this.baseUrl;
+  getGatewayUrl(): string {
+    return this.gatewayUrl;
+  }
+
+  getGatewayToken(): string {
+    return this.gatewayToken;
   }
 }

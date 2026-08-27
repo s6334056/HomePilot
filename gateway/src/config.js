@@ -3,6 +3,8 @@ export const CONFIG = {
   PORT: 51887,
   ROOT_PATH: process.env.HOMEPILOT_ROOT || 'C:\\hp1',
   MAX_FILE_SIZE: 10 * 1024 * 1024,
+  OPENCODE_HOST: '127.0.0.1',
+  OPENCODE_PORT: 4096,
   TEXT_EXTENSIONS: new Set([
     '.txt', '.md', '.json', '.js', '.ts', '.jsx', '.tsx', '.css', '.html',
     '.xml', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.env',

@@ -11,7 +11,8 @@ export class OpenCodeEventService {
   private eventSource: EventSource | null = null;
   private handlers: Set<OpenCodeEventHandler> = new Set();
   private connectionHandlers: Set<OpenCodeConnectionHandler> = new Set();
-  private baseUrl: string = '';
+  private gatewayUrl: string = '';
+  private gatewayToken: string = '';
   private reconnectAttempts: number = 0;
   private heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -32,9 +33,10 @@ export class OpenCodeEventService {
     return () => this.connectionHandlers.delete(handler);
   }
 
-  connect(baseUrl: string): void {
+  connect(gatewayUrl: string, gatewayToken: string): void {
     this.disconnect();
-    this.baseUrl = baseUrl.replace(/\/+$/, '');
+    this.gatewayUrl = gatewayUrl.replace(/\/+$/, '');
+    this.gatewayToken = gatewayToken;
     this.reconnectAttempts = 0;
     this.openSSE();
   }
@@ -64,13 +66,17 @@ export class OpenCodeEventService {
     this.notifyConnection('disconnected');
 
     try {
-      this.eventSource = new EventSource(`${this.baseUrl}/event`);
-    } catch {
+      const sseUrl = `${this.gatewayUrl}/api/opencode/event?token=${encodeURIComponent(this.gatewayToken)}`;
+      console.log(`[SSE-CLIENT] Opening EventSource: ${this.gatewayUrl}/api/opencode/event?token=***`);
+      this.eventSource = new EventSource(sseUrl);
+    } catch (e) {
+      console.log(`[SSE-CLIENT] EventSource constructor failed:`, e);
       this.handleError();
       return;
     }
 
     this.eventSource.onopen = () => {
+      console.log(`[SSE-CLIENT] onopen - connected`);
       this._connected = true;
       this.reconnectAttempts = 0;
       this.notifyConnection('connected');
@@ -78,11 +84,13 @@ export class OpenCodeEventService {
     };
 
     this.eventSource.onmessage = (event: MessageEvent) => {
+      console.log(`[SSE-CLIENT] onmessage - data length: ${event.data?.length}`);
       this.resetHeartbeat();
       this.handleRawEvent(event.data);
     };
 
-    this.eventSource.onerror = () => {
+    this.eventSource.onerror = (e) => {
+      console.log(`[SSE-CLIENT] onerror - readyState: ${this.eventSource?.readyState}`);
       this.handleError();
     };
   }
@@ -124,6 +132,7 @@ export class OpenCodeEventService {
   }
 
   private handleError(): void {
+    console.log(`[SSE-CLIENT] handleError - closing connection, scheduling reconnect`);
     this._connected = false;
     if (this.eventSource) {
       this.eventSource.close();
@@ -141,6 +150,7 @@ export class OpenCodeEventService {
       RECONNECT_BASE_MS * Math.pow(2, this.reconnectAttempts),
       RECONNECT_MAX_MS
     );
+    console.log(`[SSE-CLIENT] scheduleReconnect - attempt ${this.reconnectAttempts + 1}, delay ${delay}ms`);
     this.reconnectAttempts++;
     this.reconnectTimer = setTimeout(() => {
       this.openSSE();
@@ -152,7 +162,7 @@ export class OpenCodeEventService {
       clearTimeout(this.heartbeatTimer);
     }
     this.heartbeatTimer = setTimeout(() => {
-      console.warn('[OpenCodeEventService] Heartbeat timeout, reconnecting...');
+      console.warn(`[SSE-CLIENT] Heartbeat timeout after ${HEARTBEAT_TIMEOUT_MS}ms, reconnecting...`);
       this.handleError();
     }, HEARTBEAT_TIMEOUT_MS);
   }

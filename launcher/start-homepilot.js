@@ -123,6 +123,13 @@ function startGateway() {
 function onGatewayOutput(data) {
   const text = data.toString();
 
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (line.trim()) {
+      console.log(`[Gateway] ${line}`);
+    }
+  }
+
   const listenMatch = text.match(/HomePilot Gateway listening on (http:\/\/\S+)/);
   if (listenMatch) {
     gatewayListenAddress = listenMatch[1];

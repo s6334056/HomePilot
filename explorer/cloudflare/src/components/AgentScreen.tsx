@@ -6,14 +6,16 @@ import { Navbar } from './Navbar';
 
 interface AgentScreenProps {
   currentPath: string;
-  openCodeUrl: string;
+  gatewayUrl: string;
+  gatewayToken: string;
   onOpenSettings: () => void;
   onOpenExplorer: () => void;
 }
 
 export const AgentScreen: React.FC<AgentScreenProps> = ({
   currentPath,
-  openCodeUrl,
+  gatewayUrl,
+  gatewayToken,
   onOpenSettings,
   onOpenExplorer,
 }) => {
@@ -41,11 +43,11 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const activeSession = selectedSession;
 
   useEffect(() => {
-    if (openCodeUrl && !connected) {
-      actions.connect(openCodeUrl);
+    if (gatewayUrl && gatewayToken && !connected) {
+      actions.connect(gatewayUrl, gatewayToken);
       setConnected(true);
     }
-  }, [openCodeUrl, connected, actions]);
+  }, [gatewayUrl, gatewayToken, connected, actions]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -299,13 +301,13 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
               <>
                 <Loader2 size={32} className="oc-spinning" />
                 <p>Connecting to OpenCode Server...</p>
-                <p className="oc-connecting-url">{openCodeUrl}</p>
+                <p className="oc-connecting-url">{gatewayUrl}</p>
               </>
             ) : (
               <>
                 <WifiOff size={32} />
                 <p>Not connected to OpenCode Server</p>
-                <p className="oc-connecting-url">{openCodeUrl}</p>
+                <p className="oc-connecting-url">{gatewayUrl}</p>
                 <button className="oc-btn oc-btn-connect" onClick={handleReconnect}>
                   Connect
                 </button>
@@ -331,7 +333,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           <div className="oc-connecting-content">
             <AlertCircle size={32} className="oc-status-error" />
             <p>Failed to connect to OpenCode Server</p>
-            <p className="oc-connecting-url">{openCodeUrl}</p>
+            <p className="oc-connecting-url">{gatewayUrl}</p>
             <button className="oc-btn oc-btn-connect" onClick={handleReconnect}>
               Retry
             </button>

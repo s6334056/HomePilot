@@ -1,5 +1,7 @@
 import { readdir, stat, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { CONFIG } from './config.js';
 import { validatePath, isTextFile } from './pathValidator.js';
 
@@ -128,4 +130,125 @@ export async function handleFile(request, response, url) {
   }
 
   json(response, 200, { path: filePath, content });
+}
+
+// --- OpenCode Proxy ---
+
+export function readBody(request) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      const body = Buffer.concat(chunks).toString('utf-8');
+      resolve(body || null);
+    });
+    request.on('error', reject);
+  });
+}
+
+export function handleOpenCodeProxy(request, response, openCodePath) {
+  const options = {
+    hostname: CONFIG.OPENCODE_HOST,
+    port: CONFIG.OPENCODE_PORT,
+    path: openCodePath,
+    method: request.method,
+    headers: { ...request.headers, host: `${CONFIG.OPENCODE_HOST}:${CONFIG.OPENCODE_PORT}` },
+  };
+
+  const proxyReq = httpRequest(options, (proxyRes) => {
+    response.writeHead(proxyRes.statusCode, proxyRes.headers);
+    proxyRes.pipe(response);
+  });
+
+  proxyReq.on('error', () => {
+    errorResponse(response, 502, 'BAD_GATEWAY', 'OpenCode Server is not reachable.');
+  });
+
+  request.pipe(proxyReq);
+}
+
+export async function handleOpenCodeProxyBody(request, response, openCodePath) {
+  const body = await readBody(request);
+  const options = {
+    hostname: CONFIG.OPENCODE_HOST,
+    port: CONFIG.OPENCODE_PORT,
+    path: openCodePath,
+    method: request.method,
+    headers: {
+      ...request.headers,
+      host: `${CONFIG.OPENCODE_HOST}:${CONFIG.OPENCODE_PORT}`,
+    },
+  };
+
+  if (body) {
+    options.headers['content-length'] = Buffer.byteLength(body);
+  }
+
+  const proxyReq = httpRequest(options, (proxyRes) => {
+    response.writeHead(proxyRes.statusCode, proxyRes.headers);
+    proxyRes.pipe(response);
+  });
+
+  proxyReq.on('error', () => {
+    errorResponse(response, 502, 'BAD_GATEWAY', 'OpenCode Server is not reachable.');
+  });
+
+  if (body) {
+    proxyReq.write(body);
+  }
+  proxyReq.end();
+}
+
+export function handleOpenCodeSSE(request, response, openCodePath) {
+  console.log(`[DIAG-SSE] 1. Received SSE request: ${request.method} ${openCodePath}`);
+
+  const options = {
+    hostname: CONFIG.OPENCODE_HOST,
+    port: CONFIG.OPENCODE_PORT,
+    path: openCodePath,
+    method: 'GET',
+    headers: {
+      'Accept': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'host': `${CONFIG.OPENCODE_HOST}:${CONFIG.OPENCODE_PORT}`,
+    },
+  };
+
+  console.log(`[DIAG-SSE] 2. Connecting to OpenCode Server: http://${options.hostname}:${options.port}${options.path}`);
+
+  const proxyReq = httpRequest(options, (proxyRes) => {
+    console.log(`[DIAG-SSE] 3. OpenCode Server responded: HTTP ${proxyRes.statusCode}`);
+    console.log(`[DIAG-SSE] 3a. OpenCode Server response headers:`, JSON.stringify(proxyRes.headers));
+
+    const responseHeaders = {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    };
+
+    console.log(`[DIAG-SSE] 4. Gateway response headers:`, JSON.stringify(responseHeaders));
+    response.writeHead(proxyRes.statusCode, responseHeaders);
+    console.log(`[DIAG-SSE] 5. SSE stream forwarding started`);
+
+    proxyRes.on('data', () => {});
+    proxyRes.on('end', () => {
+      console.log(`[DIAG-SSE] 7. OpenCode Server closed connection`);
+    });
+  });
+
+  proxyReq.on('error', (err) => {
+    console.log(`[DIAG-SSE] ERROR: OpenCode Server connection error: ${err.message}`);
+    errorResponse(response, 502, 'BAD_GATEWAY', 'OpenCode Server is not reachable.');
+  });
+
+  proxyReq.end();
+
+  request.on('close', () => {
+    console.log(`[DIAG-SSE] 6. Client disconnected`);
+    proxyReq.destroy();
+  });
 }

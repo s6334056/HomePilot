@@ -493,7 +493,8 @@ export function App() {
       {currentScreen === 'agent' && (
         <AgentScreen
           currentPath={getAgentDisplayPath()}
-          openCodeUrl={import.meta.env.VITE_OPENCODE_URL || 'http://localhost:4096'}
+          gatewayUrl={resolveConfig().gatewayUrl}
+          gatewayToken={resolveConfig().gatewayToken}
           onOpenSettings={() => setShowAgentSettings(true)}
           onOpenExplorer={handleOpenExplorer}
         />

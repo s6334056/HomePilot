@@ -48,7 +48,7 @@ export interface OpenCodeState {
 }
 
 export interface OpenCodeActions {
-  connect: (url: string) => void;
+  connect: (gatewayUrl: string, gatewayToken: string) => void;
   disconnect: () => void;
   refreshSessions: () => Promise<void>;
   refreshMessages: () => Promise<void>;
@@ -80,9 +80,9 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const getClient = useCallback((url: string): OpenCodeClient => {
-    if (!clientRef.current || clientRef.current.getBaseUrl() !== url) {
-      clientRef.current = new OpenCodeClient({ baseUrl: url });
+  const getClient = useCallback((gatewayUrl: string, gatewayToken: string): OpenCodeClient => {
+    if (!clientRef.current || clientRef.current.getGatewayUrl() !== gatewayUrl) {
+      clientRef.current = new OpenCodeClient({ gatewayUrl, gatewayToken });
     }
     return clientRef.current;
   }, []);
@@ -493,8 +493,8 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     }
   }, []);
 
-  const connect = useCallback((url: string) => {
-    const client = getClient(url);
+  const connect = useCallback((gatewayUrl: string, gatewayToken: string) => {
+    const client = getClient(gatewayUrl, gatewayToken);
     clientRef.current = client;
 
     let eventService = eventServiceRef.current;
@@ -517,7 +517,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     });
 
     setState((prev) => ({ ...prev, connectionStatus: 'connecting' }));
-    eventService.connect(url);
+    eventService.connect(gatewayUrl, gatewayToken);
   }, [getClient, processEvent, refreshSessions]);
 
   const disconnect = useCallback(() => {
