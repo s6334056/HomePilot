@@ -16,8 +16,13 @@ const GATEWAY_HOST = '127.0.0.1';
 const GATEWAY_PORT = 51887;
 const GATEWAY_URL = `http://${GATEWAY_HOST}:${GATEWAY_PORT}`;
 
+const OPENCODE_HOST = '127.0.0.1';
+const OPENCODE_PORT = 4096;
+const OPENCODE_URL = `http://${OPENCODE_HOST}:${OPENCODE_PORT}`;
+
 const GATEWAY_STARTUP_TIMEOUT = 10_000;
 const TUNNEL_URL_TIMEOUT = 30_000;
+const OPENCODE_STARTUP_TIMEOUT = 15_000;
 
 // Parse command-line arguments for root folder
 // Usage: node start-homepilot.js [root-folder]
@@ -29,11 +34,34 @@ let tunnelUrl = null;
 let gatewayListenAddress = null;
 let gatewayReady = false;
 let tunnelReady = false;
+let opencodeReady = false;
 let gatewayProcess = null;
+let opencodeProcess = null;
 let cloudflaredProcess = null;
 let shuttingDown = false;
 let gatewayTimeout = null;
 let tunnelTimeout = null;
+let opencodeTimeout = null;
+
+// --- Validate root folder ---
+if (!existsSync(ROOT_FOLDER)) {
+  console.error('');
+  console.error('========================================');
+  console.error('  HomePilot - Root folder not found');
+  console.error('========================================');
+  console.error('');
+  console.error(`The specified root folder does not exist:`);
+  console.error(`  ${ROOT_FOLDER}`);
+  console.error('');
+  console.error('Please create the folder before starting HomePilot.');
+  console.error('');
+  console.error('Usage:');
+  console.error('  start-homepilot.bat [root-folder]');
+  console.error('');
+  console.error('Example:');
+  console.error('  start-homepilot.bat C:\\hp1');
+  process.exit(1);
+}
 
 // --- Validate cloudflared ---
 if (!existsSync(CLOUDFLARED_PATH)) {
@@ -48,7 +76,6 @@ if (!existsSync(CLOUDFLARED_PATH)) {
 // --- Start Gateway ---
 function startGateway() {
   console.log('Starting HomePilot Gateway...');
-  console.log(`Root: ${ROOT_FOLDER}`);
 
   gatewayProcess = spawn('node', [GATEWAY_SCRIPT], {
     cwd: GATEWAY_DIR,
@@ -116,7 +143,67 @@ function checkGatewayReady() {
       clearTimeout(gatewayTimeout);
       gatewayTimeout = null;
     }
-    console.log('Gateway is ready. Starting Quick Tunnel...');
+    console.log('Gateway is ready. Starting OpenCode Server...');
+    startOpenCodeServer();
+  }
+}
+
+// --- Start OpenCode Server ---
+function startOpenCodeServer() {
+  opencodeProcess = spawn('opencode', ['serve'], {
+    cwd: ROOT_FOLDER,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      HOMEPILOT_ROOT: ROOT_FOLDER,
+    },
+  });
+
+  opencodeProcess.stdout.on('data', onOpenCodeOutput);
+  opencodeProcess.stderr.on('data', onOpenCodeOutput);
+
+  opencodeProcess.on('close', (code) => {
+    if (!shuttingDown && !opencodeReady) {
+      console.error('');
+      console.error('OpenCode Server exited unexpectedly.');
+      if (code !== 0 && code !== null) {
+        console.error(`Exit code: ${code}`);
+      }
+      shutdown();
+    }
+  });
+
+  opencodeProcess.on('error', (err) => {
+    if (!shuttingDown) {
+      console.error('');
+      console.error('Failed to start OpenCode Server.');
+      console.error(err.message);
+      console.error('');
+      console.error('Make sure "opencode" command is available in PATH.');
+      shutdown();
+    }
+  });
+
+  opencodeTimeout = setTimeout(() => {
+    if (!opencodeReady) {
+      console.error('');
+      console.error('OpenCode Server failed to start within 15 seconds.');
+      shutdown();
+    }
+  }, OPENCODE_STARTUP_TIMEOUT);
+}
+
+function onOpenCodeOutput(data) {
+  const text = data.toString();
+
+  // Check for OpenCode Server ready indicators
+  if (!opencodeReady && (text.includes('Listening on') || text.includes('Server ready') || text.includes(`:${OPENCODE_PORT}`))) {
+    opencodeReady = true;
+    if (opencodeTimeout) {
+      clearTimeout(opencodeTimeout);
+      opencodeTimeout = null;
+    }
+    console.log('OpenCode Server is ready. Starting Quick Tunnel...');
     startCloudflared();
   }
 }
@@ -194,10 +281,10 @@ function showReady() {
   console.log('');
   console.log('HomePilot Gateway');
   console.log('-----------------');
-  console.log(`  Root    : ${ROOT_FOLDER}`);
-  console.log(`  Gateway : ${address}`);
-  console.log(`  OpenCode: http://localhost:4096`);
-  console.log(`  Token   : ${gatewayToken}`);
+  console.log(`  Root     : ${ROOT_FOLDER}`);
+  console.log(`  Gateway  : ${address}`);
+  console.log(`  OpenCode : ${OPENCODE_URL}`);
+  console.log(`  Token    : ${gatewayToken}`);
   console.log('');
   console.log('Quick Tunnel');
   console.log('  Status : READY');
@@ -233,6 +320,10 @@ function shutdown() {
     clearTimeout(tunnelTimeout);
     tunnelTimeout = null;
   }
+  if (opencodeTimeout) {
+    clearTimeout(opencodeTimeout);
+    opencodeTimeout = null;
+  }
 
   console.log('');
   console.log('Stopping HomePilot...');
@@ -240,6 +331,11 @@ function shutdown() {
   if (cloudflaredProcess && !cloudflaredProcess.killed) {
     console.log('Stopping Quick Tunnel...');
     cloudflaredProcess.kill();
+  }
+
+  if (opencodeProcess && !opencodeProcess.killed) {
+    console.log('Stopping OpenCode Server...');
+    opencodeProcess.kill();
   }
 
   if (gatewayProcess && !gatewayProcess.killed) {
@@ -259,6 +355,10 @@ function shutdown() {
   if (cloudflaredProcess && !cloudflaredProcess.killed) {
     pending++;
     cloudflaredProcess.on('close', onChildExit);
+  }
+  if (opencodeProcess && !opencodeProcess.killed) {
+    pending++;
+    opencodeProcess.on('close', onChildExit);
   }
   if (gatewayProcess && !gatewayProcess.killed) {
     pending++;
