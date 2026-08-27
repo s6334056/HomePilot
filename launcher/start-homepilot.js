@@ -150,9 +150,12 @@ function checkGatewayReady() {
 
 // --- Start OpenCode Server ---
 function startOpenCodeServer() {
+  const isWindows = process.platform === 'win32';
+
   opencodeProcess = spawn('opencode', ['serve'], {
     cwd: ROOT_FOLDER,
     stdio: ['ignore', 'pipe', 'pipe'],
+    shell: isWindows,
     env: {
       ...process.env,
       HOMEPILOT_ROOT: ROOT_FOLDER,
