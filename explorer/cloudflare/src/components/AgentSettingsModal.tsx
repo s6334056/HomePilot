@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Cpu, Loader2, RefreshCw } from 'lucide-react';
+import { X, Cpu, RefreshCw } from 'lucide-react';
 import { AgentSettings, OpenCodeProviderModel } from '../domain/types';
 import { SessionService } from '../services/SessionService';
 import { OpenCodeClient } from '../services/OpenCodeClient';

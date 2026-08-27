@@ -509,7 +509,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         ...prev,
         connectionStatus: status === 'connected' ? 'connected'
           : status === 'reconnecting' ? 'reconnecting'
-          : status === 'disconnected' ? 'disconnected'
+          : status === 'error' ? 'error'
           : 'disconnected',
       }));
       if (status === 'connected') {
