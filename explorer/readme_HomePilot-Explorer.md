@@ -122,6 +122,9 @@ npm run build
 
 https://dash.cloudflare.com/login
 
+実際にデプロイした先のURL
+https://homepilot.s6334056.workers.dev/
+
 [参考]QRコードの作成方法
 以下を背景が黒いターミナルで実行
 ```

@@ -495,6 +495,7 @@ export function App() {
           currentPath={getAgentDisplayPath()}
           gatewayUrl={resolveConfig().gatewayUrl}
           gatewayToken={resolveConfig().gatewayToken}
+          agentContext={agentContext}
           onOpenSettings={() => setShowAgentSettings(true)}
           onOpenExplorer={handleOpenExplorer}
         />

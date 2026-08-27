@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Mic, Send, Wifi, WifiOff, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
-import { OpenCodeSessionInfo } from '../domain/types';
+import { OpenCodeSessionInfo, AgentContext } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
 import { Navbar } from './Navbar';
 
@@ -8,6 +8,7 @@ interface AgentScreenProps {
   currentPath: string;
   gatewayUrl: string;
   gatewayToken: string;
+  agentContext: AgentContext | null;
   onOpenSettings: () => void;
   onOpenExplorer: () => void;
 }
@@ -16,6 +17,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   currentPath,
   gatewayUrl,
   gatewayToken,
+  agentContext,
   onOpenSettings,
   onOpenExplorer,
 }) => {
@@ -80,7 +82,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
     }
-    await actions.sendMessage(content);
+    await actions.sendMessage(content, agentContext);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

@@ -9,9 +9,11 @@ import {
   OpenCodeQuestionRequest,
   OpenCodeSSEEvent,
   AgentSettings,
+  AgentContext,
 } from '../domain/types';
 import { OpenCodeClient } from '../services/OpenCodeClient';
 import { OpenCodeEventService } from '../services/OpenCodeEventService';
+import { formatMessageWithContext } from '../services/AgentContextFormatter';
 
 const SETTINGS_STORAGE_KEY = 'homepilot-agent-settings';
 
@@ -54,7 +56,7 @@ export interface OpenCodeActions {
   refreshMessages: () => Promise<void>;
   selectSession: (sessionID: string) => Promise<void>;
   createSession: (title?: string) => Promise<string | null>;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, context?: AgentContext | null) => Promise<void>;
   respondPermission: (permissionID: string, response: 'grant' | 'deny' | 'always') => Promise<void>;
   respondQuestion: (questionID: string, answer: string | string[]) => Promise<void>;
 }
@@ -407,10 +409,12 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     }
   }, []);
 
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (content: string, context?: AgentContext | null) => {
     const client = clientRef.current;
     const sessionID = stateRef.current.selectedSessionID;
     if (!client || !sessionID) return;
+
+    const formattedMessage = formatMessageWithContext(context, content);
 
     // Optimistically add user message and processing placeholder
     const tempUserMsgId = `temp-user-${Date.now()}`;
@@ -440,7 +444,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     }));
 
     try {
-      await client.sendMessage(sessionID, content);
+      await client.sendMessage(sessionID, formattedMessage);
       // Success: SSE events will update the real messages
       // The optimistic messages will be replaced when real ones arrive
     } catch (e: unknown) {
