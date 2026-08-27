@@ -234,7 +234,8 @@ export function handleOpenCodeSSE(request, response, openCodePath) {
     response.writeHead(proxyRes.statusCode, responseHeaders);
     console.log(`[DIAG-SSE] 5. SSE stream forwarding started`);
 
-    proxyRes.on('data', () => {});
+    proxyRes.pipe(response);
+
     proxyRes.on('end', () => {
       console.log(`[DIAG-SSE] 7. OpenCode Server closed connection`);
     });

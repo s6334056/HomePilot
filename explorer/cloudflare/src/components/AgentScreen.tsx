@@ -23,6 +23,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const [showSessionList, setShowSessionList] = useState<boolean>(true);
   const [inputValue, setInputValue] = useState<string>('');
   const [connected, setConnected] = useState<boolean>(false);
+  const [hasConnected, setHasConnected] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -48,6 +49,12 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       setConnected(true);
     }
   }, [gatewayUrl, gatewayToken, connected, actions]);
+
+  useEffect(() => {
+    if (connectionStatus === 'connected') {
+      setHasConnected(true);
+    }
+  }, [connectionStatus]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -113,6 +120,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         return <Wifi size={14} className="oc-status-connected" />;
       case 'connecting':
         return <Loader2 size={14} className="oc-status-connecting" />;
+      case 'reconnecting':
+        return <Loader2 size={14} className="oc-status-connecting" />;
       case 'error':
         return <AlertCircle size={14} className="oc-status-error" />;
       default:
@@ -124,6 +133,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     switch (connectionStatus) {
       case 'connected': return 'Connected';
       case 'connecting': return 'Connecting...';
+      case 'reconnecting': return 'Reconnecting...';
       case 'error': return 'Error';
       default: return 'Disconnected';
     }
@@ -285,7 +295,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     return null;
   };
 
-  if (connectionStatus === 'disconnected' || connectionStatus === 'connecting') {
+  if (!hasConnected && (connectionStatus === 'disconnected' || connectionStatus === 'connecting')) {
     return (
       <div className="agent-screen">
         <Navbar
@@ -313,30 +323,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 </button>
               </>
             )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (connectionStatus === 'error') {
-    return (
-      <div className="agent-screen">
-        <Navbar
-          currentPath={currentPath}
-          mode="agent"
-          onOpenSessionList={handleToggleSessionList}
-          onOpenSettings={onOpenSettings}
-          onOpenExplorer={onOpenExplorer}
-        />
-        <div className="oc-connecting-screen">
-          <div className="oc-connecting-content">
-            <AlertCircle size={32} className="oc-status-error" />
-            <p>Failed to connect to OpenCode Server</p>
-            <p className="oc-connecting-url">{gatewayUrl}</p>
-            <button className="oc-btn oc-btn-connect" onClick={handleReconnect}>
-              Retry
-            </button>
           </div>
         </div>
       </div>

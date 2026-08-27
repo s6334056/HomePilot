@@ -508,7 +508,8 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       setState((prev) => ({
         ...prev,
         connectionStatus: status === 'connected' ? 'connected'
-          : status === 'error' ? 'error'
+          : status === 'reconnecting' ? 'reconnecting'
+          : status === 'disconnected' ? 'disconnected'
           : 'disconnected',
       }));
       if (status === 'connected') {

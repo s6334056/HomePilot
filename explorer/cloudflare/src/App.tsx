@@ -511,6 +511,8 @@ export function App() {
         isOpen={showAgentSettings}
         onClose={() => setShowAgentSettings(false)}
         sessionService={sessionService}
+        gatewayUrl={resolveConfig().gatewayUrl}
+        gatewayToken={resolveConfig().gatewayToken}
       />
     </div>
   );

@@ -1,40 +1,36 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Globe, Cpu, Loader2, RefreshCw } from 'lucide-react';
+import { X, Cpu, Loader2, RefreshCw } from 'lucide-react';
 import { AgentSettings, OpenCodeProviderModel } from '../domain/types';
 import { SessionService } from '../services/SessionService';
 import { OpenCodeClient } from '../services/OpenCodeClient';
-
-const OPENCODE_URL_KEY = 'homepilot-opencode-url';
-const DEFAULT_OPENCODE_URL = 'http://localhost:4096';
 
 interface AgentSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   sessionService: SessionService;
-  onOpenCodeUrlChange?: (url: string) => void;
+  gatewayUrl: string;
+  gatewayToken: string;
 }
 
 export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
   isOpen,
   onClose,
   sessionService,
-  onOpenCodeUrlChange,
+  gatewayUrl,
+  gatewayToken,
 }) => {
   const [settings, setSettings] = useState<AgentSettings>(() => sessionService.getSettings());
-  const [openCodeUrl, setOpenCodeUrl] = useState<string>(() => {
-    try {
-      return localStorage.getItem(OPENCODE_URL_KEY) || DEFAULT_OPENCODE_URL;
-    } catch {
-      return DEFAULT_OPENCODE_URL;
-    }
-  });
-
   const [models, setModels] = useState<OpenCodeProviderModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState<boolean>(false);
   const [errorModels, setErrorModels] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (url: string) => {
-    const client = new OpenCodeClient({ baseUrl: url });
+  const fetchData = useCallback(async () => {
+    if (!gatewayUrl || !gatewayToken) {
+      setErrorModels('Gateway not connected');
+      return;
+    }
+
+    const client = new OpenCodeClient({ gatewayUrl, gatewayToken });
 
     setIsLoadingModels(true);
     setErrorModels(null);
@@ -48,19 +44,14 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
     } finally {
       setIsLoadingModels(false);
     }
-  }, []);
+  }, [gatewayUrl, gatewayToken]);
 
   useEffect(() => {
     if (isOpen) {
       setSettings(sessionService.getSettings());
-      try {
-        setOpenCodeUrl(localStorage.getItem(OPENCODE_URL_KEY) || DEFAULT_OPENCODE_URL);
-      } catch {
-        setOpenCodeUrl(DEFAULT_OPENCODE_URL);
-      }
-      fetchData(openCodeUrl);
+      fetchData();
     }
-  }, [isOpen, sessionService, openCodeUrl, fetchData]);
+  }, [isOpen, sessionService, fetchData]);
 
   const handleSelectModel = (providerID: string, modelID: string) => {
     const updated = { ...settings, selectedProviderID: providerID, selectedModelID: modelID };
@@ -68,20 +59,8 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
     sessionService.updateSettings({ selectedProviderID: providerID, selectedModelID: modelID });
   };
 
-  const handleOpenCodeUrlChange = (url: string) => {
-    setOpenCodeUrl(url);
-    try {
-      localStorage.setItem(OPENCODE_URL_KEY, url);
-    } catch {
-      // localStorage unavailable
-    }
-    if (onOpenCodeUrlChange) {
-      onOpenCodeUrlChange(url);
-    }
-  };
-
   const handleRefresh = () => {
-    fetchData(openCodeUrl);
+    fetchData();
   };
 
   if (!isOpen) return null;
@@ -105,26 +84,6 @@ export const AgentSettingsModal: React.FC<AgentSettingsModalProps> = ({
         </div>
 
         <div className="settings-body">
-          <section className="settings-section">
-            <h3>OpenCode Server</h3>
-            <div className="settings-input-group">
-              <label className="settings-label">
-                <Globe size={14} />
-                <span>Server URL</span>
-              </label>
-              <input
-                type="text"
-                className="settings-input"
-                value={openCodeUrl}
-                onChange={(e) => handleOpenCodeUrlChange(e.target.value)}
-                placeholder="http://localhost:4096"
-              />
-              <p className="settings-hint">
-                URL of the OpenCode Server (default: http://localhost:4096)
-              </p>
-            </div>
-          </section>
-
           <section className="settings-section">
             <div className="settings-section-header">
               <h3>Model</h3>

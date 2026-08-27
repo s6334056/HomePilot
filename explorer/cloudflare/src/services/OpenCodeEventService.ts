@@ -1,9 +1,9 @@
 import { OpenCodeSSEEvent } from '../domain/types';
 
 export type OpenCodeEventHandler = (event: OpenCodeSSEEvent) => void;
-export type OpenCodeConnectionHandler = (status: 'connected' | 'disconnected' | 'error') => void;
+export type OpenCodeConnectionHandler = (status: 'connected' | 'disconnected' | 'reconnecting') => void;
 
-const HEARTBEAT_TIMEOUT_MS = 30000;
+const HEARTBEAT_TIMEOUT_MS = 90000;
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
 
@@ -138,7 +138,7 @@ export class OpenCodeEventService {
       this.eventSource.close();
       this.eventSource = null;
     }
-    this.notifyConnection('error');
+    this.notifyConnection('reconnecting');
     this.scheduleReconnect();
   }
 

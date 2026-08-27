@@ -64,7 +64,7 @@ export interface AgentSettings {
 // OpenCode Types (verified against OpenCode v1.18.21)
 // ============================================================
 
-export type OpenCodeConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type OpenCodeConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 
 export interface OpenCodeModel {
   id: string;
