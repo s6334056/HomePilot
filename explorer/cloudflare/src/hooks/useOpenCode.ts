@@ -435,7 +435,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     setState((prev) => ({
       ...prev,
       selectedSessionID: sessionID,
-      selectedSession: prev.sessions.find((s) => s.id === sessionID) || null,
+      selectedSession: prev.sessions.find((s) => s.id === sessionID) || prev.archivedSessions.find((s) => s.id === sessionID) || null,
       messages: [],
       sessionStatus: null,
       isLoadingMessages: true,

@@ -1037,6 +1037,7 @@
 
 .agent-session-title {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1793,19 +1794,24 @@
   display: flex;
   align-items: stretch;
   gap: 0;
+  min-width: 0;
 }
 
 .agent-session-item-wrapper .agent-session-item {
   flex: 1;
+  min-width: 0;
   border-radius: var(--radius) 0 0 var(--radius);
   border-right: none;
+  overflow: hidden;
 }
 
 /* Session Action Buttons */
 .agent-session-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex: 0 0 auto;
   border: 1px solid var(--border);
+  border-left: none;
   border-radius: 0 var(--radius) var(--radius) 0;
   overflow: hidden;
 }
@@ -1814,17 +1820,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+  width: 40px;
   background-color: var(--bg-card);
   border: none;
-  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 8px 6px;
   transition: all 0.15s ease;
 }
 
 .agent-session-action-btn:last-child {
-  border-bottom: none;
+  border-right: none;
 }
 
 .agent-session-action-btn:hover:not(:disabled) {
