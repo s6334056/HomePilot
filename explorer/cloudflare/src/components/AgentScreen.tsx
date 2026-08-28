@@ -552,6 +552,9 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         <div className="oc-connection-status">
           {getConnectionStatusIcon()}
           <span>{getConnectionStatusText()}</span>
+          {activeSession.model && (
+            <span className="oc-session-model">{activeSession.model.id}</span>
+          )}
         </div>
         <div className="oc-session-header-right">
           {sessionStatus && (
