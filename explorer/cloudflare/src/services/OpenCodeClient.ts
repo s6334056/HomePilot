@@ -66,7 +66,7 @@ export class OpenCodeClient {
   }
 
   async getAllSessions(): Promise<OpenCodeSessionInfo[]> {
-    const data = await this.request<unknown>('GET', '/experimental/session');
+    const data = await this.request<unknown>('GET', '/experimental/session?archived=true');
     return this.unwrapSessionArray(data);
   }
 
