@@ -459,6 +459,10 @@
   .toolbar {
     flex-wrap: wrap;
   }
+
+  .agent-session-list-header {
+    flex-direction: column;
+  }
 }
 
 /* Responsive: hide G2 Preview on narrow screens */
@@ -1742,4 +1746,98 @@
 .agent-session-new:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Session List Header */
+.agent-session-list-header {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.agent-session-list-header .agent-session-new {
+  flex: 1;
+}
+
+/* Archived Sessions Toggle */
+.agent-session-archive-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.agent-session-archive-toggle:hover {
+  background-color: var(--bg-sub);
+  color: var(--text);
+  border-color: #8b949e;
+}
+
+.agent-session-archive-toggle.active {
+  background-color: rgba(56, 139, 253, 0.1);
+  color: var(--accent);
+  border-color: rgba(56, 139, 253, 0.3);
+}
+
+/* Session Item Wrapper (item + actions) */
+.agent-session-item-wrapper {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.agent-session-item-wrapper .agent-session-item {
+  flex: 1;
+  border-radius: var(--radius) 0 0 var(--radius);
+  border-right: none;
+}
+
+/* Session Action Buttons */
+.agent-session-actions {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  overflow: hidden;
+}
+
+.agent-session-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-card);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: all 0.15s ease;
+}
+
+.agent-session-action-btn:last-child {
+  border-bottom: none;
+}
+
+.agent-session-action-btn:hover:not(:disabled) {
+  background-color: var(--bg-sub);
+  color: var(--text);
+}
+
+.agent-session-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.agent-session-action-btn--danger:hover:not(:disabled) {
+  background-color: rgba(248, 81, 73, 0.1);
+  color: #f85149;
 }

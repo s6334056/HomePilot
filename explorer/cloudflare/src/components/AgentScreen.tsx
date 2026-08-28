@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, Send, Wifi, WifiOff, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Mic, Send, Wifi, WifiOff, AlertCircle, Loader2, RefreshCw, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
 import { OpenCodeSessionInfo, AgentContext } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
 import { Navbar } from './Navbar';
@@ -26,18 +26,23 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const [inputValue, setInputValue] = useState<string>('');
   const [connected, setConnected] = useState<boolean>(false);
   const [hasConnected, setHasConnected] = useState<boolean>(false);
+  const [showArchivedSessions, setShowArchivedSessions] = useState<boolean>(false);
+  const [operatingSessionId, setOperatingSessionId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const {
     connectionStatus,
     sessions,
+    archivedSessions,
     selectedSessionID,
     selectedSession,
     messages,
     sessionStatus,
     pendingPermissions,
     isLoadingSessions,
+    isLoadingArchivedSessions,
     isLoadingMessages,
     isSending,
     error,
@@ -114,6 +119,38 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
   const handleRefreshMessages = () => {
     actions.refreshMessages();
+  };
+
+  const handleArchiveSession = async (sessionID: string) => {
+    if (operatingSessionId) return;
+    setOperatingSessionId(sessionID);
+    await actions.archiveSession(sessionID);
+    setOperatingSessionId(null);
+  };
+
+  const handleRestoreSession = async (sessionID: string) => {
+    if (operatingSessionId) return;
+    setOperatingSessionId(sessionID);
+    await actions.restoreSession(sessionID);
+    setOperatingSessionId(null);
+  };
+
+  const handleDeleteSession = async (sessionID: string) => {
+    if (operatingSessionId) return;
+    setOperatingSessionId(sessionID);
+    setDeleteConfirmId(null);
+    await actions.deleteSession(sessionID);
+    setOperatingSessionId(null);
+  };
+
+  const handleToggleArchived = () => {
+    setShowArchivedSessions((prev) => {
+      const next = !prev;
+      if (next) {
+        actions.refreshArchivedSessions();
+      }
+      return next;
+    });
   };
 
   const getConnectionStatusIcon = () => {
@@ -355,34 +392,147 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         )}
         <div className="agent-session-list-view">
           <div className="agent-session-list">
-            <button className="agent-session-new" onClick={handleNewSession} disabled={isLoadingSessions}>
-              <Plus size={16} />
-              <span>New Session</span>
-            </button>
-            {isLoadingSessions && sessions.length === 0 && (
-              <div className="oc-loading">Loading sessions...</div>
-            )}
-            {sessions.map((session) => (
-              <button
-                key={session.id}
-                className={`agent-session-item ${session.id === selectedSessionID ? 'active' : ''}`}
-                onClick={() => handleSelectSession(session.id)}
-              >
-                <span className="agent-session-title">
-                  {formatSessionTitle(session)}
-                </span>
-                <span className="agent-session-date">
-                  {formatTime(session.time?.updated)}
-                </span>
+            <div className="agent-session-list-header">
+              <button className="agent-session-new" onClick={handleNewSession} disabled={isLoadingSessions}>
+                <Plus size={16} />
+                <span>New Session</span>
               </button>
-            ))}
-            {sessions.length === 0 && !isLoadingSessions && (
-              <div className="agent-session-empty">
-                No sessions yet. Create one to get started.
-              </div>
+              <button
+                className={`agent-session-archive-toggle ${showArchivedSessions ? 'active' : ''}`}
+                onClick={handleToggleArchived}
+              >
+                <Archive size={14} />
+                <span>{showArchivedSessions ? 'Active' : 'Archived'}</span>
+              </button>
+            </div>
+            {showArchivedSessions ? (
+              <>
+                {isLoadingArchivedSessions && archivedSessions.length === 0 && (
+                  <div className="oc-loading">Loading archived sessions...</div>
+                )}
+                {archivedSessions.map((session) => (
+                  <div key={session.id} className="agent-session-item-wrapper">
+                    <button
+                      className={`agent-session-item ${session.id === selectedSessionID ? 'active' : ''}`}
+                      onClick={() => handleSelectSession(session.id)}
+                      disabled={operatingSessionId === session.id}
+                    >
+                      <span className="agent-session-title">
+                        {formatSessionTitle(session)}
+                      </span>
+                      <span className="agent-session-date">
+                        {formatTime(session.time?.updated)}
+                      </span>
+                    </button>
+                    <div className="agent-session-actions">
+                      <button
+                        className="agent-session-action-btn"
+                        onClick={() => handleRestoreSession(session.id)}
+                        disabled={operatingSessionId === session.id}
+                        title="Restore from archive"
+                      >
+                        {operatingSessionId === session.id ? (
+                          <Loader2 size={13} className="oc-spinning" />
+                        ) : (
+                          <ArchiveRestore size={13} />
+                        )}
+                      </button>
+                      <button
+                        className="agent-session-action-btn agent-session-action-btn--danger"
+                        onClick={() => setDeleteConfirmId(session.id)}
+                        disabled={operatingSessionId === session.id}
+                        title="Delete session"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {archivedSessions.length === 0 && !isLoadingArchivedSessions && (
+                  <div className="agent-session-empty">
+                    No archived sessions.
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {isLoadingSessions && sessions.length === 0 && (
+                  <div className="oc-loading">Loading sessions...</div>
+                )}
+                {sessions.map((session) => (
+                  <div key={session.id} className="agent-session-item-wrapper">
+                    <button
+                      className={`agent-session-item ${session.id === selectedSessionID ? 'active' : ''}`}
+                      onClick={() => handleSelectSession(session.id)}
+                      disabled={operatingSessionId === session.id}
+                    >
+                      <span className="agent-session-title">
+                        {formatSessionTitle(session)}
+                      </span>
+                      <span className="agent-session-date">
+                        {formatTime(session.time?.updated)}
+                      </span>
+                    </button>
+                    <div className="agent-session-actions">
+                      <button
+                        className="agent-session-action-btn"
+                        onClick={() => handleArchiveSession(session.id)}
+                        disabled={operatingSessionId === session.id}
+                        title="Archive session"
+                      >
+                        {operatingSessionId === session.id ? (
+                          <Loader2 size={13} className="oc-spinning" />
+                        ) : (
+                          <Archive size={13} />
+                        )}
+                      </button>
+                      <button
+                        className="agent-session-action-btn agent-session-action-btn--danger"
+                        onClick={() => setDeleteConfirmId(session.id)}
+                        disabled={operatingSessionId === session.id}
+                        title="Delete session"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {sessions.length === 0 && !isLoadingSessions && (
+                  <div className="agent-session-empty">
+                    No sessions yet. Create one to get started.
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
+        {deleteConfirmId && (
+          <div className="oc-dialog-overlay" onClick={() => setDeleteConfirmId(null)}>
+            <div className="oc-dialog" onClick={(e) => e.stopPropagation()}>
+              <div className="oc-dialog-header">
+                <AlertCircle size={18} />
+                <span>Delete Session</span>
+              </div>
+              <div className="oc-dialog-body">
+                <p>Are you sure you want to delete this session? This action cannot be undone.</p>
+              </div>
+              <div className="oc-dialog-actions">
+                <button
+                  className="oc-btn"
+                  onClick={() => setDeleteConfirmId(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="oc-btn oc-btn-deny"
+                  onClick={() => handleDeleteSession(deleteConfirmId)}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

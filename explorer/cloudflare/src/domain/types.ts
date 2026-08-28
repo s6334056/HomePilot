@@ -82,6 +82,7 @@ export interface OpenCodeTokenUsage {
 export interface OpenCodeSessionTime {
   created: number;
   updated: number;
+  archived?: number;
 }
 
 export interface OpenCodeSessionSummary {

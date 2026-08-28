@@ -37,6 +37,7 @@ export interface OpenCodeMessageWithParts extends OpenCodeMessageInfo {
 export interface OpenCodeState {
   connectionStatus: OpenCodeConnectionStatus;
   sessions: OpenCodeSessionInfo[];
+  archivedSessions: OpenCodeSessionInfo[];
   selectedSessionID: string | null;
   selectedSession: OpenCodeSessionInfo | null;
   messages: OpenCodeMessageWithParts[];
@@ -44,6 +45,7 @@ export interface OpenCodeState {
   pendingPermissions: OpenCodePermissionRequest[];
   pendingQuestions: OpenCodeQuestionRequest[];
   isLoadingSessions: boolean;
+  isLoadingArchivedSessions: boolean;
   isLoadingMessages: boolean;
   isSending: boolean;
   error: string | null;
@@ -53,18 +55,23 @@ export interface OpenCodeActions {
   connect: (gatewayUrl: string, gatewayToken: string) => void;
   disconnect: () => void;
   refreshSessions: () => Promise<void>;
+  refreshArchivedSessions: () => Promise<void>;
   refreshMessages: () => Promise<void>;
   selectSession: (sessionID: string) => Promise<void>;
   createSession: (title?: string) => Promise<string | null>;
   sendMessage: (content: string, context?: AgentContext | null) => Promise<void>;
   respondPermission: (permissionID: string, response: 'grant' | 'deny' | 'always') => Promise<void>;
   respondQuestion: (questionID: string, answer: string | string[]) => Promise<void>;
+  archiveSession: (sessionID: string) => Promise<boolean>;
+  restoreSession: (sessionID: string) => Promise<boolean>;
+  deleteSession: (sessionID: string) => Promise<boolean>;
 }
 
 export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   const [state, setState] = useState<OpenCodeState>({
     connectionStatus: 'disconnected',
     sessions: [],
+    archivedSessions: [],
     selectedSessionID: null,
     selectedSession: null,
     messages: [],
@@ -72,6 +79,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     pendingPermissions: [],
     pendingQuestions: [],
     isLoadingSessions: false,
+    isLoadingArchivedSessions: false,
     isLoadingMessages: false,
     isSending: false,
     error: null,
@@ -104,26 +112,71 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         case 'session.created': {
           const props = properties as unknown as { sessionID: string; info: OpenCodeSessionInfo };
           if (!props?.sessionID) return prev;
-          const exists = prev.sessions.some((s) => s.id === props.sessionID);
-          if (exists) return prev;
           const newSession = props.info || { id: props.sessionID };
-          return {
-            ...prev,
-            sessions: [newSession, ...prev.sessions],
-          };
+          const isArchived = OpenCodeClient.isSessionArchived(newSession);
+          if (isArchived) {
+            const exists = prev.archivedSessions.some((s) => s.id === props.sessionID);
+            if (exists) return prev;
+            return {
+              ...prev,
+              archivedSessions: [newSession, ...prev.archivedSessions],
+            };
+          } else {
+            const exists = prev.sessions.some((s) => s.id === props.sessionID);
+            if (exists) return prev;
+            return {
+              ...prev,
+              sessions: [newSession, ...prev.sessions],
+            };
+          }
         }
 
         case 'session.updated': {
           const props = properties as unknown as { sessionID: string; info: Partial<OpenCodeSessionInfo> };
           if (!props?.sessionID) return prev;
+          const mergedInfo = props.info;
+          const wasActive = prev.sessions.some((s) => s.id === props.sessionID);
+          const wasArchived = prev.archivedSessions.some((s) => s.id === props.sessionID);
+          const updatedSession = wasActive
+            ? prev.sessions.find((s) => s.id === props.sessionID)
+            : wasArchived
+              ? prev.archivedSessions.find((s) => s.id === props.sessionID)
+              : null;
+          const merged = updatedSession ? { ...updatedSession, ...mergedInfo } : mergedInfo as OpenCodeSessionInfo;
+          const nowArchived = OpenCodeClient.isSessionArchived(merged);
+          if (wasActive && nowArchived) {
+            return {
+              ...prev,
+              sessions: prev.sessions.filter((s) => s.id !== props.sessionID),
+              archivedSessions: [merged, ...prev.archivedSessions],
+              selectedSession:
+                prev.selectedSession?.id === props.sessionID
+                  ? { ...prev.selectedSession, ...mergedInfo }
+                  : prev.selectedSession,
+            };
+          }
+          if (wasArchived && !nowArchived) {
+            return {
+              ...prev,
+              archivedSessions: prev.archivedSessions.filter((s) => s.id !== props.sessionID),
+              sessions: [merged, ...prev.sessions],
+              selectedSession:
+                prev.selectedSession?.id === props.sessionID
+                  ? { ...prev.selectedSession, ...mergedInfo }
+                  : prev.selectedSession,
+            };
+          }
           return {
             ...prev,
             sessions: prev.sessions.map((s) =>
-              s.id === props.sessionID ? { ...s, ...props.info } : s
+              s.id === props.sessionID ? { ...s, ...mergedInfo } : s
+            ),
+            archivedSessions: prev.archivedSessions.map((s) =>
+              s.id === props.sessionID ? { ...s, ...mergedInfo } : s
             ),
             selectedSession:
               prev.selectedSession?.id === props.sessionID
-                ? { ...prev.selectedSession, ...props.info }
+                ? { ...prev.selectedSession, ...mergedInfo }
                 : prev.selectedSession,
           };
         }
@@ -293,6 +346,45 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load sessions';
       setState((prev) => ({ ...prev, isLoadingSessions: false, error: msg }));
+    }
+  }, []);
+
+  const refreshArchivedSessions = useCallback(async () => {
+    const client = clientRef.current;
+    if (!client) return;
+    setState((prev) => ({ ...prev, isLoadingArchivedSessions: true, error: null }));
+    try {
+      const archivedSessions = await client.getArchivedSessions();
+      setState((prev) => ({ ...prev, archivedSessions, isLoadingArchivedSessions: false }));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to load archived sessions';
+      setState((prev) => ({ ...prev, isLoadingArchivedSessions: false, error: msg }));
+    }
+  }, []);
+
+  const refreshAllSessions = useCallback(async () => {
+    const client = clientRef.current;
+    if (!client) return;
+    setState((prev) => ({ ...prev, isLoadingSessions: true, isLoadingArchivedSessions: true, error: null }));
+    try {
+      const all = await client.getAllSessions();
+      const sessions = all.filter((s) => !OpenCodeClient.isSessionArchived(s));
+      const archivedSessions = all.filter((s) => OpenCodeClient.isSessionArchived(s));
+      setState((prev) => ({
+        ...prev,
+        sessions,
+        archivedSessions,
+        isLoadingSessions: false,
+        isLoadingArchivedSessions: false,
+      }));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to load sessions';
+      setState((prev) => ({
+        ...prev,
+        isLoadingSessions: false,
+        isLoadingArchivedSessions: false,
+        error: msg,
+      }));
     }
   }, []);
 
@@ -497,6 +589,68 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     }
   }, []);
 
+  const archiveSession = useCallback(async (sessionID: string): Promise<boolean> => {
+    const client = clientRef.current;
+    if (!client) return false;
+    try {
+      await client.archiveSession(sessionID);
+      const currentSelectedID = stateRef.current.selectedSessionID;
+      if (currentSelectedID === sessionID) {
+        setState((prev) => ({
+          ...prev,
+          selectedSessionID: null,
+          selectedSession: null,
+          messages: [],
+          sessionStatus: null,
+        }));
+      }
+      await refreshAllSessions();
+      return true;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to archive session';
+      setState((prev) => ({ ...prev, error: msg }));
+      return false;
+    }
+  }, [refreshAllSessions]);
+
+  const restoreSession = useCallback(async (sessionID: string): Promise<boolean> => {
+    const client = clientRef.current;
+    if (!client) return false;
+    try {
+      await client.restoreSession(sessionID);
+      await refreshAllSessions();
+      return true;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to restore session';
+      setState((prev) => ({ ...prev, error: msg }));
+      return false;
+    }
+  }, [refreshAllSessions]);
+
+  const deleteSession = useCallback(async (sessionID: string): Promise<boolean> => {
+    const client = clientRef.current;
+    if (!client) return false;
+    try {
+      await client.deleteSession(sessionID);
+      const currentSelectedID = stateRef.current.selectedSessionID;
+      if (currentSelectedID === sessionID) {
+        setState((prev) => ({
+          ...prev,
+          selectedSessionID: null,
+          selectedSession: null,
+          messages: [],
+          sessionStatus: null,
+        }));
+      }
+      await refreshAllSessions();
+      return true;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to delete session';
+      setState((prev) => ({ ...prev, error: msg }));
+      return false;
+    }
+  }, [refreshAllSessions]);
+
   const connect = useCallback((gatewayUrl: string, gatewayToken: string) => {
     const client = getClient(gatewayUrl, gatewayToken);
     clientRef.current = client;
@@ -517,13 +671,13 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           : 'disconnected',
       }));
       if (status === 'connected') {
-        refreshSessions();
+        refreshAllSessions();
       }
     });
 
     setState((prev) => ({ ...prev, connectionStatus: 'connecting' }));
     eventService.connect(gatewayUrl, gatewayToken);
-  }, [getClient, processEvent, refreshSessions]);
+  }, [getClient, processEvent, refreshAllSessions]);
 
   const disconnect = useCallback(() => {
     if (eventServiceRef.current) {
@@ -533,6 +687,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       ...prev,
       connectionStatus: 'disconnected',
       sessions: [],
+      archivedSessions: [],
       selectedSessionID: null,
       selectedSession: null,
       messages: [],
@@ -555,12 +710,16 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     connect,
     disconnect,
     refreshSessions,
+    refreshArchivedSessions,
     refreshMessages,
     selectSession,
     createSession,
     sendMessage,
     respondPermission,
     respondQuestion,
+    archiveSession,
+    restoreSession,
+    deleteSession,
   };
 
   return [state, actions];

@@ -56,14 +56,36 @@ export class OpenCodeClient {
   }
 
   async getSessions(): Promise<OpenCodeSessionInfo[]> {
-    const data = await this.request<unknown>('GET', '/session');
+    const all = await this.getAllSessions();
+    return all.filter((s) => !OpenCodeClient.isSessionArchived(s));
+  }
+
+  async getArchivedSessions(): Promise<OpenCodeSessionInfo[]> {
+    const all = await this.getAllSessions();
+    return all.filter((s) => OpenCodeClient.isSessionArchived(s));
+  }
+
+  async getAllSessions(): Promise<OpenCodeSessionInfo[]> {
+    const data = await this.request<unknown>('GET', '/experimental/session');
+    return this.unwrapSessionArray(data);
+  }
+
+  private unwrapSessionArray(data: unknown): OpenCodeSessionInfo[] {
     if (Array.isArray(data)) {
       return data as OpenCodeSessionInfo[];
+    }
+    if (data && typeof data === 'object' && 'value' in data && Array.isArray((data as Record<string, unknown>).value)) {
+      return (data as { value: OpenCodeSessionInfo[] }).value;
     }
     if (data && typeof data === 'object' && 'sessions' in data) {
       return (data as { sessions: OpenCodeSessionInfo[] }).sessions;
     }
     return [];
+  }
+
+  static isSessionArchived(session: OpenCodeSessionInfo): boolean {
+    const archived = session.time?.archived;
+    return typeof archived === 'number' && archived > 0;
   }
 
   async getSession(sessionID: string): Promise<OpenCodeSessionInfo> {
@@ -141,6 +163,23 @@ export class OpenCodeClient {
 
   async createSession(options?: { title?: string; path?: string; projectID?: string; model?: { id: string; providerID: string } }): Promise<OpenCodeSessionInfo> {
     return this.request<OpenCodeSessionInfo>('POST', '/session', options || {});
+  }
+
+  async archiveSession(sessionID: string): Promise<void> {
+    await this.request<unknown>('PATCH', `/session/${sessionID}`, {
+      time: { archived: Date.now() },
+    });
+  }
+
+  async restoreSession(sessionID: string): Promise<void> {
+    await this.request<unknown>('PATCH', `/session/${sessionID}`, {
+      time: { archived: 0 },
+    });
+  }
+
+  async deleteSession(sessionID: string): Promise<boolean> {
+    const result = await this.request<unknown>('DELETE', `/session/${sessionID}`);
+    return result === true || result === 'true';
   }
 
   async sendMessage(sessionID: string, content: string): Promise<void> {

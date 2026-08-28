@@ -32,7 +32,7 @@ function extractTokenFromRequest(request, url) {
 
 function setCorsHeaders(response) {
   response.setHeader('Access-Control-Allow-Origin', '*');
-  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
 }
 
@@ -43,8 +43,8 @@ const server = createServer(async (request, response) => {
     return noContent(response);
   }
 
-  if (request.method !== 'GET' && request.method !== 'POST') {
-    return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only GET, POST and OPTIONS are allowed.');
+  if (request.method !== 'GET' && request.method !== 'POST' && request.method !== 'PATCH' && request.method !== 'DELETE') {
+    return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only GET, POST, PATCH, DELETE and OPTIONS are allowed.');
   }
 
   const url = parseUrl(request.url);
@@ -114,6 +114,14 @@ const server = createServer(async (request, response) => {
 
     if (request.method === 'POST') {
       return handleOpenCodeProxyBody(request, response, openCodePath);
+    }
+
+    if (request.method === 'PATCH') {
+      return handleOpenCodeProxyBody(request, response, openCodePath);
+    }
+
+    if (request.method === 'DELETE') {
+      return handleOpenCodeProxy(request, response, openCodePath);
     }
   }
 
