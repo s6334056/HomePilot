@@ -417,7 +417,7 @@ export function App() {
 
   // Build Explorer pane content
   const explorerPane = (
-    <div className={`explorer-pane ${isDesktop || paneOrder[0] === 'explorer' ? '' : 'pane-hidden'}`} key="explorer-pane">
+    <div className={`explorer-pane ${isDesktop || currentScreen === 'explorer' ? '' : 'pane-hidden'}`} key="explorer-pane">
       <Navbar
         currentPath={getNavbarPath()}
         mode="explorer"
@@ -578,7 +578,7 @@ export function App() {
 
   // Build Agent pane content
   const agentPane = (
-    <div className={`agent-pane ${isDesktop || paneOrder[0] === 'agent' ? '' : 'pane-hidden'}`} key="agent-pane">
+    <div className={`agent-pane ${isDesktop || currentScreen === 'agent' ? '' : 'pane-hidden'}`} key="agent-pane">
       <AgentScreen
         currentPath={getAgentDisplayPath()}
         gatewayUrl={resolveConfig().gatewayUrl}
