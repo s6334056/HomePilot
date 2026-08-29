@@ -62,9 +62,15 @@ export function App() {
 
   // 2-Pane layout state
   const [paneOrder, setPaneOrder] = useState<PaneOrder>(['explorer', 'agent']);
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => window.innerWidth >= 1100);
+  const MIN_PANE_WIDTH = 300;
+  const DIVIDER_WIDTH = 4;
   const [explorerPaneWidth, setExplorerPaneWidth] = useState<number>(() => {
     if (typeof window !== 'undefined') {
-      return Math.floor(window.innerWidth / 2);
+      const half = Math.floor(window.innerWidth / 2);
+      const minExplorer = MIN_PANE_WIDTH;
+      const maxExplorer = window.innerWidth - MIN_PANE_WIDTH - DIVIDER_WIDTH;
+      return Math.max(minExplorer, Math.min(maxExplorer, half));
     }
     return 600;
   });
@@ -128,7 +134,7 @@ export function App() {
         },
         (context) => {
           setAgentContext(context);
-          if (!isDesktopLayout()) {
+          if (!isDesktop) {
             setCurrentScreen('agent');
           }
           setHudPreviewText(pageManager.getLastRenderedText());
@@ -169,7 +175,7 @@ export function App() {
       },
       (context) => {
         setAgentContext(context);
-        if (!isDesktopLayout()) {
+        if (!isDesktop) {
           setCurrentScreen('agent');
         }
         setHudPreviewText(pageManager.getLastRenderedText());
@@ -207,7 +213,7 @@ export function App() {
         },
         (context) => {
           setAgentContext(context);
-          if (!isDesktopLayout()) {
+          if (!isDesktop) {
             setCurrentScreen('agent');
           }
           setHudPreviewText(pageManager.getLastRenderedText());
@@ -246,8 +252,6 @@ export function App() {
   // Agent/Explorer switching
   // In 2-pane mode (desktop), both panes are always visible.
   // These handlers only update context; screen switching is CSS-driven on mobile.
-  const isDesktopLayout = () => window.innerWidth >= 1100;
-
   const handleOpenAgent = () => {
     const item = items[selectedIndex] || null;
     const context = agentService.open({
@@ -258,13 +262,13 @@ export function App() {
       source: currentScreen === 'file_viewer' ? 'file_viewer' : 'explorer',
     });
     setAgentContext(context);
-    if (!isDesktopLayout()) {
+    if (!isDesktop) {
       setCurrentScreen('agent');
     }
   };
 
   const handleOpenExplorer = () => {
-    if (!isDesktopLayout()) {
+    if (!isDesktop) {
       setCurrentScreen('explorer');
     }
   };
@@ -275,11 +279,8 @@ export function App() {
 
   // Divider drag handlers (Pointer Events)
   const clampExplorerWidth = (width: number): number => {
-    const minExplorer = 640;
-    const minAgent = 450;
-    const dividerWidth = 4;
-    const maxExplorer = window.innerWidth - minAgent - dividerWidth;
-    return Math.max(minExplorer, Math.min(maxExplorer, width));
+    const maxExplorer = window.innerWidth - MIN_PANE_WIDTH - DIVIDER_WIDTH;
+    return Math.max(MIN_PANE_WIDTH, Math.min(maxExplorer, width));
   };
 
   const handleDividerPointerDown = (e: React.PointerEvent) => {
@@ -302,10 +303,14 @@ export function App() {
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   };
 
-  // Clamp pane width on window resize
+  // Responsive: track isDesktop state and clamp pane width on window resize
   useEffect(() => {
     const handleResize = () => {
-      setExplorerPaneWidth((prev) => clampExplorerWidth(prev));
+      setIsDesktop(window.innerWidth >= 1100);
+      setExplorerPaneWidth((prev) => {
+        const maxExplorer = window.innerWidth - MIN_PANE_WIDTH - DIVIDER_WIDTH;
+        return Math.max(MIN_PANE_WIDTH, Math.min(maxExplorer, prev));
+      });
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -347,7 +352,7 @@ export function App() {
       },
       (context) => {
         setAgentContext(context);
-        if (!isDesktopLayout()) {
+        if (!isDesktop) {
           setCurrentScreen('agent');
         }
         setHudPreviewText(pageManager.getLastRenderedText());
@@ -402,11 +407,10 @@ export function App() {
 
   // Determine which pane is first/last for swap button placement
   const isFirstExplorer = paneOrder[0] === 'explorer';
-  const isDesktop = isDesktopLayout();
 
   // Build Explorer pane content
   const explorerPane = (
-    <div className="explorer-pane" key="explorer-pane">
+    <div className={`explorer-pane ${isDesktop || currentScreen === 'explorer' ? '' : 'pane-hidden'}`} key="explorer-pane">
       <Navbar
         currentPath={getNavbarPath()}
         mode="explorer"
@@ -567,7 +571,7 @@ export function App() {
 
   // Build Agent pane content
   const agentPane = (
-    <div className={`agent-pane ${currentScreen !== 'agent' ? 'pane-hidden' : ''}`} key="agent-pane">
+    <div className={`agent-pane ${isDesktop || currentScreen === 'agent' ? '' : 'pane-hidden'}`} key="agent-pane">
       <AgentScreen
         currentPath={getAgentDisplayPath()}
         gatewayUrl={resolveConfig().gatewayUrl}
