@@ -16,6 +16,30 @@ import { OpenCodeEventService } from '../services/OpenCodeEventService';
 import { formatMessageWithContext } from '../services/AgentContextFormatter';
 
 const SETTINGS_STORAGE_KEY = 'homepilot-agent-settings';
+const UNREAD_STORAGE_KEY = 'homepilot-unread-sessions';
+
+function loadUnreadSessionIds(): string[] {
+  try {
+    const raw = localStorage.getItem(UNREAD_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((id): id is string => typeof id === 'string');
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function saveUnreadSessionIds(ids: string[]): void {
+  try {
+    localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify(ids));
+  } catch {
+    // ignore
+  }
+}
 
 function loadSettings(): AgentSettings {
   try {
@@ -49,6 +73,7 @@ export interface OpenCodeState {
   isLoadingMessages: boolean;
   isSending: boolean;
   error: string | null;
+  unreadSessionIds: string[];
 }
 
 export interface OpenCodeActions {
@@ -58,6 +83,7 @@ export interface OpenCodeActions {
   refreshArchivedSessions: () => Promise<void>;
   refreshMessages: () => Promise<void>;
   selectSession: (sessionID: string) => Promise<void>;
+  clearSelection: () => void;
   createSession: (options?: { title?: string; model?: { providerID: string; modelID: string } }) => Promise<string | null>;
   getClient: () => OpenCodeClient | null;
   sendMessage: (content: string, context?: AgentContext | null) => Promise<void>;
@@ -84,6 +110,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     isLoadingMessages: false,
     isSending: false,
     error: null,
+    unreadSessionIds: loadUnreadSessionIds(),
   });
 
   const clientRef = useRef<OpenCodeClient | null>(null);
@@ -93,6 +120,9 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   // Tracks the session status type at the moment sendMessage is called.
   // When a *different* status arrives via SSE, the agent has finished processing.
   const sendingStatusRef = useRef<string | null>(null);
+  // Set to true once the initial session load + SSE connection is established.
+  // Used to avoid marking existing messages as unread during startup.
+  const readyRef = useRef(false);
 
   const getClient = useCallback((gatewayUrl: string, gatewayToken: string): OpenCodeClient => {
     if (!clientRef.current || clientRef.current.getGatewayUrl() !== gatewayUrl) {
@@ -218,7 +248,26 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
             info: Partial<OpenCodeMessageInfo>;
           };
           if (!props?.sessionID || !props?.messageID) return prev;
-          if (prev.selectedSessionID !== props.sessionID) return prev;
+
+          // Unread detection: mark session as unread when a new assistant message
+          // arrives for a session the user is NOT currently viewing.
+          // Only after readyRef is true (initial load complete) to avoid false positives.
+          let unreadUpdate = prev.unreadSessionIds;
+          if (
+            readyRef.current &&
+            props.info?.role === 'assistant' &&
+            props.sessionID !== prev.selectedSessionID
+          ) {
+            if (!prev.unreadSessionIds.includes(props.sessionID)) {
+              unreadUpdate = [...prev.unreadSessionIds, props.sessionID];
+              saveUnreadSessionIds(unreadUpdate);
+            }
+          }
+
+          // Only update messages for the currently selected session
+          if (prev.selectedSessionID !== props.sessionID) {
+            return { ...prev, unreadSessionIds: unreadUpdate };
+          }
 
           // Remove optimistic messages when real ones arrive
           let filteredMessages = prev.messages;
@@ -241,7 +290,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
               ...updated[existingIdx],
               ...props.info,
             };
-            return { ...prev, messages: updated };
+            return { ...prev, messages: updated, unreadSessionIds: unreadUpdate };
           }
 
           const newMsg: OpenCodeMessageWithParts = {
@@ -252,7 +301,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
             parts: [],
             contentText: '',
           };
-          return { ...prev, messages: [...filteredMessages, newMsg] };
+          return { ...prev, messages: [...filteredMessages, newMsg], unreadSessionIds: unreadUpdate };
         }
 
         case 'message.part.updated': {
@@ -390,6 +439,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       const all = await client.getAllSessions();
       const sessions = all.filter((s) => !OpenCodeClient.isSessionArchived(s));
       const archivedSessions = all.filter((s) => OpenCodeClient.isSessionArchived(s));
+      readyRef.current = true;
       setState((prev) => ({
         ...prev,
         sessions,
@@ -455,6 +505,11 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     const client = clientRef.current;
     if (!client) return;
     sendingStatusRef.current = null;
+    // Mark session as read (remove from unread)
+    const unreadUpdate = stateRef.current.unreadSessionIds.filter((id) => id !== sessionID);
+    if (unreadUpdate.length !== stateRef.current.unreadSessionIds.length) {
+      saveUnreadSessionIds(unreadUpdate);
+    }
     setState((prev) => ({
       ...prev,
       selectedSessionID: sessionID,
@@ -463,6 +518,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       sessionStatus: null,
       isLoadingMessages: true,
       error: null,
+      unreadSessionIds: unreadUpdate,
     }));
     try {
       const apiMessages = await client.getMessages(sessionID);
@@ -497,6 +553,18 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       const msg = e instanceof Error ? e.message : 'Failed to load messages';
       setState((prev) => ({ ...prev, isLoadingMessages: false, error: msg }));
     }
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    sendingStatusRef.current = null;
+    setState((prev) => ({
+      ...prev,
+      selectedSessionID: null,
+      selectedSession: null,
+      messages: [],
+      sessionStatus: null,
+      isLoadingMessages: false,
+    }));
   }, []);
 
   const createSession = useCallback(async (options?: { title?: string; model?: { providerID: string; modelID: string } }): Promise<string | null> => {
@@ -665,6 +733,12 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           sessionStatus: null,
         }));
       }
+      // Remove deleted session from unread
+      const unreadUpdate = stateRef.current.unreadSessionIds.filter((id) => id !== sessionID);
+      if (unreadUpdate.length !== stateRef.current.unreadSessionIds.length) {
+        saveUnreadSessionIds(unreadUpdate);
+        setState((prev) => ({ ...prev, unreadSessionIds: unreadUpdate }));
+      }
       await refreshAllSessions();
       return true;
     } catch (e: unknown) {
@@ -737,6 +811,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     refreshArchivedSessions,
     refreshMessages,
     selectSession,
+    clearSelection,
     createSession,
     sendMessage,
     respondPermission,

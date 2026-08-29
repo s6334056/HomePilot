@@ -63,6 +63,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     isLoadingMessages,
     isSending,
     error,
+    unreadSessionIds,
   } = state;
 
   const activeSession = selectedSession;
@@ -184,6 +185,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     if (showSessionList && selectedSessionID) {
       setShowSessionList(false);
     } else if (!showSessionList) {
+      actions.clearSelection();
       setShowSessionList(true);
     }
   };
@@ -507,6 +509,9 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                       disabled={operatingSessionId === session.id}
                     >
                       <span className="agent-session-title">
+                        {unreadSessionIds.includes(session.id) && (
+                          <span className="agent-session-unread" />
+                        )}
                         {formatSessionTitle(session)}
                       </span>
                       <span className="agent-session-date">
@@ -556,6 +561,9 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                       disabled={operatingSessionId === session.id}
                     >
                       <span className="agent-session-title">
+                        {unreadSessionIds.includes(session.id) && (
+                          <span className="agent-session-unread" />
+                        )}
                         {formatSessionTitle(session)}
                       </span>
                       <span className="agent-session-date">

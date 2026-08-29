@@ -444,9 +444,9 @@
     flex-wrap: wrap;
   }
 
-  .agent-session-list-header {
+  /* .agent-session-list-header {
     flex-direction: column;
-  }
+  } */
 }
 
 /* Responsive: hide G2 Preview on narrow screens */
@@ -1022,6 +1022,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 500;
+}
+
+.agent-session-unread {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  margin-right: 6px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+  flex-shrink: 0;
 }
 
 .agent-session-date {
