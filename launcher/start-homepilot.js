@@ -300,6 +300,9 @@ function showReady() {
   console.log('  Status : READY');
   console.log(`  URL    : ${tunnelUrl}`);
   console.log('');
+  console.log('Connection JSON');
+  console.log(qrData);
+  console.log('');
   console.log('Connection QR');
   console.log('');
 
