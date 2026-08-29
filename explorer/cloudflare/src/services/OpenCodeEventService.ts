@@ -85,6 +85,12 @@ export class OpenCodeEventService {
 
     this.eventSource.onmessage = (event: MessageEvent) => {
       console.log(`[SSE-CLIENT] onmessage - data length: ${event.data?.length}`);
+      console.log('[HomePilot SSE Trace] EventSource onmessage fired', {
+        dataLength: event.data?.length,
+        eventType: event.type,
+        lastEventId: event.lastEventId,
+        rawDataPreview: typeof event.data === 'string' ? event.data.substring(0, 200) : String(event.data),
+      });
       this.resetHeartbeat();
       this.handleRawEvent(event.data);
     };
@@ -99,7 +105,20 @@ export class OpenCodeEventService {
     try {
       const parsed = JSON.parse(rawData) as OpenCodeSSEEvent;
 
+      // [TRACE] After JSON parse
+      const isSyncEvent = !!parsed.payload?.syncEvent;
+      const eventType = isSyncEvent
+        ? parsed.payload.syncEvent!.type
+        : parsed.payload?.type;
+      console.log('[HomePilot SSE Trace] Parsed event', {
+        eventType,
+        isSyncEvent,
+        hasPayload: !!parsed.payload,
+        payloadId: parsed.payload?.id,
+      });
+
       if (parsed.payload?.id && this.seenEventIds.has(parsed.payload.id)) {
+        console.log('[HomePilot SSE Trace] Skipped (duplicate by payload.id)');
         return;
       }
       if (parsed.payload?.id) {
@@ -110,14 +129,16 @@ export class OpenCodeEventService {
         }
       }
 
-      const isSyncEvent = !!parsed.payload?.syncEvent;
-      const eventType = isSyncEvent
-        ? parsed.payload.syncEvent!.type
-        : parsed.payload?.type;
-
       if (eventType === 'server.heartbeat') {
+        console.log('[HomePilot SSE Trace] Skipped (server.heartbeat)');
         return;
       }
+
+      // [TRACE] Before notifying handlers
+      console.log('[HomePilot SSE Trace] Notifying handlers', {
+        handlerCount: this.handlers.size,
+        eventType,
+      });
 
       for (const handler of this.handlers) {
         try {
@@ -126,6 +147,8 @@ export class OpenCodeEventService {
           console.error('[OpenCodeEventService] Handler error:', e);
         }
       }
+
+      console.log('[HomePilot SSE Trace] Handlers notified OK', { eventType });
     } catch {
       console.warn('[OpenCodeEventService] Failed to parse SSE event:', rawData);
     }

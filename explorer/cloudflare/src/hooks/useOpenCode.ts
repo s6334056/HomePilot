@@ -147,6 +147,13 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   }, []);
 
   const processEvent = useCallback((event: OpenCodeSSEEvent) => {
+    // [TRACE] processEvent entry - confirm event reached useOpenCode
+    console.log('[HomePilot SSE Trace] processEvent called', {
+      hasPayload: !!event.payload,
+      payloadType: event.payload?.type,
+      syncEventType: event.payload?.syncEvent?.type,
+    });
+
     const payload = event.payload;
     if (!payload) return;
 
@@ -155,6 +162,9 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     const properties = isSyncEvent
       ? payload.syncEvent!.data
       : (payload.properties || {}) as Record<string, unknown>;
+
+    // [TRACE] Event type dispatched to switch
+    console.log('[HomePilot SSE Trace] dispatching to switch', { eventType, isSyncEvent });
 
     setState((prev) => {
       switch (eventType) {
@@ -237,6 +247,18 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           const newType = props.status?.type ?? '';
           const prevType = prevSessionStatusRef.current.get(props.sessionID) ?? '';
           prevSessionStatusRef.current.set(props.sessionID, newType);
+
+          // [DEBUG] Observe actual session.status events from OpenCode
+          console.log('[HomePilot Status Debug]', {
+            sessionID: props.sessionID,
+            statusType: newType,
+            prevStatusType: prevType,
+            statusChanged: newType !== prevType,
+            selectedSessionID: prev.selectedSessionID,
+            isSending: prev.isSending,
+            isUnreadRelevant: isUnreadRelevantStatus(newType),
+            rawStatus: props.status,
+          });
 
           // Unread: when a non-selected session transitions to a terminal state
           // (finish/error/idle), mark it as unread.
@@ -415,6 +437,15 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           const exists = prev.pendingPermissions.some((p) => p.id === props.id);
           if (exists) return prev;
 
+          // [DEBUG] Observe permission.asked events
+          console.log('[HomePilot Status Debug]', {
+            event: 'permission.asked',
+            sessionID: props.sessionID,
+            permissionID: props.id,
+            permission: props.permission,
+            selectedSessionID: prev.selectedSessionID,
+          });
+
           // Unread: permission requires user action
           let unreadUpdate = prev.unreadSessionIds;
           if (
@@ -440,6 +471,15 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           if (!props?.id) return prev;
           const exists = prev.pendingQuestions.some((q) => q.id === props.id);
           if (exists) return prev;
+
+          // [DEBUG] Observe question.asked events
+          console.log('[HomePilot Status Debug]', {
+            event: 'question.asked',
+            sessionID: props.sessionID,
+            questionID: props.id,
+            question: props.question,
+            selectedSessionID: prev.selectedSessionID,
+          });
 
           // Unread: question requires user answer
           let unreadUpdate = prev.unreadSessionIds;
