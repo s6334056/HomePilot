@@ -45,6 +45,15 @@
   right: -4px;
 }
 
+/* Nav button visibility utilities (base — must come before media queries) */
+.navbar-btn-desktop-only {
+  display: none;
+}
+
+.navbar-btn-mobile-only {
+  display: inline-flex;
+}
+
 /* Desktop 2-pane mode */
 @media (min-width: 1100px) {
   .pane-hidden {
@@ -1841,11 +1850,4 @@
   color: var(--accent);
 }
 
-/* Nav button visibility utilities */
-.navbar-btn-desktop-only {
-  display: none;
-}
 
-.navbar-btn-mobile-only {
-  display: inline-flex;
-}
