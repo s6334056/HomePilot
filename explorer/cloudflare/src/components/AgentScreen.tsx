@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, Send, Wifi, WifiOff, AlertCircle, Loader2, RefreshCw, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
+import { Plus, Mic, Send, Wifi, WifiOff, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
 import { OpenCodeSessionInfo, AgentContext } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
 import { Navbar } from './Navbar';
@@ -11,6 +11,7 @@ interface AgentScreenProps {
   buildLiveContext: () => AgentContext;
   onOpenSettings: () => void;
   onOpenExplorer: () => void;
+  onReload?: () => void;
   showSettingsButton?: boolean;
   showSwapButton?: boolean;
   onSwapPanes?: () => void;
@@ -23,6 +24,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   buildLiveContext,
   onOpenSettings,
   onOpenExplorer,
+  onReload,
   showSettingsButton,
   showSwapButton,
   onSwapPanes,
@@ -124,9 +126,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     actions.disconnect();
   };
 
-  const handleRefreshMessages = () => {
-    actions.refreshMessages();
-  };
+  const handleReload = onReload || (() => { actions.refreshMessages(); });
 
   const handleArchiveSession = async (sessionID: string) => {
     if (operatingSessionId) return;
@@ -347,7 +347,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         <Navbar
           currentPath={currentPath}
           mode="agent"
-          onOpenSessionList={handleToggleSessionList}
+          onBack={handleToggleSessionList}
+          onReload={handleReload}
           onOpenSettings={onOpenSettings}
           onOpenExplorer={onOpenExplorer}
           showSettingsButton={showSettingsButton}
@@ -384,7 +385,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         <Navbar
           currentPath={currentPath}
           mode="agent"
-          onOpenSessionList={handleToggleSessionList}
+          onBack={handleToggleSessionList}
+          onReload={handleReload}
           onOpenSettings={onOpenSettings}
           onOpenExplorer={onOpenExplorer}
           showSettingsButton={showSettingsButton}
@@ -557,7 +559,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       <Navbar
         currentPath={currentPath}
         mode="agent"
-        onOpenSessionList={handleToggleSessionList}
+        onBack={handleToggleSessionList}
+        onReload={handleReload}
         onOpenSettings={onOpenSettings}
         onOpenExplorer={onOpenExplorer}
         showSettingsButton={showSettingsButton}
@@ -578,14 +581,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
               {sessionStatus.type}
             </div>
           )}
-          <button
-            className="oc-refresh-btn"
-            onClick={handleRefreshMessages}
-            disabled={isLoadingMessages}
-            title="Refresh messages"
-          >
-            <RefreshCw size={14} className={isLoadingMessages ? 'oc-spinning' : ''} />
-          </button>
         </div>
       </div>
       {error && (

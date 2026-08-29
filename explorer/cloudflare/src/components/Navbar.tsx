@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, RefreshCw, Home, Settings, Bot, PanelLeft, ArrowLeftRight } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Settings, Bot, FolderOpen, ArrowLeftRight } from 'lucide-react';
 import { truncatePath } from '../utils/pathUtils';
 
 export type NavbarMode = 'explorer' | 'agent';
@@ -18,14 +18,14 @@ interface ExplorerNavbarProps extends NavbarBaseProps {
   onBack: () => void;
   canGoBack: boolean;
   onReload: () => void;
-  onHome: () => void;
   onOpenSettings: () => void;
   onOpenAgent: () => void;
 }
 
 interface AgentNavbarProps extends NavbarBaseProps {
   mode: 'agent';
-  onOpenSessionList: () => void;
+  onBack: () => void;
+  onReload: () => void;
   onOpenSettings: () => void;
   onOpenExplorer: () => void;
 }
@@ -50,9 +50,6 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
             </button>
             <button className="btn-icon" onClick={props.onReload} title="Reload">
               <RefreshCw size={18} />
-            </button>
-            <button className="btn-icon" onClick={props.onHome} title="Home">
-              <Home size={18} />
             </button>
           </div>
           <div className="navbar-right">
@@ -95,10 +92,13 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
         <div className="navbar-left">
           <button
             className="btn-icon"
-            onClick={props.onOpenSessionList}
-            title="Sessions"
+            onClick={props.onBack}
+            title="Back to Sessions"
           >
-            <PanelLeft size={18} />
+            <ArrowLeft size={18} />
+          </button>
+          <button className="btn-icon" onClick={props.onReload} title="Refresh">
+            <RefreshCw size={18} />
           </button>
         </div>
         <div className="navbar-right">
@@ -106,7 +106,7 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
             <Settings size={18} />
           </button>
           <button className="btn-icon navbar-btn-mobile-only" onClick={props.onOpenExplorer} title="Explorer">
-            <Home size={18} />
+            <FolderOpen size={18} />
           </button>
           {props.showSettingsButton && (
             <button className="btn-icon navbar-btn-desktop-only" onClick={props.onOpenSettings} title="Settings">

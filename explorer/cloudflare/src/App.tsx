@@ -225,11 +225,6 @@ export function App() {
     }
   };
 
-  const handleExplorerHome = async () => {
-    explorerHistoryRef.current.push(explorerPath);
-    await navigateToPath(getRootPath());
-  };
-
   const handleExplorerReload = async () => {
     await navigateToPath(explorerPath);
   };
@@ -397,7 +392,6 @@ export function App() {
         onBack={handleExplorerBack}
         canGoBack={canExplorerGoBack()}
         onReload={handleExplorerReload}
-        onHome={handleExplorerHome}
         onOpenSettings={() => setShowSettings(true)}
         onOpenAgent={handleOpenAgent}
         showSettingsButton={isDesktop && !isFirstExplorer}
