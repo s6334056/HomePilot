@@ -19,6 +19,7 @@ export class ExplorerPage extends BasePage {
   private onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void;
   private onFileViewerStateChange?: (file: FileSystemItem, content: string) => void;
   private onAgentStateChange?: (context: AgentContext) => void;
+  private initialRestoreIndex?: number;
 
   constructor(
     currentPath: string,
@@ -26,7 +27,8 @@ export class ExplorerPage extends BasePage {
     agentService: AgentService,
     onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void,
     onFileViewerStateChange?: (file: FileSystemItem, content: string) => void,
-    onAgentStateChange?: (context: AgentContext) => void
+    onAgentStateChange?: (context: AgentContext) => void,
+    initialRestoreIndex?: number
   ) {
     super();
     this.pageType = "ExplorerPage";
@@ -36,11 +38,13 @@ export class ExplorerPage extends BasePage {
     this.onStateChange = onStateChange;
     this.onFileViewerStateChange = onFileViewerStateChange;
     this.onAgentStateChange = onAgentStateChange;
+    this.initialRestoreIndex = initialRestoreIndex;
   }
 
   public async afterRender(): Promise<void> {
     if (this.items.length === 0) {
-      await this.loadDirectory(this.currentPath);
+      await this.loadDirectory(this.currentPath, this.initialRestoreIndex);
+      this.initialRestoreIndex = undefined;
     } else {
       this.notifyState();
     }

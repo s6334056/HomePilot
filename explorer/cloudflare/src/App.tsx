@@ -18,6 +18,11 @@ import './App.css';
 type PaneType = 'explorer' | 'agent';
 type PaneOrder = [PaneType, PaneType];
 
+interface ExplorerHistoryEntry {
+  path: string;
+  selectedIndex: number;
+}
+
 function createFileService(): FileSystemService {
   const config = resolveConfig();
   if (config.mode === 'gateway' && config.gatewayToken) {
@@ -73,7 +78,7 @@ export function App() {
   const dragStartWidth = useRef<number>(0);
 
   const isInitializedRef = useRef(false);
-  const explorerHistoryRef = useRef<string[]>([]);
+  const explorerHistoryRef = useRef<ExplorerHistoryEntry[]>([]);
   const previousScreenRef = useRef<ScreenType>('explorer');
 
   const getRootPath = () => {
@@ -152,7 +157,7 @@ export function App() {
   }, [fileService, agentService, pageManager]);
 
   // Internal navigate (no history management)
-  const navigateToPath = async (path: string) => {
+  const navigateToPath = async (path: string, restoreIndex?: number) => {
     const page = new ExplorerPage(
       path,
       fileService,
@@ -174,15 +179,16 @@ export function App() {
         if (!isDesktop) {
           setCurrentScreen('agent');
         }
-      }
+      },
+      restoreIndex
     );
     await pageManager.navigateTo(page);
   };
 
-  const handleOpenFile = async (file: FileSystemItem) => {
+  const handleOpenFile = async (file: FileSystemItem, index: number) => {
     try {
       const content = await fileService.readFile(file.path);
-      explorerHistoryRef.current.push(explorerPath);
+      explorerHistoryRef.current.push({ path: explorerPath, selectedIndex: index });
       setSelectedFile(file);
       setFileContent(content);
       setCurrentScreen('file_viewer');
@@ -195,8 +201,11 @@ export function App() {
         async () => {
           // File viewer back → return to folder (no history push, this IS the back)
           const prev = explorerHistoryRef.current.pop();
-          const returnPath = prev !== undefined ? prev : explorerPath;
-          await navigateToPath(returnPath);
+          if (prev !== undefined) {
+            await navigateToPath(prev.path, prev.selectedIndex);
+          } else {
+            await navigateToPath(explorerPath);
+          }
           return true;
         },
         (f, c) => {
@@ -221,7 +230,7 @@ export function App() {
   const handleExplorerBack = async () => {
     const prev = explorerHistoryRef.current.pop();
     if (prev !== undefined) {
-      await navigateToPath(prev);
+      await navigateToPath(prev.path, prev.selectedIndex);
     }
   };
 
@@ -230,8 +239,8 @@ export function App() {
   };
 
   // Folder click from FileTable → push history
-  const handleOpenDirectory = async (path: string) => {
-    explorerHistoryRef.current.push(explorerPath);
+  const handleOpenDirectory = async (path: string, index: number) => {
+    explorerHistoryRef.current.push({ path: explorerPath, selectedIndex: index });
     await navigateToPath(path);
   };
 

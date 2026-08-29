@@ -6,8 +6,8 @@ interface FileTableProps {
   items: FileSystemItem[];
   selectedIndex: number;
   onSelectItem: (index: number) => void;
-  onOpenDirectory: (path: string) => void;
-  onOpenFile: (item: FileSystemItem) => void;
+  onOpenDirectory: (path: string, index: number) => void;
+  onOpenFile: (item: FileSystemItem, index: number) => void;
 }
 
 export const FileTable: React.FC<FileTableProps> = ({
@@ -49,9 +49,9 @@ export const FileTable: React.FC<FileTableProps> = ({
                 onClick={() => {
                   onSelectItem(idx);
                   if (isDir) {
-                    onOpenDirectory(item.path);
+                    onOpenDirectory(item.path, idx);
                   } else {
-                    onOpenFile(item);
+                    onOpenFile(item, idx);
                   }
                 }}
               >
