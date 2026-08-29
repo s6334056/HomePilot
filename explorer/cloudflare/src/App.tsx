@@ -71,10 +71,10 @@ export function App() {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const dragStartX = useRef<number>(0);
   const dragStartWidth = useRef<number>(0);
-  const wasDesktopRef = useRef<boolean>(window.innerWidth >= 1100);
 
   const isInitializedRef = useRef(false);
   const explorerHistoryRef = useRef<string[]>([]);
+  const previousScreenRef = useRef<ScreenType>('explorer');
 
   const getRootPath = () => {
     if (isGatewayService(fileService)) {
@@ -240,13 +240,14 @@ export function App() {
   // These handlers only update screen visibility; Context is built at message send time.
   const handleOpenAgent = () => {
     if (!isDesktop) {
+      previousScreenRef.current = currentScreen;
       setCurrentScreen('agent');
     }
   };
 
   const handleOpenExplorer = () => {
     if (!isDesktop) {
-      setCurrentScreen('explorer');
+      setCurrentScreen(previousScreenRef.current);
     }
   };
 
@@ -289,15 +290,10 @@ export function App() {
         const maxExplorer = window.innerWidth - MIN_PANE_WIDTH - DIVIDER_WIDTH;
         return Math.max(MIN_PANE_WIDTH, Math.min(maxExplorer, prev));
       });
-      // When crossing from Desktop to Mobile, show paneOrder[0]
-      if (wasDesktopRef.current && !nowDesktop) {
-        setCurrentScreen(paneOrder[0]);
-      }
-      wasDesktopRef.current = nowDesktop;
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [paneOrder]);
+  }, []);
 
   const handleReconnect = useCallback(async () => {
     const newService = createFileService();
@@ -384,7 +380,7 @@ export function App() {
 
   // Build Explorer pane content
   const explorerPane = (
-    <div className={`explorer-pane ${isDesktop || currentScreen === 'explorer' ? '' : 'pane-hidden'}`} key="explorer-pane">
+    <div className={`explorer-pane ${isDesktop || currentScreen === 'explorer' || currentScreen === 'file_viewer' ? '' : 'pane-hidden'}`} key="explorer-pane">
       <Navbar
         currentPath={getNavbarPath()}
         mode="explorer"
