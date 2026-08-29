@@ -113,7 +113,9 @@ export function App() {
         },
         (context) => {
           setAgentContext(context);
-          setCurrentScreen('agent');
+          if (!isDesktopLayout()) {
+            setCurrentScreen('agent');
+          }
           setHudPreviewText(pageManager.getLastRenderedText());
         }
       );
@@ -152,7 +154,9 @@ export function App() {
       },
       (context) => {
         setAgentContext(context);
-        setCurrentScreen('agent');
+        if (!isDesktopLayout()) {
+          setCurrentScreen('agent');
+        }
         setHudPreviewText(pageManager.getLastRenderedText());
       }
     );
@@ -188,7 +192,9 @@ export function App() {
         },
         (context) => {
           setAgentContext(context);
-          setCurrentScreen('agent');
+          if (!isDesktopLayout()) {
+            setCurrentScreen('agent');
+          }
           setHudPreviewText(pageManager.getLastRenderedText());
         }
       );
@@ -223,6 +229,10 @@ export function App() {
   };
 
   // Agent/Explorer switching
+  // In 2-pane mode (desktop), both panes are always visible.
+  // These handlers only update context; screen switching is CSS-driven on mobile.
+  const isDesktopLayout = () => window.innerWidth >= 900;
+
   const handleOpenAgent = () => {
     const item = items[selectedIndex] || null;
     const context = agentService.open({
@@ -233,11 +243,15 @@ export function App() {
       source: currentScreen === 'file_viewer' ? 'file_viewer' : 'explorer',
     });
     setAgentContext(context);
-    setCurrentScreen('agent');
+    if (!isDesktopLayout()) {
+      setCurrentScreen('agent');
+    }
   };
 
   const handleOpenExplorer = () => {
-    setCurrentScreen('explorer');
+    if (!isDesktopLayout()) {
+      setCurrentScreen('explorer');
+    }
   };
 
   const handleReconnect = useCallback(async () => {
@@ -276,7 +290,9 @@ export function App() {
       },
       (context) => {
         setAgentContext(context);
-        setCurrentScreen('agent');
+        if (!isDesktopLayout()) {
+          setCurrentScreen('agent');
+        }
         setHudPreviewText(pageManager.getLastRenderedText());
       }
     );
@@ -329,8 +345,8 @@ export function App() {
 
   return (
     <div className="app-layout">
-      {/* Explorer Navbar */}
-      {currentScreen !== 'agent' && (
+      {/* ===== Explorer Pane (always rendered) ===== */}
+      <div className="explorer-pane">
         <Navbar
           currentPath={getNavbarPath()}
           mode="explorer"
@@ -342,10 +358,7 @@ export function App() {
           onOpenSettings={() => setShowExplorerSettings(true)}
           onOpenAgent={handleOpenAgent}
         />
-      )}
 
-      {/* Main Content - Full screen switching */}
-      {currentScreen !== 'agent' && (
         <div className="main-content-container">
           <main className="content-view">
             {currentScreen === 'explorer' && (
@@ -487,10 +500,10 @@ export function App() {
             </div>
           </aside>
         </div>
-      )}
+      </div>
 
-      {/* Agent Screen - Full screen */}
-      {currentScreen === 'agent' && (
+      {/* ===== Agent Pane (always rendered; hidden on mobile via CSS when not active) ===== */}
+      <div className={`agent-pane ${currentScreen !== 'agent' ? 'pane-hidden' : ''}`}>
         <AgentScreen
           currentPath={getAgentDisplayPath()}
           gatewayUrl={resolveConfig().gatewayUrl}
@@ -499,7 +512,7 @@ export function App() {
           onOpenSettings={() => setShowAgentSettings(true)}
           onOpenExplorer={handleOpenExplorer}
         />
-      )}
+      </div>
 
       {/* Modals */}
       <SettingsModal

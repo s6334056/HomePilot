@@ -1,8 +1,35 @@
 .app-layout {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   height: 100vh;
   overflow: hidden;
+}
+
+/* Pane wrappers */
+.explorer-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+}
+
+.agent-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Mobile: hide inactive pane (keeps AgentScreen mounted for SSE lifecycle) */
+@media (max-width: 899px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pane-hidden {
+    display: none !important;
+  }
 }
 
 /* Header & Navbar */
@@ -139,6 +166,17 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+/* Desktop 2-pane mode: hide G2 sidebar, Explorer takes full width */
+@media (min-width: 900px) {
+  .main-content-container {
+    grid-template-columns: 1fr;
+  }
+
+  .g2-hud-sidebar {
+    display: none;
+  }
 }
 
 @media (max-width: 900px) {
