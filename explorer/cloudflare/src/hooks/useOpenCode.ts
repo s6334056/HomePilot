@@ -90,6 +90,9 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   const eventServiceRef = useRef<OpenCodeEventService | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Tracks the session status type at the moment sendMessage is called.
+  // When a *different* status arrives via SSE, the agent has finished processing.
+  const sendingStatusRef = useRef<string | null>(null);
 
   const getClient = useCallback((gatewayUrl: string, gatewayToken: string): OpenCodeClient => {
     if (!clientRef.current || clientRef.current.getGatewayUrl() !== gatewayUrl) {
@@ -186,9 +189,25 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           const props = properties as unknown as { sessionID: string; status: OpenCodeSessionStatus };
           if (!props?.sessionID) return prev;
           if (prev.selectedSessionID !== props.sessionID) return prev;
+          // If we are in a sending state, detect completion by status change.
+          // The first status received after sendMessage marks the "busy" status.
+          // When a *different* status arrives, the agent has finished processing.
+          let isSendingUpdate = prev.isSending;
+          if (prev.isSending) {
+            const newType = props.status?.type ?? '';
+            if (sendingStatusRef.current === null) {
+              // First status event after sendMessage — record as the busy status
+              sendingStatusRef.current = newType;
+            } else if (newType !== sendingStatusRef.current) {
+              // Status changed — agent finished processing
+              isSendingUpdate = false;
+              sendingStatusRef.current = null;
+            }
+          }
           return {
             ...prev,
             sessionStatus: props.status,
+            isSending: isSendingUpdate,
           };
         }
 
@@ -424,15 +443,18 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         isLoadingMessages: false,
         isSending: false,
       }));
+      sendingStatusRef.current = null;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load messages';
       setState((prev) => ({ ...prev, isLoadingMessages: false, isSending: false, error: msg }));
+      sendingStatusRef.current = null;
     }
   }, []);
 
   const selectSession = useCallback(async (sessionID: string) => {
     const client = clientRef.current;
     if (!client) return;
+    sendingStatusRef.current = null;
     setState((prev) => ({
       ...prev,
       selectedSessionID: sessionID,
@@ -542,6 +564,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     } catch (e: unknown) {
       // On error: remove the processing placeholder and optimistic user message
       const msg = e instanceof Error ? e.message : 'Failed to send message';
+      sendingStatusRef.current = null;
       setState((prev) => ({
         ...prev,
         messages: prev.messages.filter(
@@ -683,6 +706,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     if (eventServiceRef.current) {
       eventServiceRef.current.disconnect();
     }
+    sendingStatusRef.current = null;
     setState((prev) => ({
       ...prev,
       connectionStatus: 'disconnected',
