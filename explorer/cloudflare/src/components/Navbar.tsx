@@ -8,6 +8,7 @@ interface NavbarBaseProps {
   currentPath: string;
   mode: NavbarMode;
   rootPath?: string;
+  showSettingsButton?: boolean;
   showSwapButton?: boolean;
   onSwapPanes?: () => void;
 }
@@ -55,12 +56,17 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
             </button>
           </div>
           <div className="navbar-right">
-            <button className="btn-icon" onClick={props.onOpenSettings} title="Settings">
+            <button className="btn-icon navbar-btn-mobile-only" onClick={props.onOpenSettings} title="Settings">
               <Settings size={18} />
             </button>
             <button className="btn-icon btn-icon--agent navbar-btn-mobile-only" onClick={props.onOpenAgent} title="Agent">
               <Bot size={18} />
             </button>
+            {props.showSettingsButton && (
+              <button className="btn-icon navbar-btn-desktop-only" onClick={props.onOpenSettings} title="Settings">
+                <Settings size={18} />
+              </button>
+            )}
             {props.showSwapButton && (
               <button className="btn-icon btn-swap-panes" onClick={props.onSwapPanes} title="Swap panes">
                 <ArrowLeftRight size={18} />
@@ -96,12 +102,17 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
           </button>
         </div>
         <div className="navbar-right">
-          <button className="btn-icon" onClick={props.onOpenSettings} title="Agent Settings">
+          <button className="btn-icon navbar-btn-mobile-only" onClick={props.onOpenSettings} title="Settings">
             <Settings size={18} />
           </button>
           <button className="btn-icon navbar-btn-mobile-only" onClick={props.onOpenExplorer} title="Explorer">
             <Home size={18} />
           </button>
+          {props.showSettingsButton && (
+            <button className="btn-icon navbar-btn-desktop-only" onClick={props.onOpenSettings} title="Settings">
+              <Settings size={18} />
+            </button>
+          )}
           {props.showSwapButton && (
             <button className="btn-icon btn-swap-panes" onClick={props.onSwapPanes} title="Swap panes">
               <ArrowLeftRight size={18} />

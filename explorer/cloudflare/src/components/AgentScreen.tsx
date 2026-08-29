@@ -11,6 +11,7 @@ interface AgentScreenProps {
   agentContext: AgentContext | null;
   onOpenSettings: () => void;
   onOpenExplorer: () => void;
+  showSettingsButton?: boolean;
   showSwapButton?: boolean;
   onSwapPanes?: () => void;
 }
@@ -22,6 +23,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   agentContext,
   onOpenSettings,
   onOpenExplorer,
+  showSettingsButton,
   showSwapButton,
   onSwapPanes,
 }) => {
@@ -347,6 +349,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           onOpenSessionList={handleToggleSessionList}
           onOpenSettings={onOpenSettings}
           onOpenExplorer={onOpenExplorer}
+          showSettingsButton={showSettingsButton}
           showSwapButton={showSwapButton}
           onSwapPanes={onSwapPanes}
         />
@@ -383,6 +386,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           onOpenSessionList={handleToggleSessionList}
           onOpenSettings={onOpenSettings}
           onOpenExplorer={onOpenExplorer}
+          showSettingsButton={showSettingsButton}
           showSwapButton={showSwapButton}
           onSwapPanes={onSwapPanes}
         />
@@ -555,6 +559,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         onOpenSessionList={handleToggleSessionList}
         onOpenSettings={onOpenSettings}
         onOpenExplorer={onOpenExplorer}
+        showSettingsButton={showSettingsButton}
         showSwapButton={showSwapButton}
         onSwapPanes={onSwapPanes}
       />

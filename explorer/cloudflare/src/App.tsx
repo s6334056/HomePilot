@@ -5,7 +5,6 @@ import { FileViewerPage } from './hud/pages/file-viewer-page';
 import { MockFileSystemService } from './services/MockFileSystemService';
 import { GatewayFileSystemService } from './services/GatewayFileSystemService';
 import { AgentService } from './services/AgentService';
-import { SessionService } from './services/SessionService';
 import { FileSystemService } from './services/FileSystemService';
 import { resolveConfig } from './services/ConnectionConfig';
 import { FileSystemItem, ScreenType, AgentContext } from './domain/types';
@@ -14,8 +13,6 @@ import { FileTable } from './components/FileTable';
 import { FileViewer } from './components/FileViewer';
 import { AgentScreen } from './components/AgentScreen';
 import { SettingsModal } from './components/SettingsModal';
-import { AgentSettingsModal } from './components/AgentSettingsModal';
-import { Glasses, ChevronUp, ChevronDown, MousePointer, CornerUpLeft, Bot, RefreshCw, Home } from 'lucide-react';
 import './App.css';
 
 type PaneType = 'explorer' | 'agent';
@@ -36,7 +33,6 @@ function isGatewayService(s: FileSystemService): s is GatewayFileSystemService {
 export function App() {
   const [fileService, setFileService] = useState<FileSystemService>(() => createFileService());
   const [agentService] = useState(() => new AgentService());
-  const [sessionService] = useState(() => new SessionService());
   const [pageManager] = useState(() => new PageManager((status) => setG2Status(status)));
 
   // Explorer state
@@ -56,9 +52,7 @@ export function App() {
 
   // UI state
   const [_g2Status, setG2Status] = useState<string>('Initializing G2 SDK...');
-  const [hudPreviewText, setHudPreviewText] = useState<string>('');
-  const [showExplorerSettings, setShowExplorerSettings] = useState<boolean>(false);
-  const [showAgentSettings, setShowAgentSettings] = useState<boolean>(false);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
 
   // 2-Pane layout state
   const [paneOrder, setPaneOrder] = useState<PaneOrder>(['explorer', 'agent']);
@@ -125,34 +119,25 @@ export function App() {
           setSelectedIndex(selected);
           setCurrentScreen('explorer');
           setSelectedFile(null);
-          setHudPreviewText(pageManager.getLastRenderedText());
         },
         (file, content) => {
           setSelectedFile(file);
           setFileContent(content);
           setCurrentScreen('file_viewer');
-          setHudPreviewText(pageManager.getLastRenderedText());
         },
         (context) => {
           setAgentContext(context);
           if (!isDesktop) {
             setCurrentScreen('agent');
           }
-          setHudPreviewText(pageManager.getLastRenderedText());
         }
       );
 
       await pageManager.navigateTo(explorerPage);
-      setHudPreviewText(pageManager.getLastRenderedText());
     };
 
     init();
   }, [fileService, agentService, pageManager]);
-
-  // Sync HUD preview on any render
-  const refreshHudPreview = () => {
-    setHudPreviewText(pageManager.getLastRenderedText());
-  };
 
   // Internal navigate (no history management)
   const navigateToPath = async (path: string) => {
@@ -166,24 +151,20 @@ export function App() {
         setSelectedIndex(selected);
         setCurrentScreen('explorer');
         setSelectedFile(null);
-        refreshHudPreview();
       },
       (file, content) => {
         setSelectedFile(file);
         setFileContent(content);
         setCurrentScreen('file_viewer');
-        setHudPreviewText(pageManager.getLastRenderedText());
       },
       (context) => {
         setAgentContext(context);
         if (!isDesktop) {
           setCurrentScreen('agent');
         }
-        setHudPreviewText(pageManager.getLastRenderedText());
       }
     );
     await pageManager.navigateTo(page);
-    refreshHudPreview();
   };
 
   const handleOpenFile = async (file: FileSystemItem) => {
@@ -210,18 +191,15 @@ export function App() {
           setSelectedFile(f);
           setFileContent(c);
           setCurrentScreen('file_viewer');
-          setHudPreviewText(pageManager.getLastRenderedText());
         },
         (context) => {
           setAgentContext(context);
           if (!isDesktop) {
             setCurrentScreen('agent');
           }
-          setHudPreviewText(pageManager.getLastRenderedText());
         }
       );
       await pageManager.navigateTo(viewerPage);
-      refreshHudPreview();
     } catch (e: any) {
       alert(`Failed to open file: ${e.message}`);
     }
@@ -349,24 +327,20 @@ export function App() {
         setSelectedIndex(selected);
         setCurrentScreen('explorer');
         setSelectedFile(null);
-        setHudPreviewText(pageManager.getLastRenderedText());
       },
       (file, content) => {
         setSelectedFile(file);
         setFileContent(content);
         setCurrentScreen('file_viewer');
-        setHudPreviewText(pageManager.getLastRenderedText());
       },
       (context) => {
         setAgentContext(context);
         if (!isDesktop) {
           setCurrentScreen('agent');
         }
-        setHudPreviewText(pageManager.getLastRenderedText());
       }
     );
     await pageManager.navigateTo(explorerPage);
-    setHudPreviewText(pageManager.getLastRenderedText());
   }, [agentService, pageManager]);
 
   // Keyboard Navigation for PC testing
@@ -377,23 +351,18 @@ export function App() {
       if (e.key === 'ArrowUp') {
         e.preventDefault();
         await pageManager.dispatchSimulatedEvent('scroll_up');
-        refreshHudPreview();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         await pageManager.dispatchSimulatedEvent('scroll_down');
-        refreshHudPreview();
       } else if (e.key === 'Enter') {
         e.preventDefault();
         await pageManager.dispatchSimulatedEvent('click');
-        refreshHudPreview();
       } else if (e.key === 'Backspace' || e.key === 'Escape') {
         e.preventDefault();
         await pageManager.dispatchSimulatedEvent('double_click');
-        refreshHudPreview();
       } else if (e.key.toLowerCase() === 'a') {
         e.preventDefault();
         await pageManager.dispatchSimulatedEvent('long_press');
-        refreshHudPreview();
       }
     };
 
@@ -426,8 +395,9 @@ export function App() {
         canGoBack={canExplorerGoBack()}
         onReload={handleExplorerReload}
         onHome={handleExplorerHome}
-        onOpenSettings={() => setShowExplorerSettings(true)}
+        onOpenSettings={() => setShowSettings(true)}
         onOpenAgent={handleOpenAgent}
+        showSettingsButton={isDesktop && !isFirstExplorer}
         showSwapButton={isDesktop && !isFirstExplorer}
         onSwapPanes={handleSwapPanes}
       />
@@ -444,7 +414,6 @@ export function App() {
                 if (page instanceof ExplorerPage) {
                   (page as any).selectedIndex = idx;
                   pageManager.renderCurrentPage();
-                  refreshHudPreview();
                 }
               }}
               onOpenDirectory={handleOpenDirectory}
@@ -459,119 +428,6 @@ export function App() {
             />
           )}
         </main>
-
-        {/* G2 HUD Simulator & Event Trigger Panel */}
-        <aside className="g2-hud-sidebar">
-          <div className="g2-hud-header">
-            <div className="g2-title">
-              <Glasses size={18} className="icon-g2" />
-              <span>G2 Display Preview</span>
-            </div>
-            <span className="g2-tag">576x288 HUD</span>
-          </div>
-
-          <div className="g2-hud-screen">
-            <pre>{hudPreviewText || 'G2 HUD Connecting...'}</pre>
-          </div>
-
-          <div className="g2-controls-section">
-            <div className="section-label">G2 Touch & Gestures Emulation</div>
-            <div className="g2-btn-grid">
-              <button
-                className="g2-btn"
-                onClick={async () => {
-                  await pageManager.dispatchSimulatedEvent('scroll_up');
-                  refreshHudPreview();
-                }}
-                title="Scroll Up (Focus Prev)"
-              >
-                <ChevronUp size={14} /> Scroll Up
-              </button>
-              <button
-                className="g2-btn"
-                onClick={async () => {
-                  await pageManager.dispatchSimulatedEvent('scroll_down');
-                  refreshHudPreview();
-                }}
-                title="Scroll Down (Focus Next)"
-              >
-                <ChevronDown size={14} /> Scroll Down
-              </button>
-              <button
-                className="g2-btn"
-                onClick={async () => {
-                  await pageManager.dispatchSimulatedEvent('click');
-                  refreshHudPreview();
-                }}
-                title="Tap (Open File/Folder)"
-              >
-                <MousePointer size={14} /> Tap (Open)
-              </button>
-              <button
-                className="g2-btn"
-                onClick={async () => {
-                  await pageManager.dispatchSimulatedEvent('double_click');
-                  refreshHudPreview();
-                }}
-                title="Double Tap (Parent / Back)"
-              >
-                <CornerUpLeft size={14} /> Double Tap
-              </button>
-              <button
-                className="g2-btn btn-agent-trigger"
-                onClick={async () => {
-                  await pageManager.dispatchSimulatedEvent('long_press');
-                  refreshHudPreview();
-                }}
-                title="Long Press (Launch Agent Context)"
-              >
-                <Bot size={14} /> Long Press (Agent)
-              </button>
-            </div>
-          </div>
-
-          <div className="g2-controls-section">
-            <div className="section-label">G2 Context Menu</div>
-            <div className="g2-btn-grid">
-              <button
-                className="g2-btn"
-                onClick={async () => {
-                  await pageManager.dispatchSimulatedEvent('menu_click', 'refresh');
-                  refreshHudPreview();
-                }}
-              >
-                <RefreshCw size={13} /> Refresh
-              </button>
-              <button
-                className="g2-btn"
-                onClick={async () => {
-                  await pageManager.dispatchSimulatedEvent('menu_click', 'home');
-                  refreshHudPreview();
-                }}
-              >
-                <Home size={13} /> Home
-              </button>
-              <button
-                className="g2-btn"
-                onClick={async () => {
-                  await pageManager.dispatchSimulatedEvent('menu_click', 'parent');
-                  refreshHudPreview();
-                }}
-              >
-                <CornerUpLeft size={13} /> Parent
-              </button>
-              <button
-                className="g2-btn"
-                onClick={async () => {
-                  await pageManager.dispatchSimulatedEvent('menu_click', 'info');
-                  refreshHudPreview();
-                }}
-              >
-                ⓘ Info
-              </button>
-            </div>
-          </div>
-        </aside>
       </div>
     </div>
   );
@@ -584,8 +440,9 @@ export function App() {
         gatewayUrl={resolveConfig().gatewayUrl}
         gatewayToken={resolveConfig().gatewayToken}
         agentContext={agentContext}
-        onOpenSettings={() => setShowAgentSettings(true)}
+        onOpenSettings={() => setShowSettings(true)}
         onOpenExplorer={handleOpenExplorer}
+        showSettingsButton={isDesktop && isFirstExplorer}
         showSwapButton={isDesktop && isFirstExplorer}
         onSwapPanes={handleSwapPanes}
       />
@@ -614,19 +471,11 @@ export function App() {
         <>{agentPane}{divider}{explorerPane}</>
       )}
 
-      {/* Modals */}
+      {/* Settings Modal */}
       <SettingsModal
-        isOpen={showExplorerSettings}
-        onClose={() => setShowExplorerSettings(false)}
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
         onReconnect={handleReconnect}
-      />
-
-      <AgentSettingsModal
-        isOpen={showAgentSettings}
-        onClose={() => setShowAgentSettings(false)}
-        sessionService={sessionService}
-        gatewayUrl={resolveConfig().gatewayUrl}
-        gatewayToken={resolveConfig().gatewayToken}
       />
     </div>
   );

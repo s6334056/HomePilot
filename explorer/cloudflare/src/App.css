@@ -206,7 +206,7 @@
 /* Main Container Grid */
 .main-content-container {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 1fr;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -218,10 +218,6 @@
     grid-template-columns: 1fr;
   }
 
-  .g2-hud-sidebar {
-    display: none;
-  }
-
   /* Desktop: hide mutual nav buttons, show swap button */
   .navbar-btn-desktop-only {
     display: inline-flex;
@@ -229,18 +225,6 @@
 
   .navbar-btn-mobile-only {
     display: none !important;
-  }
-}
-
-@media (max-width: 1099px) {
-  .main-content-container {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) auto;
-    overflow: hidden;
-  }
-
-  .g2-hud-sidebar {
-    max-height: 60vh;
   }
 }
 
@@ -445,106 +429,6 @@
 }
 
 /* G2 HUD Sidebar */
-.g2-hud-sidebar {
-  background-color: var(--bg-card);
-  border-left: 1px solid var(--border);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  overflow-y: auto;
-}
-
-.g2-hud-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.g2-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.icon-g2 {
-  color: var(--g2-green);
-}
-
-.g2-tag {
-  font-size: 10px;
-  background-color: var(--g2-bg);
-  border: 1px solid var(--g2-dim);
-  color: var(--g2-green);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-}
-
-.g2-hud-screen {
-  background-color: var(--g2-bg);
-  border: 2px solid var(--g2-dim);
-  border-radius: 8px;
-  padding: 12px;
-  box-shadow: 0 0 12px rgba(57, 255, 20, 0.15);
-}
-
-.g2-hud-screen pre {
-  color: var(--g2-green);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  word-break: break-all;
-  min-height: 140px;
-}
-
-.g2-controls-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.section-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.g2-btn-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
-}
-
-.g2-btn {
-  background-color: var(--bg-sub);
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: 6px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-}
-
-.g2-btn:hover {
-  background-color: #30363d;
-  color: var(--accent);
-}
-
-.btn-agent-trigger {
-  grid-column: span 2;
-  color: var(--accent);
-  border-color: rgba(88, 166, 255, 0.4);
-}
-
 /* Responsive: narrow phones */
 @media (max-width: 480px) {
   .toolbar {
@@ -558,10 +442,6 @@
 
 /* Responsive: hide G2 Preview on narrow screens */
 @media (max-width: 640px) {
-  .main-content-container .g2-hud-sidebar {
-    display: none;
-  }
-
   .file-table .col-size,
   .file-table .col-type,
   .file-table .col-modified {
