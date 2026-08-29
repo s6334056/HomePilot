@@ -58,7 +58,8 @@ export interface OpenCodeActions {
   refreshArchivedSessions: () => Promise<void>;
   refreshMessages: () => Promise<void>;
   selectSession: (sessionID: string) => Promise<void>;
-  createSession: (title?: string) => Promise<string | null>;
+  createSession: (options?: { title?: string; model?: { providerID: string; modelID: string } }) => Promise<string | null>;
+  getClient: () => OpenCodeClient | null;
   sendMessage: (content: string, context?: AgentContext | null) => Promise<void>;
   respondPermission: (permissionID: string, response: 'grant' | 'deny' | 'always') => Promise<void>;
   respondQuestion: (questionID: string, answer: string | string[]) => Promise<void>;
@@ -476,18 +477,17 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     }
   }, []);
 
-  const createSession = useCallback(async (title?: string): Promise<string | null> => {
+  const createSession = useCallback(async (options?: { title?: string; model?: { providerID: string; modelID: string } }): Promise<string | null> => {
     const client = clientRef.current;
     if (!client) return null;
     try {
       const settings = loadSettings();
       const session = await client.createSession({
-        title,
+        title: options?.title,
         projectID: settings.selectedProjectID,
-        model: {
-          id: settings.selectedModelID,
-          providerID: settings.selectedProviderID,
-        },
+        model: options?.model
+          ? { id: options.model.modelID, providerID: options.model.providerID }
+          : undefined,
       });
       setState((prev) => ({
         ...prev,
@@ -720,6 +720,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     archiveSession,
     restoreSession,
     deleteSession,
+    getClient: () => clientRef.current,
   };
 
   return [state, actions];

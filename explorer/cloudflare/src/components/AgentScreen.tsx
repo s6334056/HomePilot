@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Mic, Send, Wifi, WifiOff, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
-import { OpenCodeSessionInfo, AgentContext } from '../domain/types';
+import { OpenCodeSessionInfo, OpenCodeProviderModel, AgentContext } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
 import { Navbar } from './Navbar';
 
@@ -37,6 +37,15 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const [showArchivedSessions, setShowArchivedSessions] = useState<boolean>(false);
   const [operatingSessionId, setOperatingSessionId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showModelSelect, setShowModelSelect] = useState<boolean>(false);
+  const [availableModels, setAvailableModels] = useState<OpenCodeProviderModel[]>([]);
+  const [selectedModelIndex, setSelectedModelIndex] = useState<number>(0);
+  const [isLoadingModels, setIsLoadingModels] = useState<boolean>(false);
+  const [modelError, setModelError] = useState<string | null>(null);
+  const [isCreatingSession, setIsCreatingSession] = useState<boolean>(false);
+  const [sessionCreateError, setSessionCreateError] = useState<string | null>(null);
+  const lastSelectedModelIndexRef = useRef<number>(0);
+  const modelListRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -75,12 +84,77 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
-  const handleNewSession = async () => {
-    const sessionID = await actions.createSession();
-    if (sessionID) {
-      await actions.selectSession(sessionID);
-      setShowSessionList(false);
+  useEffect(() => {
+    if (showModelSelect && !isLoadingModels && availableModels.length > 0) {
+      requestAnimationFrame(() => {
+        const list = modelListRef.current;
+        if (!list) return;
+        const selectedItem = list.querySelector('.oc-model-select-item.selected');
+        if (selectedItem) {
+          selectedItem.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+        }
+      });
     }
+  }, [showModelSelect, isLoadingModels, availableModels.length]);
+
+  const handleNewSession = async () => {
+    setShowModelSelect(true);
+    setSessionCreateError(null);
+    await fetchModels();
+  };
+
+  const fetchModels = async () => {
+    const client = actions.getClient();
+    if (!client) return;
+    setIsLoadingModels(true);
+    setModelError(null);
+    try {
+      const providers = await client.getProviders();
+      const models = client.extractFreeModels(providers);
+      setAvailableModels(models);
+      if (models.length > 0) {
+        setSelectedModelIndex(lastSelectedModelIndexRef.current < models.length ? lastSelectedModelIndexRef.current : 0);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to load models';
+      setModelError(msg);
+    } finally {
+      setIsLoadingModels(false);
+    }
+  };
+
+  const handleModelSelectStart = async () => {
+    if (availableModels.length === 0) return;
+    const model = availableModels[selectedModelIndex];
+    if (!model) return;
+    lastSelectedModelIndexRef.current = selectedModelIndex;
+    setIsCreatingSession(true);
+    setSessionCreateError(null);
+    try {
+      const sessionID = await actions.createSession({
+        model: { providerID: model.providerID, modelID: model.modelID },
+      });
+      if (sessionID) {
+        await actions.selectSession(sessionID);
+        setShowModelSelect(false);
+        setShowSessionList(false);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to create session';
+      setSessionCreateError(msg);
+    } finally {
+      setIsCreatingSession(false);
+    }
+  };
+
+  const handleModelSelectCancel = () => {
+    setShowModelSelect(false);
+    setSessionCreateError(null);
+  };
+
+  const handleModelSelectRetry = async () => {
+    setSessionCreateError(null);
+    await fetchModels();
   };
 
   const handleSelectSession = async (id: string) => {
@@ -543,6 +617,93 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                   onClick={() => handleDeleteSession(deleteConfirmId)}
                 >
                   Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {showModelSelect && (
+          <div className="oc-dialog-overlay" onClick={handleModelSelectCancel}>
+            <div className="oc-dialog oc-dialog-model-select" onClick={(e) => e.stopPropagation()}>
+              <div className="oc-dialog-header">
+                <span>New Session</span>
+              </div>
+              <div className="oc-dialog-body oc-dialog-model-select-body">
+                <div className="oc-model-select-label">Select a model</div>
+                {isLoadingModels && (
+                  <div className="oc-model-select-loading">
+                    <Loader2 size={16} className="oc-spinning" />
+                    <span>Loading models...</span>
+                  </div>
+                )}
+                {!isLoadingModels && modelError && (
+                  <div className="oc-model-select-error">
+                    <p>{modelError}</p>
+                  </div>
+                )}
+                {!isLoadingModels && !modelError && availableModels.length === 0 && (
+                  <div className="oc-model-select-empty">
+                    No available models.
+                  </div>
+                )}
+                {!isLoadingModels && !modelError && availableModels.length > 0 && (
+                  <div className="oc-model-select-list" ref={modelListRef}>
+                    {availableModels.map((model, index) => (
+                      <label
+                        key={`${model.providerID}-${model.modelID}`}
+                        className={`oc-model-select-item ${index === selectedModelIndex ? 'selected' : ''}`}
+                      >
+                        <input
+                          type="radio"
+                          name="model-select"
+                          checked={index === selectedModelIndex}
+                          onChange={() => setSelectedModelIndex(index)}
+                          className="oc-model-select-radio"
+                        />
+                        <div className="oc-model-select-info">
+                          <span className="oc-model-select-name">{model.name}</span>
+                          <span className="oc-model-select-provider">OpenCode · Free</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {sessionCreateError && (
+                <div className="oc-model-select-create-error">
+                  <AlertCircle size={14} />
+                  <span>{sessionCreateError}</span>
+                </div>
+              )}
+              <div className="oc-dialog-actions">
+                <button
+                  className="oc-btn"
+                  onClick={handleModelSelectCancel}
+                  disabled={isCreatingSession}
+                >
+                  Cancel
+                </button>
+                {!isLoadingModels && modelError && (
+                  <button
+                    className="oc-btn oc-btn-always"
+                    onClick={handleModelSelectRetry}
+                  >
+                    Retry
+                  </button>
+                )}
+                <button
+                  className="oc-btn oc-btn-grant"
+                  onClick={handleModelSelectStart}
+                  disabled={isLoadingModels || availableModels.length === 0 || isCreatingSession}
+                >
+                  {isCreatingSession ? (
+                    <>
+                      <Loader2 size={14} className="oc-spinning" />
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <span>Start</span>
+                  )}
                 </button>
               </div>
             </div>
