@@ -77,6 +77,7 @@ export function App() {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const dragStartX = useRef<number>(0);
   const dragStartWidth = useRef<number>(0);
+  const wasDesktopRef = useRef<boolean>(window.innerWidth >= 1100);
 
   const isInitializedRef = useRef(false);
   const explorerHistoryRef = useRef<string[]>([]);
@@ -306,15 +307,21 @@ export function App() {
   // Responsive: track isDesktop state and clamp pane width on window resize
   useEffect(() => {
     const handleResize = () => {
-      setIsDesktop(window.innerWidth >= 1100);
+      const nowDesktop = window.innerWidth >= 1100;
+      setIsDesktop(nowDesktop);
       setExplorerPaneWidth((prev) => {
         const maxExplorer = window.innerWidth - MIN_PANE_WIDTH - DIVIDER_WIDTH;
         return Math.max(MIN_PANE_WIDTH, Math.min(maxExplorer, prev));
       });
+      // When crossing from Desktop to Mobile, show paneOrder[0]
+      if (wasDesktopRef.current && !nowDesktop) {
+        setCurrentScreen(paneOrder[0]);
+      }
+      wasDesktopRef.current = nowDesktop;
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [paneOrder]);
 
   const handleReconnect = useCallback(async () => {
     const newService = createFileService();
@@ -410,7 +417,7 @@ export function App() {
 
   // Build Explorer pane content
   const explorerPane = (
-    <div className={`explorer-pane ${isDesktop || currentScreen === 'explorer' ? '' : 'pane-hidden'}`} key="explorer-pane">
+    <div className={`explorer-pane ${isDesktop || paneOrder[0] === 'explorer' ? '' : 'pane-hidden'}`} key="explorer-pane">
       <Navbar
         currentPath={getNavbarPath()}
         mode="explorer"
@@ -571,7 +578,7 @@ export function App() {
 
   // Build Agent pane content
   const agentPane = (
-    <div className={`agent-pane ${isDesktop || currentScreen === 'agent' ? '' : 'pane-hidden'}`} key="agent-pane">
+    <div className={`agent-pane ${isDesktop || paneOrder[0] === 'agent' ? '' : 'pane-hidden'}`} key="agent-pane">
       <AgentScreen
         currentPath={getAgentDisplayPath()}
         gatewayUrl={resolveConfig().gatewayUrl}
