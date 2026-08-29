@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, RefreshCw, Home, Settings, Bot, PanelLeft } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Home, Settings, Bot, PanelLeft, ArrowLeftRight } from 'lucide-react';
 import { truncatePath } from '../utils/pathUtils';
 
 export type NavbarMode = 'explorer' | 'agent';
@@ -8,6 +8,8 @@ interface NavbarBaseProps {
   currentPath: string;
   mode: NavbarMode;
   rootPath?: string;
+  showSwapButton?: boolean;
+  onSwapPanes?: () => void;
 }
 
 interface ExplorerNavbarProps extends NavbarBaseProps {
@@ -56,9 +58,14 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
             <button className="btn-icon" onClick={props.onOpenSettings} title="Settings">
               <Settings size={18} />
             </button>
-            <button className="btn-icon btn-icon--agent" onClick={props.onOpenAgent} title="Agent">
+            <button className="btn-icon btn-icon--agent navbar-btn-mobile-only" onClick={props.onOpenAgent} title="Agent">
               <Bot size={18} />
             </button>
+            {props.showSwapButton && (
+              <button className="btn-icon btn-swap-panes" onClick={props.onSwapPanes} title="Swap panes">
+                <ArrowLeftRight size={18} />
+              </button>
+            )}
           </div>
         </header>
         <nav className="path-bar">
@@ -92,9 +99,14 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
           <button className="btn-icon" onClick={props.onOpenSettings} title="Agent Settings">
             <Settings size={18} />
           </button>
-          <button className="btn-icon" onClick={props.onOpenExplorer} title="Explorer">
+          <button className="btn-icon navbar-btn-mobile-only" onClick={props.onOpenExplorer} title="Explorer">
             <Home size={18} />
           </button>
+          {props.showSwapButton && (
+            <button className="btn-icon btn-swap-panes" onClick={props.onSwapPanes} title="Swap panes">
+              <ArrowLeftRight size={18} />
+            </button>
+          )}
         </div>
       </header>
       <nav className="path-bar">

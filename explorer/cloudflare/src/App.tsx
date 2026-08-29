@@ -18,6 +18,9 @@ import { AgentSettingsModal } from './components/AgentSettingsModal';
 import { Glasses, ChevronUp, ChevronDown, MousePointer, CornerUpLeft, Bot, RefreshCw, Home } from 'lucide-react';
 import './App.css';
 
+type PaneType = 'explorer' | 'agent';
+type PaneOrder = [PaneType, PaneType];
+
 function createFileService(): FileSystemService {
   const config = resolveConfig();
   if (config.mode === 'gateway' && config.gatewayToken) {
@@ -56,6 +59,18 @@ export function App() {
   const [hudPreviewText, setHudPreviewText] = useState<string>('');
   const [showExplorerSettings, setShowExplorerSettings] = useState<boolean>(false);
   const [showAgentSettings, setShowAgentSettings] = useState<boolean>(false);
+
+  // 2-Pane layout state
+  const [paneOrder, setPaneOrder] = useState<PaneOrder>(['explorer', 'agent']);
+  const [explorerPaneWidth, setExplorerPaneWidth] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      return Math.floor(window.innerWidth / 2);
+    }
+    return 600;
+  });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const dragStartX = useRef<number>(0);
+  const dragStartWidth = useRef<number>(0);
 
   const isInitializedRef = useRef(false);
   const explorerHistoryRef = useRef<string[]>([]);
@@ -231,7 +246,7 @@ export function App() {
   // Agent/Explorer switching
   // In 2-pane mode (desktop), both panes are always visible.
   // These handlers only update context; screen switching is CSS-driven on mobile.
-  const isDesktopLayout = () => window.innerWidth >= 900;
+  const isDesktopLayout = () => window.innerWidth >= 1100;
 
   const handleOpenAgent = () => {
     const item = items[selectedIndex] || null;
@@ -253,6 +268,48 @@ export function App() {
       setCurrentScreen('explorer');
     }
   };
+
+  const handleSwapPanes = () => {
+    setPaneOrder((prev) => [prev[1], prev[0]]);
+  };
+
+  // Divider drag handlers (Pointer Events)
+  const clampExplorerWidth = (width: number): number => {
+    const minExplorer = 640;
+    const minAgent = 450;
+    const dividerWidth = 4;
+    const maxExplorer = window.innerWidth - minAgent - dividerWidth;
+    return Math.max(minExplorer, Math.min(maxExplorer, width));
+  };
+
+  const handleDividerPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    dragStartX.current = e.clientX;
+    dragStartWidth.current = explorerPaneWidth;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handleDividerPointerMove = (e: React.PointerEvent) => {
+    if (!isDragging) return;
+    const delta = e.clientX - dragStartX.current;
+    const newWidth = clampExplorerWidth(dragStartWidth.current + delta);
+    setExplorerPaneWidth(newWidth);
+  };
+
+  const handleDividerPointerUp = (e: React.PointerEvent) => {
+    setIsDragging(false);
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  };
+
+  // Clamp pane width on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setExplorerPaneWidth((prev) => clampExplorerWidth(prev));
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleReconnect = useCallback(async () => {
     const newService = createFileService();
@@ -343,176 +400,208 @@ export function App() {
     return explorerPath;
   };
 
-  return (
-    <div className="app-layout">
-      {/* ===== Explorer Pane (always rendered) ===== */}
-      <div className="explorer-pane">
-        <Navbar
-          currentPath={getNavbarPath()}
-          mode="explorer"
-          rootPath={isGatewayService(fileService) ? getRootPath() : undefined}
-          onBack={handleExplorerBack}
-          canGoBack={canExplorerGoBack()}
-          onReload={handleExplorerReload}
-          onHome={handleExplorerHome}
-          onOpenSettings={() => setShowExplorerSettings(true)}
-          onOpenAgent={handleOpenAgent}
-        />
+  // Determine which pane is first/last for swap button placement
+  const isFirstExplorer = paneOrder[0] === 'explorer';
+  const isDesktop = isDesktopLayout();
 
-        <div className="main-content-container">
-          <main className="content-view">
-            {currentScreen === 'explorer' && (
-              <FileTable
-                items={items}
-                selectedIndex={selectedIndex}
-                onSelectItem={(idx) => {
-                  setSelectedIndex(idx);
-                  const page = pageManager.getCurrentPage();
-                  if (page instanceof ExplorerPage) {
-                    (page as any).selectedIndex = idx;
-                    pageManager.renderCurrentPage();
-                    refreshHudPreview();
-                  }
+  // Build Explorer pane content
+  const explorerPane = (
+    <div className="explorer-pane" key="explorer-pane">
+      <Navbar
+        currentPath={getNavbarPath()}
+        mode="explorer"
+        rootPath={isGatewayService(fileService) ? getRootPath() : undefined}
+        onBack={handleExplorerBack}
+        canGoBack={canExplorerGoBack()}
+        onReload={handleExplorerReload}
+        onHome={handleExplorerHome}
+        onOpenSettings={() => setShowExplorerSettings(true)}
+        onOpenAgent={handleOpenAgent}
+        showSwapButton={isDesktop && !isFirstExplorer}
+        onSwapPanes={handleSwapPanes}
+      />
+
+      <div className="main-content-container">
+        <main className="content-view">
+          {currentScreen === 'explorer' && (
+            <FileTable
+              items={items}
+              selectedIndex={selectedIndex}
+              onSelectItem={(idx) => {
+                setSelectedIndex(idx);
+                const page = pageManager.getCurrentPage();
+                if (page instanceof ExplorerPage) {
+                  (page as any).selectedIndex = idx;
+                  pageManager.renderCurrentPage();
+                  refreshHudPreview();
+                }
+              }}
+              onOpenDirectory={handleOpenDirectory}
+              onOpenFile={handleOpenFile}
+            />
+          )}
+
+          {currentScreen === 'file_viewer' && selectedFile && (
+            <FileViewer
+              file={selectedFile}
+              content={fileContent}
+            />
+          )}
+        </main>
+
+        {/* G2 HUD Simulator & Event Trigger Panel */}
+        <aside className="g2-hud-sidebar">
+          <div className="g2-hud-header">
+            <div className="g2-title">
+              <Glasses size={18} className="icon-g2" />
+              <span>G2 Display Preview</span>
+            </div>
+            <span className="g2-tag">576x288 HUD</span>
+          </div>
+
+          <div className="g2-hud-screen">
+            <pre>{hudPreviewText || 'G2 HUD Connecting...'}</pre>
+          </div>
+
+          <div className="g2-controls-section">
+            <div className="section-label">G2 Touch & Gestures Emulation</div>
+            <div className="g2-btn-grid">
+              <button
+                className="g2-btn"
+                onClick={async () => {
+                  await pageManager.dispatchSimulatedEvent('scroll_up');
+                  refreshHudPreview();
                 }}
-                onOpenDirectory={handleOpenDirectory}
-                onOpenFile={handleOpenFile}
-              />
-            )}
-
-            {currentScreen === 'file_viewer' && selectedFile && (
-              <FileViewer
-                file={selectedFile}
-                content={fileContent}
-              />
-            )}
-          </main>
-
-          {/* G2 HUD Simulator & Event Trigger Panel */}
-          <aside className="g2-hud-sidebar">
-            <div className="g2-hud-header">
-              <div className="g2-title">
-                <Glasses size={18} className="icon-g2" />
-                <span>G2 Display Preview</span>
-              </div>
-              <span className="g2-tag">576x288 HUD</span>
+                title="Scroll Up (Focus Prev)"
+              >
+                <ChevronUp size={14} /> Scroll Up
+              </button>
+              <button
+                className="g2-btn"
+                onClick={async () => {
+                  await pageManager.dispatchSimulatedEvent('scroll_down');
+                  refreshHudPreview();
+                }}
+                title="Scroll Down (Focus Next)"
+              >
+                <ChevronDown size={14} /> Scroll Down
+              </button>
+              <button
+                className="g2-btn"
+                onClick={async () => {
+                  await pageManager.dispatchSimulatedEvent('click');
+                  refreshHudPreview();
+                }}
+                title="Tap (Open File/Folder)"
+              >
+                <MousePointer size={14} /> Tap (Open)
+              </button>
+              <button
+                className="g2-btn"
+                onClick={async () => {
+                  await pageManager.dispatchSimulatedEvent('double_click');
+                  refreshHudPreview();
+                }}
+                title="Double Tap (Parent / Back)"
+              >
+                <CornerUpLeft size={14} /> Double Tap
+              </button>
+              <button
+                className="g2-btn btn-agent-trigger"
+                onClick={async () => {
+                  await pageManager.dispatchSimulatedEvent('long_press');
+                  refreshHudPreview();
+                }}
+                title="Long Press (Launch Agent Context)"
+              >
+                <Bot size={14} /> Long Press (Agent)
+              </button>
             </div>
+          </div>
 
-            <div className="g2-hud-screen">
-              <pre>{hudPreviewText || 'G2 HUD Connecting...'}</pre>
+          <div className="g2-controls-section">
+            <div className="section-label">G2 Context Menu</div>
+            <div className="g2-btn-grid">
+              <button
+                className="g2-btn"
+                onClick={async () => {
+                  await pageManager.dispatchSimulatedEvent('menu_click', 'refresh');
+                  refreshHudPreview();
+                }}
+              >
+                <RefreshCw size={13} /> Refresh
+              </button>
+              <button
+                className="g2-btn"
+                onClick={async () => {
+                  await pageManager.dispatchSimulatedEvent('menu_click', 'home');
+                  refreshHudPreview();
+                }}
+              >
+                <Home size={13} /> Home
+              </button>
+              <button
+                className="g2-btn"
+                onClick={async () => {
+                  await pageManager.dispatchSimulatedEvent('menu_click', 'parent');
+                  refreshHudPreview();
+                }}
+              >
+                <CornerUpLeft size={13} /> Parent
+              </button>
+              <button
+                className="g2-btn"
+                onClick={async () => {
+                  await pageManager.dispatchSimulatedEvent('menu_click', 'info');
+                  refreshHudPreview();
+                }}
+              >
+                ⓘ Info
+              </button>
             </div>
-
-            <div className="g2-controls-section">
-              <div className="section-label">G2 Touch & Gestures Emulation</div>
-              <div className="g2-btn-grid">
-                <button
-                  className="g2-btn"
-                  onClick={async () => {
-                    await pageManager.dispatchSimulatedEvent('scroll_up');
-                    refreshHudPreview();
-                  }}
-                  title="Scroll Up (Focus Prev)"
-                >
-                  <ChevronUp size={14} /> Scroll Up
-                </button>
-                <button
-                  className="g2-btn"
-                  onClick={async () => {
-                    await pageManager.dispatchSimulatedEvent('scroll_down');
-                    refreshHudPreview();
-                  }}
-                  title="Scroll Down (Focus Next)"
-                >
-                  <ChevronDown size={14} /> Scroll Down
-                </button>
-                <button
-                  className="g2-btn"
-                  onClick={async () => {
-                    await pageManager.dispatchSimulatedEvent('click');
-                    refreshHudPreview();
-                  }}
-                  title="Tap (Open File/Folder)"
-                >
-                  <MousePointer size={14} /> Tap (Open)
-                </button>
-                <button
-                  className="g2-btn"
-                  onClick={async () => {
-                    await pageManager.dispatchSimulatedEvent('double_click');
-                    refreshHudPreview();
-                  }}
-                  title="Double Tap (Parent / Back)"
-                >
-                  <CornerUpLeft size={14} /> Double Tap
-                </button>
-                <button
-                  className="g2-btn btn-agent-trigger"
-                  onClick={async () => {
-                    await pageManager.dispatchSimulatedEvent('long_press');
-                    refreshHudPreview();
-                  }}
-                  title="Long Press (Launch Agent Context)"
-                >
-                  <Bot size={14} /> Long Press (Agent)
-                </button>
-              </div>
-            </div>
-
-            <div className="g2-controls-section">
-              <div className="section-label">G2 Context Menu</div>
-              <div className="g2-btn-grid">
-                <button
-                  className="g2-btn"
-                  onClick={async () => {
-                    await pageManager.dispatchSimulatedEvent('menu_click', 'refresh');
-                    refreshHudPreview();
-                  }}
-                >
-                  <RefreshCw size={13} /> Refresh
-                </button>
-                <button
-                  className="g2-btn"
-                  onClick={async () => {
-                    await pageManager.dispatchSimulatedEvent('menu_click', 'home');
-                    refreshHudPreview();
-                  }}
-                >
-                  <Home size={13} /> Home
-                </button>
-                <button
-                  className="g2-btn"
-                  onClick={async () => {
-                    await pageManager.dispatchSimulatedEvent('menu_click', 'parent');
-                    refreshHudPreview();
-                  }}
-                >
-                  <CornerUpLeft size={13} /> Parent
-                </button>
-                <button
-                  className="g2-btn"
-                  onClick={async () => {
-                    await pageManager.dispatchSimulatedEvent('menu_click', 'info');
-                    refreshHudPreview();
-                  }}
-                >
-                  ⓘ Info
-                </button>
-              </div>
-            </div>
-          </aside>
-        </div>
+          </div>
+        </aside>
       </div>
+    </div>
+  );
 
-      {/* ===== Agent Pane (always rendered; hidden on mobile via CSS when not active) ===== */}
-      <div className={`agent-pane ${currentScreen !== 'agent' ? 'pane-hidden' : ''}`}>
-        <AgentScreen
-          currentPath={getAgentDisplayPath()}
-          gatewayUrl={resolveConfig().gatewayUrl}
-          gatewayToken={resolveConfig().gatewayToken}
-          agentContext={agentContext}
-          onOpenSettings={() => setShowAgentSettings(true)}
-          onOpenExplorer={handleOpenExplorer}
-        />
-      </div>
+  // Build Agent pane content
+  const agentPane = (
+    <div className={`agent-pane ${currentScreen !== 'agent' ? 'pane-hidden' : ''}`} key="agent-pane">
+      <AgentScreen
+        currentPath={getAgentDisplayPath()}
+        gatewayUrl={resolveConfig().gatewayUrl}
+        gatewayToken={resolveConfig().gatewayToken}
+        agentContext={agentContext}
+        onOpenSettings={() => setShowAgentSettings(true)}
+        onOpenExplorer={handleOpenExplorer}
+        showSwapButton={isDesktop && isFirstExplorer}
+        onSwapPanes={handleSwapPanes}
+      />
+    </div>
+  );
+
+  // Build divider (only in desktop 2-pane mode)
+  const divider = isDesktop ? (
+    <div
+      key="pane-divider"
+      className={`pane-divider ${isDragging ? 'dragging' : ''}`}
+      onPointerDown={handleDividerPointerDown}
+      onPointerMove={handleDividerPointerMove}
+      onPointerUp={handleDividerPointerUp}
+    />
+  ) : null;
+
+  return (
+    <div
+      className="app-layout"
+      style={isDesktop ? { gridTemplateColumns: `${explorerPaneWidth}px 4px 1fr` } : undefined}
+    >
+      {isFirstExplorer ? (
+        <>{explorerPane}{divider}{agentPane}</>
+      ) : (
+        <>{agentPane}{divider}{explorerPane}</>
+      )}
 
       {/* Modals */}
       <SettingsModal

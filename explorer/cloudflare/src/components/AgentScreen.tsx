@@ -11,6 +11,8 @@ interface AgentScreenProps {
   agentContext: AgentContext | null;
   onOpenSettings: () => void;
   onOpenExplorer: () => void;
+  showSwapButton?: boolean;
+  onSwapPanes?: () => void;
 }
 
 export const AgentScreen: React.FC<AgentScreenProps> = ({
@@ -20,6 +22,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   agentContext,
   onOpenSettings,
   onOpenExplorer,
+  showSwapButton,
+  onSwapPanes,
 }) => {
   const [state, actions] = useOpenCode();
   const [showSessionList, setShowSessionList] = useState<boolean>(true);
@@ -343,6 +347,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           onOpenSessionList={handleToggleSessionList}
           onOpenSettings={onOpenSettings}
           onOpenExplorer={onOpenExplorer}
+          showSwapButton={showSwapButton}
+          onSwapPanes={onSwapPanes}
         />
         <div className="oc-connecting-screen">
           <div className="oc-connecting-content">
@@ -377,6 +383,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           onOpenSessionList={handleToggleSessionList}
           onOpenSettings={onOpenSettings}
           onOpenExplorer={onOpenExplorer}
+          showSwapButton={showSwapButton}
+          onSwapPanes={onSwapPanes}
         />
         <div className="oc-session-header">
           <div className="oc-connection-status">
@@ -547,6 +555,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         onOpenSessionList={handleToggleSessionList}
         onOpenSettings={onOpenSettings}
         onOpenExplorer={onOpenExplorer}
+        showSwapButton={showSwapButton}
+        onSwapPanes={onSwapPanes}
       />
       <div className="oc-session-header">
         <div className="oc-connection-status">
