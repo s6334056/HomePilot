@@ -8,7 +8,7 @@ interface AgentScreenProps {
   currentPath: string;
   gatewayUrl: string;
   gatewayToken: string;
-  agentContext: AgentContext | null;
+  buildLiveContext: () => AgentContext;
   onOpenSettings: () => void;
   onOpenExplorer: () => void;
   showSettingsButton?: boolean;
@@ -20,7 +20,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   currentPath,
   gatewayUrl,
   gatewayToken,
-  agentContext,
+  buildLiveContext,
   onOpenSettings,
   onOpenExplorer,
   showSettingsButton,
@@ -93,7 +93,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
     }
-    await actions.sendMessage(content, agentContext);
+    const liveContext = buildLiveContext();
+    await actions.sendMessage(content, liveContext);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

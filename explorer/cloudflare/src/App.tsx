@@ -83,11 +83,23 @@ export function App() {
     return '/home';
   };
 
-  // Compute agent display path from context
+  // Compute agent display path from live Explorer state (not from agentContext snapshot)
   const getAgentDisplayPath = (): string => {
-    if (agentContext?.selectedFile?.path) return agentContext.selectedFile.path;
-    if (agentContext?.currentPath) return agentContext.currentPath;
+    if (selectedFile?.path) return selectedFile.path;
     return explorerPath;
+  };
+
+  // Build Live Context from current Explorer state (PWA only — called at message send time)
+  const buildLiveContext = (): AgentContext => {
+    const item = items[selectedIndex] || null;
+    return {
+      currentPath: explorerPath,
+      selectedItem: item,
+      selectedFile: selectedFile,
+      content: fileContent || undefined,
+      sourceScreen: currentScreen === 'file_viewer' ? 'file_viewer' : 'explorer',
+      timestamp: new Date().toISOString(),
+    };
   };
 
   // Can the user go back in explorer history?
@@ -230,17 +242,8 @@ export function App() {
 
   // Agent/Explorer switching
   // In 2-pane mode (desktop), both panes are always visible.
-  // These handlers only update context; screen switching is CSS-driven on mobile.
+  // These handlers only update screen visibility; Context is built at message send time.
   const handleOpenAgent = () => {
-    const item = items[selectedIndex] || null;
-    const context = agentService.open({
-      path: explorerPath,
-      item,
-      selectedFile,
-      content: fileContent || undefined,
-      source: currentScreen === 'file_viewer' ? 'file_viewer' : 'explorer',
-    });
-    setAgentContext(context);
     if (!isDesktop) {
       setCurrentScreen('agent');
     }
@@ -439,7 +442,7 @@ export function App() {
         currentPath={getAgentDisplayPath()}
         gatewayUrl={resolveConfig().gatewayUrl}
         gatewayToken={resolveConfig().gatewayToken}
-        agentContext={agentContext}
+        buildLiveContext={buildLiveContext}
         onOpenSettings={() => setShowSettings(true)}
         onOpenExplorer={handleOpenExplorer}
         showSettingsButton={isDesktop && isFirstExplorer}
