@@ -123,6 +123,21 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   // Set to true once the initial session load + SSE connection is established.
   // Used to avoid marking existing messages as unread during startup.
   const readyRef = useRef(false);
+  // Grace period after readyRef becomes true: ignore unread during initial status events.
+  const readyTimeRef = useRef<number>(0);
+  // Tracks previous session.status.type per session to detect transitions to terminal states.
+  const prevSessionStatusRef = useRef<Map<string, string>>(new Map());
+
+  // Returns true if the given status type represents a terminal/result state
+  // that should trigger Unread (user action or confirmation needed).
+  function isUnreadRelevantStatus(statusType: string): boolean {
+    // Empty or falsy status = agent idle / finished
+    if (!statusType) return true;
+    // Known terminal states
+    const lower = statusType.toLowerCase();
+    if (lower === 'idle' || lower === 'completed' || lower === 'finished' || lower === 'error') return true;
+    return false;
+  }
 
   const getClient = useCallback((gatewayUrl: string, gatewayToken: string): OpenCodeClient => {
     if (!clientRef.current || clientRef.current.getGatewayUrl() !== gatewayUrl) {
@@ -218,26 +233,49 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         case 'session.status': {
           const props = properties as unknown as { sessionID: string; status: OpenCodeSessionStatus };
           if (!props?.sessionID) return prev;
-          if (prev.selectedSessionID !== props.sessionID) return prev;
-          // If we are in a sending state, detect completion by status change.
-          // The first status received after sendMessage marks the "busy" status.
-          // When a *different* status arrives, the agent has finished processing.
+
+          const newType = props.status?.type ?? '';
+          const prevType = prevSessionStatusRef.current.get(props.sessionID) ?? '';
+          prevSessionStatusRef.current.set(props.sessionID, newType);
+
+          // Unread: when a non-selected session transitions to a terminal state
+          // (finish/error/idle), mark it as unread.
+          // Grace period: skip unread during 3s after initial load to avoid false positives.
+          const inGracePeriod = readyRef.current && (Date.now() - readyTimeRef.current < 3000);
+          let unreadUpdate = prev.unreadSessionIds;
+          if (
+            readyRef.current &&
+            !inGracePeriod &&
+            props.sessionID !== prev.selectedSessionID &&
+            newType !== prevType &&
+            isUnreadRelevantStatus(newType)
+          ) {
+            if (!prev.unreadSessionIds.includes(props.sessionID)) {
+              unreadUpdate = [...prev.unreadSessionIds, props.sessionID];
+              saveUnreadSessionIds(unreadUpdate);
+            }
+          }
+
+          // isSending: only relevant for the currently selected session
           let isSendingUpdate = prev.isSending;
-          if (prev.isSending) {
-            const newType = props.status?.type ?? '';
+          if (prev.isSending && props.sessionID === prev.selectedSessionID) {
             if (sendingStatusRef.current === null) {
-              // First status event after sendMessage — record as the busy status
               sendingStatusRef.current = newType;
             } else if (newType !== sendingStatusRef.current) {
-              // Status changed — agent finished processing
               isSendingUpdate = false;
               sendingStatusRef.current = null;
             }
           }
+
+          // Only update sessionStatus for the selected session
+          const sessionStatusUpdate =
+            props.sessionID === prev.selectedSessionID ? props.status : prev.sessionStatus;
+
           return {
             ...prev,
-            sessionStatus: props.status,
+            sessionStatus: sessionStatusUpdate,
             isSending: isSendingUpdate,
+            unreadSessionIds: unreadUpdate,
           };
         }
 
@@ -249,25 +287,8 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           };
           if (!props?.sessionID || !props?.messageID) return prev;
 
-          // Unread detection: mark session as unread when a new assistant message
-          // arrives for a session the user is NOT currently viewing.
-          // Only after readyRef is true (initial load complete) to avoid false positives.
-          let unreadUpdate = prev.unreadSessionIds;
-          if (
-            readyRef.current &&
-            props.info?.role === 'assistant' &&
-            props.sessionID !== prev.selectedSessionID
-          ) {
-            if (!prev.unreadSessionIds.includes(props.sessionID)) {
-              unreadUpdate = [...prev.unreadSessionIds, props.sessionID];
-              saveUnreadSessionIds(unreadUpdate);
-            }
-          }
-
           // Only update messages for the currently selected session
-          if (prev.selectedSessionID !== props.sessionID) {
-            return { ...prev, unreadSessionIds: unreadUpdate };
-          }
+          if (prev.selectedSessionID !== props.sessionID) return prev;
 
           // Remove optimistic messages when real ones arrive
           let filteredMessages = prev.messages;
@@ -290,7 +311,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
               ...updated[existingIdx],
               ...props.info,
             };
-            return { ...prev, messages: updated, unreadSessionIds: unreadUpdate };
+            return { ...prev, messages: updated };
           }
 
           const newMsg: OpenCodeMessageWithParts = {
@@ -301,7 +322,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
             parts: [],
             contentText: '',
           };
-          return { ...prev, messages: [...filteredMessages, newMsg], unreadSessionIds: unreadUpdate };
+          return { ...prev, messages: [...filteredMessages, newMsg] };
         }
 
         case 'message.part.updated': {
@@ -393,9 +414,50 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           if (!props?.id) return prev;
           const exists = prev.pendingPermissions.some((p) => p.id === props.id);
           if (exists) return prev;
+
+          // Unread: permission requires user action
+          let unreadUpdate = prev.unreadSessionIds;
+          if (
+            readyRef.current &&
+            props.sessionID &&
+            props.sessionID !== prev.selectedSessionID
+          ) {
+            if (!prev.unreadSessionIds.includes(props.sessionID)) {
+              unreadUpdate = [...prev.unreadSessionIds, props.sessionID];
+              saveUnreadSessionIds(unreadUpdate);
+            }
+          }
+
           return {
             ...prev,
             pendingPermissions: [...prev.pendingPermissions, props],
+            unreadSessionIds: unreadUpdate,
+          };
+        }
+
+        case 'question.asked': {
+          const props = properties as unknown as OpenCodeQuestionRequest;
+          if (!props?.id) return prev;
+          const exists = prev.pendingQuestions.some((q) => q.id === props.id);
+          if (exists) return prev;
+
+          // Unread: question requires user answer
+          let unreadUpdate = prev.unreadSessionIds;
+          if (
+            readyRef.current &&
+            props.sessionID &&
+            props.sessionID !== prev.selectedSessionID
+          ) {
+            if (!prev.unreadSessionIds.includes(props.sessionID)) {
+              unreadUpdate = [...prev.unreadSessionIds, props.sessionID];
+              saveUnreadSessionIds(unreadUpdate);
+            }
+          }
+
+          return {
+            ...prev,
+            pendingQuestions: [...prev.pendingQuestions, props],
+            unreadSessionIds: unreadUpdate,
           };
         }
 
@@ -440,6 +502,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       const sessions = all.filter((s) => !OpenCodeClient.isSessionArchived(s));
       const archivedSessions = all.filter((s) => OpenCodeClient.isSessionArchived(s));
       readyRef.current = true;
+      readyTimeRef.current = Date.now();
       setState((prev) => ({
         ...prev,
         sessions,
@@ -781,6 +844,9 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       eventServiceRef.current.disconnect();
     }
     sendingStatusRef.current = null;
+    readyRef.current = false;
+    readyTimeRef.current = 0;
+    prevSessionStatusRef.current.clear();
     setState((prev) => ({
       ...prev,
       connectionStatus: 'disconnected',
