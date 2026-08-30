@@ -2053,4 +2053,80 @@
   }
 }
 
+/* Speech Recognition Dialog */
+.oc-speech-dialog {
+  max-width: 360px;
+}
+
+.oc-speech-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 20px;
+}
+
+.oc-speech-mic-icon {
+  color: var(--danger);
+}
+
+.oc-speech-indicator {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.oc-speech-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--danger);
+  animation: speech-pulse 1.2s ease-in-out infinite;
+}
+
+.oc-speech-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.oc-speech-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes speech-pulse {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.oc-speech-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.oc-speech-error-text {
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.agent-mic-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.agent-mic-btn.recording {
+  color: var(--danger);
+  animation: mic-recording-pulse 1s ease-in-out infinite;
+}
+
+@keyframes mic-recording-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 

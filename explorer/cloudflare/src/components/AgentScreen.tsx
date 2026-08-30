@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, Send, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2, WifiOff } from 'lucide-react';
+import { Plus, Mic, Send, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2, WifiOff, Square, X } from 'lucide-react';
 import { OpenCodeSessionInfo, OpenCodeProviderModel, AgentContext } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { Navbar } from './Navbar';
 
 interface AgentScreenProps {
@@ -49,6 +50,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const speech = useSpeechRecognition({ gatewayUrl, gatewayToken });
+
   const {
     connectionStatus,
     sessions,
@@ -85,6 +88,13 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
+
+  useEffect(() => {
+    if (speech.state === 'completed' && speech.result) {
+      setInputValue((prev) => (prev ? prev + ' ' + speech.result : speech.result));
+      speech.reset();
+    }
+  }, [speech.state]);
 
   useEffect(() => {
     if (showModelSelect && !isLoadingModels && availableModels.length > 0) {
@@ -179,6 +189,12 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleSendMessage();
+    }
+  };
+
+  const handleMicClick = () => {
+    if (speech.state === 'idle') {
+      speech.startRecording();
     }
   };
 
@@ -810,7 +826,12 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
             rows={1}
             disabled={!selectedSessionID}
           />
-          <button className="btn-icon agent-mic-btn" title="Voice Input (coming soon)">
+          <button
+            className="btn-icon agent-mic-btn"
+            title="Voice Input"
+            onClick={handleMicClick}
+            disabled={!selectedSessionID || speech.state === 'recording' || speech.state === 'transcribing'}
+          >
             <Mic size={18} />
           </button>
           <button
@@ -825,6 +846,65 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       </div>
 
       {renderPermissionDialog()}
+
+      {(speech.state === 'recording' || speech.state === 'transcribing' || (speech.state === 'error' && speech.error)) && (
+        <div className="oc-dialog-overlay">
+          <div className="oc-dialog oc-speech-dialog">
+            {speech.state === 'recording' && (
+              <>
+                <div className="oc-dialog-header">
+                  <Mic size={18} className="oc-speech-mic-icon" />
+                  <span>Listening...</span>
+                </div>
+                <div className="oc-dialog-body oc-speech-body">
+                  <div className="oc-speech-indicator">
+                    <span className="oc-speech-dot" />
+                    <span className="oc-speech-dot" />
+                    <span className="oc-speech-dot" />
+                  </div>
+                  <p className="oc-speech-hint">Speak now</p>
+                </div>
+                <div className="oc-dialog-actions">
+                  <button className="oc-btn oc-btn-deny" onClick={speech.stopRecording}>
+                    <Square size={14} />
+                    <span>Stop</span>
+                  </button>
+                  <button className="oc-btn" onClick={speech.cancel}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+            {speech.state === 'transcribing' && (
+              <>
+                <div className="oc-dialog-header">
+                  <Loader2 size={18} className="oc-spinning" />
+                  <span>Transcribing...</span>
+                </div>
+                <div className="oc-dialog-body oc-speech-body">
+                  <p className="oc-speech-hint">Please wait</p>
+                </div>
+              </>
+            )}
+            {speech.state === 'error' && speech.error && (
+              <>
+                <div className="oc-dialog-header">
+                  <AlertCircle size={18} />
+                  <span>Voice Input Error</span>
+                </div>
+                <div className="oc-dialog-body">
+                  <p className="oc-speech-error-text">{speech.error}</p>
+                </div>
+                <div className="oc-dialog-actions">
+                  <button className="oc-btn oc-btn-grant" onClick={speech.reset}>
+                    OK
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

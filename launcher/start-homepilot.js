@@ -1,12 +1,39 @@
 import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import qrcode from 'qrcode-terminal';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const HOME_ROOT = resolve(__dirname, '..');
+
+// --- Load .env file ---
+function loadEnvFile(filePath) {
+  if (!existsSync(filePath)) return {};
+  const env = {};
+  let content;
+  try {
+    content = readFileSync(filePath, 'utf-8');
+  } catch {
+    return {};
+  }
+  for (const raw of content.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eqIndex = line.indexOf('=');
+    if (eqIndex === -1) continue;
+    const key = line.slice(0, eqIndex).trim();
+    let value = line.slice(eqIndex + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    env[key] = value;
+  }
+  return env;
+}
+
+const envFile = loadEnvFile(join(__dirname, '.env'));
 
 const GATEWAY_DIR = join(HOME_ROOT, 'gateway');
 const GATEWAY_SCRIPT = join(GATEWAY_DIR, 'src', 'index.js');
@@ -27,7 +54,10 @@ const OPENCODE_STARTUP_TIMEOUT = 15_000;
 // Parse command-line arguments for root folder
 // Usage: node start-homepilot.js [root-folder]
 // Example: node start-homepilot.js C:\hp1
-const ROOT_FOLDER = process.argv[2] || process.env.HOMEPILOT_ROOT || 'C:\\hp1';
+// .env file is also checked as fallback
+const ROOT_FOLDER = process.argv[2] || process.env.HOMEPILOT_ROOT || envFile.ROOT_PATH || 'C:\\hp1';
+const WORKER_URL = process.env.HOMEPILOT_WORKER_URL || envFile.HOMEPILOT_WORKER_URL || '';
+const WORKER_SECRET_TOKEN = process.env.HOMEPILOT_WORKER_SECRET_TOKEN || envFile.HOMEPILOT_WORKER_SECRET_TOKEN || '';
 
 let gatewayToken = null;
 let tunnelUrl = null;
@@ -73,6 +103,30 @@ if (!existsSync(CLOUDFLARED_PATH)) {
   process.exit(1);
 }
 
+// --- Validate .env configuration ---
+const missingVars = [];
+if (!WORKER_URL) missingVars.push('HOMEPILOT_WORKER_URL');
+if (!WORKER_SECRET_TOKEN) missingVars.push('HOMEPILOT_WORKER_SECRET_TOKEN');
+if (missingVars.length > 0) {
+  console.error('');
+  console.error('========================================');
+  console.error('  HomePilot - Configuration missing');
+  console.error('========================================');
+  console.error('');
+  console.error('The following variables are not set:');
+  for (const v of missingVars) {
+    console.error(`  - ${v}`);
+  }
+  console.error('');
+  console.error('Create launcher/.env with these values:');
+  console.error('');
+  console.error('  HOMEPILOT_WORKER_URL=http://127.0.0.1:8787');
+  console.error('  HOMEPILOT_WORKER_SECRET_TOKEN=your-token');
+  console.error('  ROOT_PATH=C:\\hp1');
+  console.error('');
+  process.exit(1);
+}
+
 // --- Start Gateway ---
 function startGateway() {
   console.log('Starting HomePilot Gateway...');
@@ -83,6 +137,8 @@ function startGateway() {
     env: {
       ...process.env,
       HOMEPILOT_ROOT: ROOT_FOLDER,
+      HOMEPILOT_WORKER_URL: WORKER_URL,
+      HOMEPILOT_WORKER_SECRET_TOKEN: WORKER_SECRET_TOKEN,
     },
   });
 
@@ -295,6 +351,7 @@ function showReady() {
   console.log(`  Gateway  : ${address}`);
   console.log(`  OpenCode : ${OPENCODE_URL}`);
   console.log(`  Token    : ${gatewayToken}`);
+  console.log(`  Worker   : ${WORKER_URL}`);
   console.log('');
   console.log('Quick Tunnel');
   console.log('  Status : READY');
