@@ -289,6 +289,26 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     });
   };
 
+  const formatDateTime = (timestamp?: number): string => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const h = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${y}/${m}/${d} ${h}:${min}`;
+  };
+
+  const formatDuration = (ms: number): string => {
+    if (ms < 60000) {
+      return `${(ms / 1000).toFixed(1)}秒`;
+    }
+    const minutes = Math.floor(ms / 60000);
+    const seconds = ((ms % 60000) / 1000).toFixed(1);
+    return `${minutes}分${seconds}秒`;
+  };
+
   const renderPermissionDialog = () => {
     if (pendingPermissions.length === 0) return null;
     const perm = pendingPermissions[0];
@@ -784,17 +804,34 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           {isLoadingMessages && messages.length === 0 && (
             <div className="oc-loading">Loading messages...</div>
           )}
-          {messages.map((msg) => (
-            <div key={msg.id} className={`agent-message agent-message--${msg.role}`}>
-              <div className="agent-message-role">
-                {msg.role === 'user' ? 'USER' : 'ASSISTANT'}
-                {msg.agent && <span className="oc-msg-agent"> ({msg.agent})</span>}
+          {messages.map((msg) => {
+            const isAssistant = msg.role === 'assistant';
+            const createdTime = msg.time?.created;
+            const completedTime = msg.time?.completed;
+            const durationMs = isAssistant && createdTime && completedTime
+              ? completedTime - createdTime
+              : undefined;
+
+            return (
+              <div key={msg.id} className={`agent-message agent-message--${msg.role}`}>
+                <div className="agent-message-role">
+                  {msg.role === 'user' ? 'USER' : 'ASSISTANT'}
+                  {msg.agent && <span className="oc-msg-agent"> ({msg.agent})</span>}
+                </div>
+                <div className="agent-message-content">
+                  {renderMessageContent(msg)}
+                </div>
+                {(createdTime || (isAssistant && durationMs !== undefined)) && (
+                  <div className="agent-message-timestamp">
+                    {createdTime && formatDateTime(createdTime)}
+                    {isAssistant && durationMs !== undefined && createdTime && (
+                      <span className="agent-message-duration"> · {formatDuration(durationMs)}</span>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="agent-message-content">
-                {renderMessageContent(msg)}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
 
