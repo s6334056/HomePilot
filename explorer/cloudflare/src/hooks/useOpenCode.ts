@@ -17,6 +17,8 @@ import { formatMessageWithContext } from '../services/AgentContextFormatter';
 
 const SETTINGS_STORAGE_KEY = 'homepilot-agent-settings';
 const LAST_CHECKED_STORAGE_KEY = 'homepilot-session-lastChecked';
+const PROCESSING_STORAGE_KEY = 'homepilot-processing-sessions';
+const PROCESSING_TTL_MS = 24 * 60 * 60 * 1000;
 
 function loadLastCheckedAt(): Record<string, number> {
   try {
@@ -40,6 +42,56 @@ function loadLastCheckedAt(): Record<string, number> {
 function saveLastCheckedAt(map: Record<string, number>): void {
   try {
     localStorage.setItem(LAST_CHECKED_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+interface ProcessingEntry {
+  startedAt: number;
+}
+
+function loadProcessingSessions(): Record<string, ProcessingEntry> {
+  try {
+    const raw = localStorage.getItem(PROCESSING_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const now = Date.now();
+        const result: Record<string, ProcessingEntry> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          const entry = v as ProcessingEntry;
+          if (entry && typeof entry.startedAt === 'number' && (now - entry.startedAt) < PROCESSING_TTL_MS) {
+            result[k] = entry;
+          }
+        }
+        return result;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function saveProcessingSessions(map: Record<string, ProcessingEntry>): void {
+  try {
+    localStorage.setItem(PROCESSING_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+function removeProcessingSession(sessionID: string): void {
+  try {
+    const raw = localStorage.getItem(PROCESSING_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        delete parsed[sessionID];
+        localStorage.setItem(PROCESSING_STORAGE_KEY, JSON.stringify(parsed));
+      }
+    }
   } catch {
     // ignore
   }
@@ -102,6 +154,7 @@ export interface OpenCodeActions {
 }
 
 export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
+  const processingData = loadProcessingSessions();
   const [state, setState] = useState<OpenCodeState>({
     connectionStatus: 'disconnected',
     sessions: [],
@@ -118,7 +171,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     isSending: false,
     error: null,
     unreadSessionIds: [],
-    processingSessionIds: [],
+    processingSessionIds: Object.keys(processingData),
   });
 
   const clientRef = useRef<OpenCodeClient | null>(null);
@@ -127,6 +180,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   stateRef.current = state;
   const sendingStatusRef = useRef<string | null>(null);
   const lastCheckedAtRef = useRef<Record<string, number>>(loadLastCheckedAt());
+  const processingDataRef = useRef<Record<string, ProcessingEntry>>(processingData);
 
   const getClient = useCallback((gatewayUrl: string, gatewayToken: string): OpenCodeClient => {
     if (!clientRef.current || clientRef.current.getGatewayUrl() !== gatewayUrl) {
@@ -240,10 +294,19 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           const sessionStatusUpdate =
             props.sessionID === prev.selectedSessionID ? props.status : prev.sessionStatus;
 
+          // Remove from processing on status change
+          let processingUpdate = prev.processingSessionIds;
+          if (prev.processingSessionIds.includes(props.sessionID) && newType !== '' && newType !== 'idle') {
+            processingUpdate = prev.processingSessionIds.filter((id) => id !== props.sessionID);
+            delete processingDataRef.current[props.sessionID];
+            saveProcessingSessions(processingDataRef.current);
+          }
+
           return {
             ...prev,
             sessionStatus: sessionStatusUpdate,
             isSending: isSendingUpdate,
+            processingSessionIds: processingUpdate,
           };
         }
 
@@ -627,8 +690,16 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       ...prev,
       messages: [...prev.messages, userMessage, processingMessage],
       isSending: true,
+      processingSessionIds: prev.processingSessionIds.includes(sessionID)
+        ? prev.processingSessionIds
+        : [...prev.processingSessionIds, sessionID],
       error: null,
     }));
+
+    // Save to localStorage
+    const now = Date.now();
+    processingDataRef.current[sessionID] = { startedAt: now };
+    saveProcessingSessions(processingDataRef.current);
 
     try {
       await client.sendMessage(sessionID, formattedMessage);
@@ -638,12 +709,16 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       // On error: remove the processing placeholder and optimistic user message
       const msg = e instanceof Error ? e.message : 'Failed to send message';
       sendingStatusRef.current = null;
+      // Remove from processing on error
+      delete processingDataRef.current[sessionID];
+      saveProcessingSessions(processingDataRef.current);
       setState((prev) => ({
         ...prev,
         messages: prev.messages.filter(
           (m) => m.id !== tempUserMsgId && m.id !== tempAssistantMsgId
         ),
         isSending: false,
+        processingSessionIds: prev.processingSessionIds.filter((id) => id !== sessionID),
         error: msg,
       }));
     }
@@ -757,7 +832,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     const now = Date.now();
     const lastChecked = lastCheckedAtRef.current;
     const newUnreadIds: string[] = [];
-    const newProcessingIds: string[] = [];
 
     // Initialize lastCheckedAt for sessions not yet tracked
     for (const s of sessions) {
@@ -774,6 +848,9 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       }
     }
 
+    // Sessions that completed via REST API - remove from processing
+    const completedSessionIds: string[] = [];
+
     // Check each session's latest assistant message via REST API
     for (const s of sessions) {
       try {
@@ -783,25 +860,21 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         // Find the latest assistant message
         let latestAssistantTime: number | undefined;
         let latestFinish: string | undefined;
-        let hasRunningParts = false;
         for (let i = apiMessages.length - 1; i >= 0; i--) {
           const msg = apiMessages[i];
           if (msg.info.role === 'assistant') {
             latestAssistantTime = msg.info.time?.completed ?? msg.info.time?.created;
             latestFinish = msg.info.finish;
-            // Check if any parts are still running
-            if (msg.parts) {
-              hasRunningParts = msg.parts.some((p) => p.state?.status === 'running');
-            }
             break;
           }
         }
 
         if (latestAssistantTime === undefined) continue;
 
-        // Processing if: finish is not "stop" or parts are still running
-        if (latestFinish === 'tool-calls' || latestFinish === undefined || hasRunningParts) {
-          newProcessingIds.push(s.id);
+        // If finish === "stop", this session completed - remove from processing
+        if (latestFinish === 'stop' && stateRef.current.processingSessionIds.includes(s.id)) {
+          completedSessionIds.push(s.id);
+          delete processingDataRef.current[s.id];
         }
 
         // Unread if: latest result was created after user last checked
@@ -813,18 +886,25 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       }
     }
 
+    // Persist processing changes
+    if (completedSessionIds.length > 0) {
+      saveProcessingSessions(processingDataRef.current);
+    }
+
     saveLastCheckedAt(lastChecked);
 
     setState((prev) => {
       const sortedUnread = [...newUnreadIds].sort();
       const prevSortedUnread = [...prev.unreadSessionIds].sort();
-      const sortedProcessing = [...newProcessingIds].sort();
-      const prevSortedProcessing = [...prev.processingSessionIds].sort();
       
       const unreadChanged = sortedUnread.length !== prevSortedUnread.length || 
         sortedUnread.some((id, i) => id !== prevSortedUnread[i]);
-      const processingChanged = sortedProcessing.length !== prevSortedProcessing.length ||
-        sortedProcessing.some((id, i) => id !== prevSortedProcessing[i]);
+      
+      // Remove completed sessions from processing
+      const newProcessing = completedSessionIds.length > 0
+        ? prev.processingSessionIds.filter((id) => !completedSessionIds.includes(id))
+        : prev.processingSessionIds;
+      const processingChanged = newProcessing.length !== prev.processingSessionIds.length;
       
       if (!unreadChanged && !processingChanged) {
         return prev;
@@ -832,7 +912,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       return { 
         ...prev, 
         unreadSessionIds: unreadChanged ? newUnreadIds : prev.unreadSessionIds,
-        processingSessionIds: processingChanged ? newProcessingIds : prev.processingSessionIds,
+        processingSessionIds: processingChanged ? newProcessing : prev.processingSessionIds,
       };
     });
   }, []);
