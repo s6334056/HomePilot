@@ -131,7 +131,8 @@ export interface OpenCodeMessageInfo {
   sessionID: string;
   agent?: string;
   model?: OpenCodeMessageModel;
-  time?: { created: number };
+  time?: { created: number; completed?: number };
+  finish?: string;
   mode?: string;
   path?: OpenCodeMessagePath;
   modelID?: string;

@@ -64,6 +64,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     isSending,
     error,
     unreadSessionIds,
+    processingSessionIds,
   } = state;
 
   const activeSession = selectedSession;
@@ -202,7 +203,13 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     actions.disconnect();
   };
 
-  const handleReload = onReload || (() => { actions.refreshMessages(); });
+  const handleReload = onReload || (() => {
+    if (selectedSessionID && !showSessionList) {
+      actions.refreshMessages();
+    } else {
+      actions.refreshAllSessions();
+    }
+  });
 
   const handleArchiveSession = async (sessionID: string) => {
     if (operatingSessionId) return;
@@ -512,6 +519,9 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                         {unreadSessionIds.includes(session.id) && (
                           <span className="agent-session-unread" />
                         )}
+                        {processingSessionIds.includes(session.id) && (
+                          <span className="agent-session-processing" />
+                        )}
                         {formatSessionTitle(session)}
                       </span>
                       <span className="agent-session-date">
@@ -563,6 +573,9 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                       <span className="agent-session-title">
                         {unreadSessionIds.includes(session.id) && (
                           <span className="agent-session-unread" />
+                        )}
+                        {processingSessionIds.includes(session.id) && (
+                          <span className="agent-session-processing" />
                         )}
                         {formatSessionTitle(session)}
                       </span>

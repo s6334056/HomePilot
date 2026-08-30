@@ -1037,6 +1037,26 @@
   flex-shrink: 0;
 }
 
+.agent-session-processing {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background-color: transparent;
+  margin-right: 6px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+  flex-shrink: 0;
+  animation: processing-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes processing-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .agent-session-date {
   font-size: 11px;
   color: var(--text-dim);

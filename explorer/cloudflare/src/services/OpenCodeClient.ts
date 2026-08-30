@@ -136,6 +136,7 @@ export class OpenCodeClient {
       agent: r.agent as string | undefined,
       model: r.model as OpenCodeMessageInfo['model'],
       time: r.time as OpenCodeMessageInfo['time'],
+      finish: r.finish as string | undefined,
       mode: r.mode as string | undefined,
       path: r.path as OpenCodeMessageInfo['path'],
       modelID: r.modelID as string | undefined,

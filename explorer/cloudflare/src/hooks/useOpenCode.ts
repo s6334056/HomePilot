@@ -16,26 +16,30 @@ import { OpenCodeEventService } from '../services/OpenCodeEventService';
 import { formatMessageWithContext } from '../services/AgentContextFormatter';
 
 const SETTINGS_STORAGE_KEY = 'homepilot-agent-settings';
-const UNREAD_STORAGE_KEY = 'homepilot-unread-sessions';
+const LAST_CHECKED_STORAGE_KEY = 'homepilot-session-lastChecked';
 
-function loadUnreadSessionIds(): string[] {
+function loadLastCheckedAt(): Record<string, number> {
   try {
-    const raw = localStorage.getItem(UNREAD_STORAGE_KEY);
+    const raw = localStorage.getItem(LAST_CHECKED_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((id): id is string => typeof id === 'string');
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const result: Record<string, number> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === 'number') result[k] = v;
+        }
+        return result;
       }
     }
   } catch {
     // ignore
   }
-  return [];
+  return {};
 }
 
-function saveUnreadSessionIds(ids: string[]): void {
+function saveLastCheckedAt(map: Record<string, number>): void {
   try {
-    localStorage.setItem(UNREAD_STORAGE_KEY, JSON.stringify(ids));
+    localStorage.setItem(LAST_CHECKED_STORAGE_KEY, JSON.stringify(map));
   } catch {
     // ignore
   }
@@ -74,12 +78,14 @@ export interface OpenCodeState {
   isSending: boolean;
   error: string | null;
   unreadSessionIds: string[];
+  processingSessionIds: string[];
 }
 
 export interface OpenCodeActions {
   connect: (gatewayUrl: string, gatewayToken: string) => void;
   disconnect: () => void;
   refreshSessions: () => Promise<void>;
+  refreshAllSessions: () => Promise<void>;
   refreshArchivedSessions: () => Promise<void>;
   refreshMessages: () => Promise<void>;
   selectSession: (sessionID: string) => Promise<void>;
@@ -92,6 +98,7 @@ export interface OpenCodeActions {
   archiveSession: (sessionID: string) => Promise<boolean>;
   restoreSession: (sessionID: string) => Promise<boolean>;
   deleteSession: (sessionID: string) => Promise<boolean>;
+  syncSessionStates: (sessions: OpenCodeSessionInfo[]) => Promise<void>;
 }
 
 export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
@@ -110,34 +117,16 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     isLoadingMessages: false,
     isSending: false,
     error: null,
-    unreadSessionIds: loadUnreadSessionIds(),
+    unreadSessionIds: [],
+    processingSessionIds: [],
   });
 
   const clientRef = useRef<OpenCodeClient | null>(null);
   const eventServiceRef = useRef<OpenCodeEventService | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
-  // Tracks the session status type at the moment sendMessage is called.
-  // When a *different* status arrives via SSE, the agent has finished processing.
   const sendingStatusRef = useRef<string | null>(null);
-  // Set to true once the initial session load + SSE connection is established.
-  // Used to avoid marking existing messages as unread during startup.
-  const readyRef = useRef(false);
-  // Grace period after readyRef becomes true: ignore unread during initial status events.
-  const readyTimeRef = useRef<number>(0);
-  // Tracks previous session.status.type per session to detect transitions to terminal states.
-  const prevSessionStatusRef = useRef<Map<string, string>>(new Map());
-
-  // Returns true if the given status type represents a terminal/result state
-  // that should trigger Unread (user action or confirmation needed).
-  function isUnreadRelevantStatus(statusType: string): boolean {
-    // Empty or falsy status = agent idle / finished
-    if (!statusType) return true;
-    // Known terminal states
-    const lower = statusType.toLowerCase();
-    if (lower === 'idle' || lower === 'completed' || lower === 'finished' || lower === 'error') return true;
-    return false;
-  }
+  const lastCheckedAtRef = useRef<Record<string, number>>(loadLastCheckedAt());
 
   const getClient = useCallback((gatewayUrl: string, gatewayToken: string): OpenCodeClient => {
     if (!clientRef.current || clientRef.current.getGatewayUrl() !== gatewayUrl) {
@@ -147,13 +136,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   }, []);
 
   const processEvent = useCallback((event: OpenCodeSSEEvent) => {
-    // [TRACE] processEvent entry - confirm event reached useOpenCode
-    console.log('[HomePilot SSE Trace] processEvent called', {
-      hasPayload: !!event.payload,
-      payloadType: event.payload?.type,
-      syncEventType: event.payload?.syncEvent?.type,
-    });
-
     const payload = event.payload;
     if (!payload) return;
 
@@ -162,9 +144,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     const properties = isSyncEvent
       ? payload.syncEvent!.data
       : (payload.properties || {}) as Record<string, unknown>;
-
-    // [TRACE] Event type dispatched to switch
-    console.log('[HomePilot SSE Trace] dispatching to switch', { eventType, isSyncEvent });
 
     setState((prev) => {
       switch (eventType) {
@@ -245,38 +224,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           if (!props?.sessionID) return prev;
 
           const newType = props.status?.type ?? '';
-          const prevType = prevSessionStatusRef.current.get(props.sessionID) ?? '';
-          prevSessionStatusRef.current.set(props.sessionID, newType);
-
-          // [DEBUG] Observe actual session.status events from OpenCode
-          console.log('[HomePilot Status Debug]', {
-            sessionID: props.sessionID,
-            statusType: newType,
-            prevStatusType: prevType,
-            statusChanged: newType !== prevType,
-            selectedSessionID: prev.selectedSessionID,
-            isSending: prev.isSending,
-            isUnreadRelevant: isUnreadRelevantStatus(newType),
-            rawStatus: props.status,
-          });
-
-          // Unread: when a non-selected session transitions to a terminal state
-          // (finish/error/idle), mark it as unread.
-          // Grace period: skip unread during 3s after initial load to avoid false positives.
-          const inGracePeriod = readyRef.current && (Date.now() - readyTimeRef.current < 3000);
-          let unreadUpdate = prev.unreadSessionIds;
-          if (
-            readyRef.current &&
-            !inGracePeriod &&
-            props.sessionID !== prev.selectedSessionID &&
-            newType !== prevType &&
-            isUnreadRelevantStatus(newType)
-          ) {
-            if (!prev.unreadSessionIds.includes(props.sessionID)) {
-              unreadUpdate = [...prev.unreadSessionIds, props.sessionID];
-              saveUnreadSessionIds(unreadUpdate);
-            }
-          }
 
           // isSending: only relevant for the currently selected session
           let isSendingUpdate = prev.isSending;
@@ -297,7 +244,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
             ...prev,
             sessionStatus: sessionStatusUpdate,
             isSending: isSendingUpdate,
-            unreadSessionIds: unreadUpdate,
           };
         }
 
@@ -437,32 +383,9 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           const exists = prev.pendingPermissions.some((p) => p.id === props.id);
           if (exists) return prev;
 
-          // [DEBUG] Observe permission.asked events
-          console.log('[HomePilot Status Debug]', {
-            event: 'permission.asked',
-            sessionID: props.sessionID,
-            permissionID: props.id,
-            permission: props.permission,
-            selectedSessionID: prev.selectedSessionID,
-          });
-
-          // Unread: permission requires user action
-          let unreadUpdate = prev.unreadSessionIds;
-          if (
-            readyRef.current &&
-            props.sessionID &&
-            props.sessionID !== prev.selectedSessionID
-          ) {
-            if (!prev.unreadSessionIds.includes(props.sessionID)) {
-              unreadUpdate = [...prev.unreadSessionIds, props.sessionID];
-              saveUnreadSessionIds(unreadUpdate);
-            }
-          }
-
           return {
             ...prev,
             pendingPermissions: [...prev.pendingPermissions, props],
-            unreadSessionIds: unreadUpdate,
           };
         }
 
@@ -472,32 +395,9 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           const exists = prev.pendingQuestions.some((q) => q.id === props.id);
           if (exists) return prev;
 
-          // [DEBUG] Observe question.asked events
-          console.log('[HomePilot Status Debug]', {
-            event: 'question.asked',
-            sessionID: props.sessionID,
-            questionID: props.id,
-            question: props.question,
-            selectedSessionID: prev.selectedSessionID,
-          });
-
-          // Unread: question requires user answer
-          let unreadUpdate = prev.unreadSessionIds;
-          if (
-            readyRef.current &&
-            props.sessionID &&
-            props.sessionID !== prev.selectedSessionID
-          ) {
-            if (!prev.unreadSessionIds.includes(props.sessionID)) {
-              unreadUpdate = [...prev.unreadSessionIds, props.sessionID];
-              saveUnreadSessionIds(unreadUpdate);
-            }
-          }
-
           return {
             ...prev,
             pendingQuestions: [...prev.pendingQuestions, props],
-            unreadSessionIds: unreadUpdate,
           };
         }
 
@@ -541,8 +441,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       const all = await client.getAllSessions();
       const sessions = all.filter((s) => !OpenCodeClient.isSessionArchived(s));
       const archivedSessions = all.filter((s) => OpenCodeClient.isSessionArchived(s));
-      readyRef.current = true;
-      readyTimeRef.current = Date.now();
       setState((prev) => ({
         ...prev,
         sessions,
@@ -550,6 +448,8 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         isLoadingSessions: false,
         isLoadingArchivedSessions: false,
       }));
+      // Rebuild unread state from REST API after sessions are loaded
+      syncSessionStates(sessions);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load sessions';
       setState((prev) => ({
@@ -608,11 +508,10 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     const client = clientRef.current;
     if (!client) return;
     sendingStatusRef.current = null;
-    // Mark session as read (remove from unread)
-    const unreadUpdate = stateRef.current.unreadSessionIds.filter((id) => id !== sessionID);
-    if (unreadUpdate.length !== stateRef.current.unreadSessionIds.length) {
-      saveUnreadSessionIds(unreadUpdate);
-    }
+    // Mark session as checked
+    lastCheckedAtRef.current[sessionID] = Date.now();
+    saveLastCheckedAt(lastCheckedAtRef.current);
+    // Remove from unread list immediately
     setState((prev) => ({
       ...prev,
       selectedSessionID: sessionID,
@@ -621,7 +520,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       sessionStatus: null,
       isLoadingMessages: true,
       error: null,
-      unreadSessionIds: unreadUpdate,
+      unreadSessionIds: prev.unreadSessionIds.filter((id) => id !== sessionID),
     }));
     try {
       const apiMessages = await client.getMessages(sessionID);
@@ -836,12 +735,9 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           sessionStatus: null,
         }));
       }
-      // Remove deleted session from unread
-      const unreadUpdate = stateRef.current.unreadSessionIds.filter((id) => id !== sessionID);
-      if (unreadUpdate.length !== stateRef.current.unreadSessionIds.length) {
-        saveUnreadSessionIds(unreadUpdate);
-        setState((prev) => ({ ...prev, unreadSessionIds: unreadUpdate }));
-      }
+      // Clean up lastCheckedAt entry
+      delete lastCheckedAtRef.current[sessionID];
+      saveLastCheckedAt(lastCheckedAtRef.current);
       await refreshAllSessions();
       return true;
     } catch (e: unknown) {
@@ -850,6 +746,93 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       return false;
     }
   }, [refreshAllSessions]);
+
+  const syncSessionStates = useCallback(async (sessions: OpenCodeSessionInfo[]) => {
+    const client = clientRef.current;
+    if (!client) return;
+
+    const now = Date.now();
+    const lastChecked = lastCheckedAtRef.current;
+    const newUnreadIds: string[] = [];
+    const newProcessingIds: string[] = [];
+
+    // Initialize lastCheckedAt for sessions not yet tracked
+    for (const s of sessions) {
+      if (!(s.id in lastChecked)) {
+        lastChecked[s.id] = now;
+      }
+    }
+
+    // Clean up entries for sessions that no longer exist
+    const sessionIds = new Set(sessions.map((s) => s.id));
+    for (const id of Object.keys(lastChecked)) {
+      if (!sessionIds.has(id)) {
+        delete lastChecked[id];
+      }
+    }
+
+    // Check each session's latest assistant message via REST API
+    for (const s of sessions) {
+      try {
+        const apiMessages = await client.getMessages(s.id);
+        if (apiMessages.length === 0) continue;
+
+        // Find the latest assistant message
+        let latestAssistantTime: number | undefined;
+        let latestFinish: string | undefined;
+        let hasRunningParts = false;
+        for (let i = apiMessages.length - 1; i >= 0; i--) {
+          const msg = apiMessages[i];
+          if (msg.info.role === 'assistant') {
+            latestAssistantTime = msg.info.time?.completed ?? msg.info.time?.created;
+            latestFinish = msg.info.finish;
+            // Check if any parts are still running
+            if (msg.parts) {
+              hasRunningParts = msg.parts.some((p) => p.state?.status === 'running');
+            }
+            break;
+          }
+        }
+
+        if (latestAssistantTime === undefined) continue;
+
+        // Processing if: finish is not "stop" or parts are still running
+        if (latestFinish === 'tool-calls' || latestFinish === undefined || hasRunningParts) {
+          newProcessingIds.push(s.id);
+        }
+
+        // Unread if: latest result was created after user last checked
+        if (latestAssistantTime > (lastChecked[s.id] ?? 0) && latestFinish === 'stop') {
+          newUnreadIds.push(s.id);
+        }
+      } catch {
+        // Skip sessions that fail to load
+      }
+    }
+
+    saveLastCheckedAt(lastChecked);
+
+    setState((prev) => {
+      const sortedUnread = [...newUnreadIds].sort();
+      const prevSortedUnread = [...prev.unreadSessionIds].sort();
+      const sortedProcessing = [...newProcessingIds].sort();
+      const prevSortedProcessing = [...prev.processingSessionIds].sort();
+      
+      const unreadChanged = sortedUnread.length !== prevSortedUnread.length || 
+        sortedUnread.some((id, i) => id !== prevSortedUnread[i]);
+      const processingChanged = sortedProcessing.length !== prevSortedProcessing.length ||
+        sortedProcessing.some((id, i) => id !== prevSortedProcessing[i]);
+      
+      if (!unreadChanged && !processingChanged) {
+        return prev;
+      }
+      return { 
+        ...prev, 
+        unreadSessionIds: unreadChanged ? newUnreadIds : prev.unreadSessionIds,
+        processingSessionIds: processingChanged ? newProcessingIds : prev.processingSessionIds,
+      };
+    });
+  }, []);
 
   const connect = useCallback((gatewayUrl: string, gatewayToken: string) => {
     const client = getClient(gatewayUrl, gatewayToken);
@@ -884,9 +867,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       eventServiceRef.current.disconnect();
     }
     sendingStatusRef.current = null;
-    readyRef.current = false;
-    readyTimeRef.current = 0;
-    prevSessionStatusRef.current.clear();
     setState((prev) => ({
       ...prev,
       connectionStatus: 'disconnected',
@@ -898,6 +878,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       sessionStatus: null,
       pendingPermissions: [],
       pendingQuestions: [],
+      processingSessionIds: [],
     }));
   }, []);
 
@@ -914,6 +895,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     connect,
     disconnect,
     refreshSessions,
+    refreshAllSessions,
     refreshArchivedSessions,
     refreshMessages,
     selectSession,
@@ -925,6 +907,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     archiveSession,
     restoreSession,
     deleteSession,
+    syncSessionStates,
     getClient: () => clientRef.current,
   };
 
