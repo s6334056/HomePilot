@@ -449,7 +449,10 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         isLoadingArchivedSessions: false,
       }));
       // Rebuild unread state from REST API after sessions are loaded
-      syncSessionStates(sessions);
+      // Only sync sessions updated within last 24 hours
+      const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+      const recentSessions = sessions.filter((s) => (s.time?.updated ?? 0) >= twentyFourHoursAgo);
+      syncSessionStates(recentSessions);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load sessions';
       setState((prev) => ({
@@ -853,14 +856,11 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           : status === 'error' ? 'error'
           : 'disconnected',
       }));
-      if (status === 'connected') {
-        refreshAllSessions();
-      }
     });
 
     setState((prev) => ({ ...prev, connectionStatus: 'connecting' }));
     eventService.connect(gatewayUrl, gatewayToken);
-  }, [getClient, processEvent, refreshAllSessions]);
+  }, [getClient, processEvent]);
 
   const disconnect = useCallback(() => {
     if (eventServiceRef.current) {
