@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, Send, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2, WifiOff, Square, X } from 'lucide-react';
+import { Plus, Mic, Send, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2, WifiOff, Square } from 'lucide-react';
 import { OpenCodeSessionInfo, OpenCodeProviderModel, AgentContext } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -91,7 +91,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
   useEffect(() => {
     if (speech.state === 'completed' && speech.result) {
-      setInputValue((prev) => (prev ? prev + ' ' + speech.result : speech.result));
+      const text = speech.result;
+      setInputValue((prev) => (prev ? prev + ' ' + text : text));
       speech.reset();
     }
   }, [speech.state]);

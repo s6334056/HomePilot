@@ -1,4 +1,22 @@
+===============================
+デプロイやるときめも
+cd C:\1\work\github\s6334056\HomePilot\speech-worker
+npx wrangler deploy
+================================
 
+あと今回の件で、今後のHomePilotにとって地味に超重要な教訓もできた。
+ソースコードが正しい
+        ≠
+実際に動いているCloudflare Workerが最新
+なので今後、Worker系を変更したら、
+npx wrangler deploy
+
+そして必要なら
+npx wrangler deployments list
+
+までセットにしておくと安心。
+
+======
 
 Windows PowerShell
 Copyright (C) Microsoft Corporation. All rights reserved.
@@ -470,4 +488,146 @@ PS C:\1\temp>
 
 
 
+
+cd C:\1\work\github\s6334056\HomePilot\speech-worker
+npx wrangler deployments list
+
+
+
+
+
+
+
+
+
+
+OK, analysis complete. Here is the comprehensive report.
+
+---
+
+## 調査結果レポート
+
+### コードパスの完全トレース
+
+```
+ブラウザ fetch()
+  ↓ POST /api/speech/transcribe
+  ↓ Headers: Authorization: Bearer TOKEN, Content-Type: audio/webm;codecs=opus
+  ↓ Body: ArrayBuffer (音声バイナリ)
+  
+index.js:40  createServer(async callback)
+  ↓ line 41: setCorsHeaders(response) → setHeader()でCORS設定
+  ↓ line 101: path === '/api/speech/transcribe' → マッチ
+  ↓ line 102-104: verifyToken → 認証OK
+  ↓ line 105-107: method === 'POST' → OK
+  ↓ line 108: return handleSpeechTranscribe(request, response)
+
+speech.js:37  handleSpeechTranscribe (async)
+  ↓ line 42-46: Content-Type検査 → stripContentTypeParams(";codecs=opus"除去) → audio/webm → OK
+  ↓ line 49-50: readBodyWithLimit(request, 5MB) → 音声バッファ読み込み完了
+  ↓ line 62-67: new URL("https://homepilot-speech-test.s6334056.workers.dev") → OK
+  ↓ line 69: await sendToWorker(workerUrl, contentType, audioBuffer)
+  
+speech.js:80  sendToWorker (HTTPS POST to Worker)
+  ↓ line 82-93: httpsRequest options作成
+  ↓   hostname: homepilot-speech-test.s6334056.workers.dev
+  ↓   port: 443, path: /
+  ↓   headers: Content-Type, Content-Length, Authorization
+  ↓   timeout: 60000ms
+  ↓ line 137-138: req.write(audioBuffer); req.end() → Workerへ送信
+  ↓
+  ↓ Worker応答時:
+  ↓   line 101: status 401 → {error: 'WORKER_AUTH_FAILED', status: 502}
+  ↓   line 106: status !== 200 → {error: 'WORKER_ERROR', status: 502, message: "Worker returned HTTP ${status}."}
+  ↓   line 112-124: JSONパース+text文字列チェック → {data: {text, language}}
+  ↓   line 128: req.on('error') → {error: 'WORKER_UNREACHABLE', status: 502}
+  ↓   line 132: req.on('timeout') → {error: 'WORKER_TIMEOUT', status: 504}
+
+speech.js:69 戻り値受領
+  ↓ line 70-71: workerResponse.error → errorResponse(response, 502, code, message)
+  ↓   → handlers.js:27 errorResponse → handlers.js:14 json()
+  ↓   → response.writeHead(502, { CORS_HEADERS, Content-Type }) ← CORSヘッダーはここにある
+  ↓   → response.end(JSON body)
+
+  ↓ line 74-77: 成功 → json(response, 200, { text, language }) ← CORSヘッダーはここにある
+```
+
+### 実測結果のまとめ (前回のテスト)
+
+| # | テスト | Status | CORS | Body | 出典 |
+|---|--------|--------|------|------|------|
+| A | Direct OPTIONS | 204 | `*` | (empty) | Gateway応答 |
+| B | Direct POST (認証なし) | 401 | `*` | JSON エラー | Gateway応答 |
+| C | **Direct POST (認証+無効音声4B)** | **502** | **`*`** | **`{"error":{"code":"WORKER_ERROR","message":"Worker returned HTTP 500."}}`** | **Gateway応答** |
+| D | Tunnel OPTIONS | 204 | `*` | (empty) | Gateway応答(通り) |
+| E | Tunnel POST (認証なし) | 401 | `*` | JSON エラー | Gateway応答(通り) |
+| F | **Tunnel POST (認証+無効音声4B)** | **502** | **`null`** | **Cloudflare HTML `502: Bad gateway`** | **Cloudflare生成** |
+| G | **Tunnel POST (認証+10KB)** | **502** | **`null`** | **Cloudflare HTML `502: Bad gateway`** | **Cloudflare生成** |
+| H | Worker直接 (認証+無効音声) | 500 | N/A | `WHISPER_ERROR: Failed to decode audio` | Worker応答 |
+
+### 回答
+
+#### 1. ブラウザ → Quick Tunnel → Gateway のリクエストは到達しているか
+**認証チェックまでは到達している** (Eで401が返る)。しかし、認証通過後の `handleSpeechTranscribe` による Worker 呼び出しが完了する前に、**Quick Tunnel が接続を切断している** (F, G)。
+
+#### 2. Gateway → Cloudflare Worker のHTTPSリクエストは到達しているか
+**到達している** (HでWorkerが500を返している)。Workerの認証も通る。問題はWorkerではなく、Gatewayの502応答がQuick TunnelでCloudflare自身のエラーページに置き換えられていること。
+
+#### 3. Workerが返しているHTTPステータス
+- 無効音声: **500** (`WHISPER_ERROR`)
+- 認証失敗: **401**
+- 有効音声: **200** (期待値)
+
+#### 4. CORSエラーの原因
+**CORS設定に問題はない。** CORSエラーは「二次的症状」である:
+- Gatewayの502応答にはCORSヘッダーが付与されている (Cで確認)
+- しかしQuick Tunnel経由でCloudflare Edgeが502ページを生成し直すため、CORSヘッダーが消失
+- ブラウザはCORSヘッダーのない502応答を"CORS policy violation"として表示
+
+#### 5. 診断ログを追加すべき箇所
+`speech.js` の `handleSpeechTranscribe` に3箇所:
+
+**① line 69 の直前** (Worker呼び出し前):
+```
+[SPEECH] Calling Worker: url=..., contentType=..., audioSize=...
+```
+
+**② line 69 の直後** (Worker応答受領):
+```
+[SPEECH] Worker responded: error=..., status=...
+```
+
+**③ line 77 の直前** (成功応答前):
+```
+[SPEECH] Success: text=..., language=...
+```
+
+これにより、GatewayがWorkerに到達したか、Workerが何を返したか、Gatewayが応答を書き始めたかが分かる。
+
+#### 6. curlによる3段階テスト (Gateway起動後に実行)
+
+**Stage 1: Worker直接** (Gateway不要)
+```powershell
+curl.exe -s -D - -X POST "https://homepilot-speech-test.s6334056.workers.dev" -H "Content-Type: audio/webm" -H "Authorization: Bearer HomePilotSpeechTest-2026-08-30-1234167190" --data-binary "fakeaudio" --insecure
+```
+
+**Stage 2: Gateway直接** (Tunnel不要)
+```powershell
+# GatewayのコンソールからTOKENを取得して以下に貼る:
+curl.exe -s -D - -X POST "http://127.0.0.1:51887/api/speech/transcribe" -H "Content-Type: audio/webm" -H "Authorization: Bearer [TOKEN]" --data-binary "fakeaudio"
+```
+
+**Stage 3: Quick Tunnel経由**
+```powershell
+# start-homepilot.bat のコンソールからTUNNEL_URLとTOKENを取得:
+curl.exe -s -D - -X POST "https://[TUNNEL_URL]/api/speech/transcribe" -H "Content-Type: audio/webm" -H "Authorization: Bearer [TOKEN]" -H "Origin: http://localhost:5174" --data-binary "fakeaudio" --insecure
+```
+
+### 次のアクション
+
+Stage 2 で502 + CORS `*` + JSONが返ればGateway正常。Stage 3 で502 + CORS `null` + HTMLが返れば、**Quick Tunnelのorigin応答タイムアウトが原因**と確定。その場合の設計判断は:
+
+1. **Worker呼び出しをクライアント直に**: ブラウザがWorker URLを直接呼び、Gateway経由を廃止 (WorkerにCORSヘッダー追加必要)
+2. **Gatewayが先に202 Acceptedを返し、結果を別のエンドポイントでPolling**: 長いWorker応答を待たずにresponseを返す
+3. **Cloudflare Workersで直接Whisper処理**: GatewayのHTTPSコールを回避
 
