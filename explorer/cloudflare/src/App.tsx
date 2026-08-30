@@ -80,6 +80,7 @@ export function App() {
   const isInitializedRef = useRef(false);
   const explorerHistoryRef = useRef<ExplorerHistoryEntry[]>([]);
   const previousScreenRef = useRef<ScreenType>('explorer');
+  const prevIsDesktopRef = useRef<boolean>(() => window.innerWidth >= 1100);
 
   const getRootPath = () => {
     if (isGatewayService(fileService)) {
@@ -294,11 +295,37 @@ export function App() {
   useEffect(() => {
     const handleResize = () => {
       const nowDesktop = window.innerWidth >= 1100;
+      const wasDesktop = prevIsDesktopRef.current;
       setIsDesktop(nowDesktop);
       setExplorerPaneWidth((prev) => {
         const maxExplorer = window.innerWidth - MIN_PANE_WIDTH - DIVIDER_WIDTH;
         return Math.max(MIN_PANE_WIDTH, Math.min(maxExplorer, prev));
       });
+
+      // Wide → Narrow: preserve Left Pane as currentScreen
+      if (wasDesktop && !nowDesktop) {
+        setPaneOrder((order) => {
+          const leftPane = order[0];
+          setCurrentScreen(leftPane === 'explorer' ? 'explorer' : 'agent');
+          return order;
+        });
+      }
+
+      // Narrow → Wide: set Left Pane to the screen user was viewing
+      if (!wasDesktop && nowDesktop) {
+        setCurrentScreen((prevScreen) => {
+          setPaneOrder((order) => {
+            const currentLeft = order[0];
+            // If current screen is already left pane, keep order
+            if (currentLeft === prevScreen) return order;
+            // Otherwise swap so current screen becomes left
+            return [order[1], order[0]];
+          });
+          return prevScreen;
+        });
+      }
+
+      prevIsDesktopRef.current = nowDesktop;
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
