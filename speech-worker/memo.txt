@@ -1,0 +1,473 @@
+
+
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+PS C:\WINDOWS\system32> cd C:\1\temp\
+PS C:\1\temp>
+PS C:\1\temp> node --version
+v24.14.0
+PS C:\1\temp> npm --version
+11.12.0
+PS C:\1\temp> npm create cloudflare@latest HomePilotSpeechTest
+Need to install the following packages:
+create-cloudflare@2.72.3
+Ok to proceed? (y)
+
+> npx
+> create-cloudflare HomePilotSpeechTest
+
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
+👋 Welcome to create-cloudflare v2.72.3!
+🧡 Let's get started.
+📊 Cloudflare collects telemetry about your usage of Create-Cloudflare.
+
+Learn more at: https://github.com/cloudflare/workers-sdk/blob/main/packages/create-cloudflare/telemetry.md
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+╭ Create an application with Cloudflare Step 1 of 3
+│
+├ In which directory do you want to create your application?
+│ dir ./HomePilotSpeechTest
+│
+├ What would you like to start with?
+│ category Hello World example
+│
+├ Which template would you like to use?
+│ type Worker only
+│
+├ Which language do you want to use?
+│ lang TypeScript
+│
+╰  ERROR  Error: Project names must only contain lowercase characters, numbers, and dashes.
+npm error code 1
+npm error path C:\1\temp
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c create-cloudflare HomePilotSpeechTest
+npm error A complete log of this run can be found in: C:\Users\syamc\AppData\Local\npm-cache\_logs\2026-08-30T11_10_30_586Z-debug-0.log
+PS C:\1\temp>
+PS C:\1\temp> npm create cloudflare@latest homepilot-speech-test
+
+> npx
+> create-cloudflare homepilot-speech-test
+
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
+👋 Welcome to create-cloudflare v2.72.3!
+🧡 Let's get started.
+📊 Cloudflare collects telemetry about your usage of Create-Cloudflare.
+
+Learn more at: https://github.com/cloudflare/workers-sdk/blob/main/packages/create-cloudflare/telemetry.md
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+╭ Create an application with Cloudflare Step 1 of 3
+│
+├ In which directory do you want to create your application?
+│ dir ./homepilot-speech-test
+│
+├ What would you like to start with?
+│ category Hello World example
+│
+├ Which template would you like to use?
+│ type Worker only
+│
+├ Which language do you want to use?
+│ lang TypeScript
+│
+├ Copying template files
+│ files copied to project directory
+│
+├ Updating name in `package.json`
+│ updated `package.json`
+│
+├ Installing dependencies
+│ installed via `npm install`
+│
+├ Do you want to add an AGENTS.md file to help AI coding tools understand Cloudflare APIs?
+│ yes agents
+│
+╰ Application created
+
+╭ Configuring your application for Cloudflare Step 2 of 3
+│
+├ Installing wrangler A command line tool for building Cloudflare Workers
+│ installed via `npm install wrangler --save-dev`
+│
+├ Selecting workerd compatibility date
+│ compatibility date 2026-08-25
+│
+├ Generating types for your application
+│ generated to `./worker-configuration.d.ts` via `npm run cf-typegen`
+│
+├ Installing @types/node
+│ installed via npm
+│
+├ Do you want to use git for version control?
+│ yes git
+│
+├ Must configure `user.name` and user.email` to use git. Continuing without git.
+│
+╰ Application configured
+
+╭ Deploy with Cloudflare Step 3 of 3
+│
+├ Do you want to deploy your application?
+│ no deploy via `npm run deploy`
+│
+╰ Done
+
+────────────────────────────────────────────────────────────
+🎉  SUCCESS  Application created successfully!
+
+💻 Continue Developing
+Change directories: cd homepilot-speech-test
+Deploy: npm run deploy
+
+📖 Explore Documentation
+https://developers.cloudflare.com/workers
+
+🐛 Report an Issue
+https://github.com/cloudflare/workers-sdk/issues/new/choose
+
+💬 Join our Community
+https://discord.cloudflare.com
+────────────────────────────────────────────────────────────
+
+
+PS C:\1\temp>
+PS C:\1\temp>
+PS C:\1\temp>
+PS C:\1\temp>
+PS C:\1\temp> dir
+
+
+    ディレクトリ: C:\1\temp
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----        2026/08/30     20:18                homepilot-speech-test
+d-----        2026/08/27      0:12                projectTest1
+d-----        2026/08/27      0:15                projectTest2
+-a----        2026/08/23     10:47       54893480 cloudflared.exe
+-a----        2026/08/24     23:38          61734 mimo-session-ses_fd0ca75b4ffeANu1w2NMT6rdbB.txt
+-a----        2026/08/24     21:55         478747 opencode-api.json
+-a----        2026/08/25     22:00             15 permission-test.txt
+-a----        2025/10/23     19:22           1140 Personal Vault.lnk
+-a----        2025/09/21     12:29           1775 SendTo - ショートカット.lnk
+-a----        2025/09/21     12:55           1329 share - ショートカット.lnk
+-a----        2025/09/21     12:30           2220 スタートアップ - ショートカット.lnk
+-a----        2025/09/21     12:39            315 タイトルなし.txt
+-a----        2025/09/21     12:22            132 マークダウンお試し.md
+-a----        2025/12/13     22:44          24389 新規 テキスト ドキュメント.txt
+
+
+PS C:\1\temp>
+PS C:\1\temp>
+PS C:\1\temp> cd homepilot-speech-test
+PS C:\1\temp\homepilot-speech-test>
+PS C:\1\temp\homepilot-speech-test> npm run cf-typegen
+
+> homepilot-speech-test@0.0.0 cf-typegen
+> wrangler types
+
+
+ ⛅️ wrangler 4.127.1
+────────────────────
+Generating project types...
+
+interface __BaseEnv_Env {
+        AI: Ai;
+}
+declare namespace Cloudflare {
+        interface GlobalProps {
+                mainModule: typeof import("./src/index");
+        }
+        interface Env extends __BaseEnv_Env {}
+}
+interface Env extends __BaseEnv_Env {}
+
+Generating runtime types...
+
+Runtime types generated.
+
+────────────────────────────────────────────────────────────
+✨ Types written to worker-configuration.d.ts
+
+📖 Read about runtime types
+https://developers.cloudflare.com/workers/languages/typescript/#generate-types
+📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
+
+PS C:\1\temp\homepilot-speech-test>
+PS C:\1\temp\homepilot-speech-test>
+
+
+PS C:\1\temp\homepilot-speech-test> npm run dev
+
+> homepilot-speech-test@0.0.0 dev
+> wrangler dev
+
+
+ ⛅️ wrangler 4.127.1
+────────────────────
+
+Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
+Your Worker has access to the following bindings:
+Binding        Resource      Mode
+env.AI         AI            remote
+
+╭───────────────────────────╮
+│  [b] open a browser       │
+│  [d] open devtools        │
+│  [e] open local explorer  │
+│  [t] start tunnel         │
+│  [c] clear console        │
+│  [x] to exit              │
+╰───────────────────────────╯
+⎔ Establishing remote connection...
+Attempting to login via OAuth...
+Opening a link in your default browser: https://dash.cloudflare.com/oauth2/auth?response_type=code&client_id=54d11594-84e4-41aa-b438-e81b8fa78ee7&redirect_uri=http%3A%2F%2Flocalhost%3A8976%2Foauth%2Fcallback&scope=account%3Aread%20user%3Aread%20workers%3Awrite%20workers_kv%3Awrite%20workers_routes%3Awrite%20workers_scripts%3Awrite%20workers_tail%3Aread%20d1%3Awrite%20pages%3Awrite%20zone%3Aread%20ssl_c
+
+ブラウザでcloudflareのアカウントログインと承認
+
+Successfully logged in.
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+⎔ Starting local server...
+[wrangler:info] Ready on http://127.0.0.1:8787
+[wrangler:info] GET / 200 OK (35ms)
+[wrangler:info] GET /favicon.ico 200 OK (10ms)
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+⎔ Reloading local server...
+⎔ Local server updated and ready
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+⎔ Reloading local server...
+⎔ Local server updated and ready
+▲ [WARNING] AI bindings always access remote resources, and so may incur usage charges even in local dev. To suppress this warning, set `remote: true` for the binding definition in your configuration file.
+
+
+⎔ Reloading local server...
+⎔ Local server updated and ready
+[wrangler:info] POST / 200 OK (2547ms)
+
+
+
+
+
+
+別のターミナルで、、、
+
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+PS C:\WINDOWS\system32> cd C:\1\temp\
+PS C:\1\temp>
+PS C:\1\temp> curl.exe -X POST `
+>>   -H "Content-Type: audio/mp4" `
+>>   --data-binary "@C:\1\temp\test.m4a" `
+>>   http://127.0.0.1:8787/
+{"transcription_info":{"language":"ja","language_probability":0.9990234375,"duration":7.9786875,"duration_after_vad":7.9786875},"text":"こんにちは。これはホームパイロットのテストのための音声です。終了です。","word_count":1,"segments":[{"start":0.8000000000000005,"end":7.16,"text":"こんにちは。これはホームパイロットのテストのための音声です。終了です。","temperature":0,"avg_logprob":-0.14385516540362284,"compression_ratio":1.1170212765957446,"no_speech_prob":0,"words":[{"word":"こんにちは。","start":0.8000000000000005,"end":1.32},{"word":"これは","start":1.82,"end":2.2},{"word":"ホ","start":2.2,"end":2.62},{"word":"ーム","start":2.62,"end":2.88},{"word":"パ","start":2.88,"end":3.12},{"word":"イ","start":3.12,"end":3.22},{"word":"ロ","start":3.22,"end":3.34},{"word":"ット","start":3.34,"end":3.58},{"word":"の","start":3.58,"end":3.76},{"word":"テ","start":3.76,"end":3.98},{"word":"スト","start":3.98,"end":4.24},{"word":"の","start":4.24,"end":4.44},{"word":"ため","start":4.44,"end":4.7},{"word":"の","start":4.7,"end":4.92},{"word":"音","start":4.92,"end":5.28},{"word":"声","start":5.28,"end":5.6},{"word":"です。","start":5.6,"end":5.94},{"word":"終","start":6.18,"end":6.4},{"word":"了","start":6.4,"end":6.76},{"word":"です。","start":6.76,"end":7.16}],"word_count":1}],"vtt":"WEBVTT\n\n00:00.800 --> 00:01.320\nこんにちは。\n\n00:01.820 --> 00:02.200\nこれは\n\n00:02.200 --> 00:02.620\nホ\n\n00:02.620 --> 00:02.880\nーム\n\n00:02.880 --> 00:03.120\nパ\n\n00:03.120 --> 00:03.220\nイ\n\n00:03.220 --> 00:03.340\nロ\n\n00:03.340 --> 00:03.580\nット\n\n00:03.580 --> 00:03.760\nの\n\n00:03.760 --> 00:03.980\nテ\n\n00:03.980 --> 00:04.240\nスト\n\n00:04.240 --> 00:04.440\nの\n\n00:04.440 --> 00:04.700\nため\n\n00:04.700 --> 00:04.920\nの\n\n00:04.920 --> 00:05.280\n音\n\n00:05.280 --> 00:05.600\n声\n\n00:05.600 --> 00:05.940\nです。\n\n00:06.180 --> 00:06.400\n終\n\n00:06.400 --> 00:06.760\n了\n\n00:06.760 --> 00:07.160\nです。\n\n","usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"neurons":6.200801578182225}}
+PS C:\1\temp>
+
+
+
+
+curl.exe -X POST `
+  -H "Content-Type: audio/mp4" `
+  --data-binary "@C:\1\temp\test2.m4a" `
+  http://127.0.0.1:8787/
+
+
+
+PS C:\1\temp> curl.exe -X POST `
+>>   -H "Content-Type: audio/mp4" `
+>>   --data-binary "@C:\1\temp\test2.m4a" `
+>>   http://127.0.0.1:8787/
+{"transcription_info":{"language":"ja","language_probability":0.99951171875,"duration":31.7866875,"duration_after_vad":31.7866875},"text":"こんにちは。これはホームパイロットのテストの音声のちょっと長い時間用のテストです。 あと20秒ほどあります。 今、ホームパイロットの音声入力テストの音声をとっています。 結構長い時間喋っています。残り5秒くらいです。 えっと、もう話すことがありません。 終了です。","word_count":6,"segments":[{"start":0.9999999999999987,"end":9.14,"text":"こんにちは。これはホームパイロットのテストの音声のちょっと長い時間用のテストです。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"こんにちは。","start":0.9999999999999987,"end":1.6},{"word":"これは","start":2.08,"end":2.4},{"word":"ホ","start":2.4,"end":2.76},{"word":"ーム","start":2.76,"end":3},{"word":"パ","start":3,"end":3.34},{"word":"イ","start":3.34,"end":3.56},{"word":"ロ","start":3.56,"end":3.68},{"word":"ット","start":3.68,"end":3.9},{"word":"の","start":3.9,"end":4.28},{"word":"テ","start":4.28,"end":4.38},{"word":"スト","start":4.38,"end":4.62},{"word":"の","start":4.62,"end":4.86},{"word":"音","start":4.86,"end":5.16},{"word":"声","start":5.16,"end":5.4},{"word":"の","start":5.4,"end":5.62},{"word":"ちょっと","start":5.62,"end":6},{"word":"長","start":6,"end":6.42},{"word":"い","start":6.42,"end":6.66},{"word":"時間","start":6.66,"end":7.1},{"word":"用","start":7.1,"end":7.7},{"word":"の","start":7.7,"end":8.04},{"word":"テ","start":8.04,"end":8.48},{"word":"スト","start":8.48,"end":8.74},{"word":"です。","start":8.74,"end":9.14}],"word_count":1},{"start":10,"end":12.78,"text":"あと20秒ほどあります。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"あと","start":10,"end":10.48},{"word":"20","start":10.48,"end":11.18},{"word":"秒","start":11.18,"end":11.62},{"word":"ほど","start":11.62,"end":12.08},{"word":"あります。","start":12.08,"end":12.78}],"word_count":1},{"start":14.02,"end":20.9,"text":"今、ホームパイロットの音声入力テストの音声をとっています。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"今、","start":14.02,"end":14.36},{"word":"ホ","start":14.68,"end":14.8},{"word":"ーム","start":14.8,"end":15.04},{"word":"パ","start":15.04,"end":15.36},{"word":"イ","start":15.36,"end":15.52},{"word":"ロ","start":15.52,"end":15.66},{"word":"ット","start":15.66,"end":15.9},{"word":"の","start":15.9,"end":16.28},{"word":"音","start":16.28,"end":17.06},{"word":"声","start":17.06,"end":17.44},{"word":"入","start":17.44,"end":17.74},{"word":"力","start":17.74,"end":18.14},{"word":"テ","start":18.14,"end":18.42},{"word":"スト","start":18.42,"end":18.64},{"word":"の","start":18.64,"end":18.9},{"word":"音","start":18.9,"end":19.32},{"word":"声","start":19.32,"end":19.68},{"word":"を","start":19.68,"end":19.98},{"word":"と","start":19.98,"end":20.24},{"word":"って","start":20.24,"end":20.52},{"word":"います。","start":20.52,"end":20.9}],"word_count":1},{"start":21.38,"end":26.2,"text":"結構長い時間喋っています。残り5秒くらいです。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"結","start":21.38,"end":21.68},{"word":"構","start":21.68,"end":21.96},{"word":"長","start":21.96,"end":22.34},{"word":"い","start":22.34,"end":22.58},{"word":"時間","start":22.58,"end":23.06},{"word":"喋","start":23.06,"end":23.36},{"word":"って","start":23.36,"end":23.72},{"word":"います。","start":23.72,"end":24},{"word":"残","start":24.34,"end":24.7},{"word":"り","start":24.7,"end":24.86},{"word":"5","start":24.86,"end":25.06},{"word":"秒","start":25.06,"end":25.34},{"word":"く","start":25.34,"end":25.54},{"word":"らい","start":25.54,"end":25.8},{"word":"です。","start":25.8,"end":26.2}],"word_count":1},{"start":26.86,"end":29.76,"text":"えっと、もう話すことがありません。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"え","start":26.86,"end":27.1},{"word":"っと、","start":27.1,"end":27.38},{"word":"もう","start":27.92,"end":28.12},{"word":"話","start":28.12,"end":28.48},{"word":"す","start":28.48,"end":28.74},{"word":"こと","start":28.74,"end":28.92},{"word":"が","start":28.92,"end":29.14},{"word":"あり","start":29.14,"end":29.38},{"word":"ません。","start":29.38,"end":29.76}],"word_count":1},{"start":30,"end":31.04,"text":"終了です。","temperature":0,"avg_logprob":-0.3069196343421936,"compression_ratio":0.625,"no_speech_prob":0,"words":[{"word":"終","start":30,"end":30.26},{"word":"了","start":30.26,"end":30.68},{"word":"です。","start":30.68,"end":31.04}],"word_count":1}],"vtt":"WEBVTT\n\n00:01.000 --> 00:01.600\nこんにちは。\n\n00:02.080 --> 00:02.400\nこれは\n\n00:02.400 --> 00:02.760\nホ\n\n00:02.760 --> 00:03.000\nーム\n\n00:03.000 --> 00:03.340\nパ\n\n00:03.340 --> 00:03.560\nイ\n\n00:03.560 --> 00:03.680\nロ\n\n00:03.680 --> 00:03.900\nット\n\n00:03.900 --> 00:04.280\nの\n\n00:04.280 --> 00:04.380\nテ\n\n00:04.380 --> 00:04.620\nスト\n\n00:04.620 --> 00:04.860\nの\n\n00:04.860 --> 00:05.160\n音\n\n00:05.160 --> 00:05.400\n声\n\n00:05.400 --> 00:05.620\nの\n\n00:05.620 --> 00:06.000\nちょっと\n\n00:06.000 --> 00:06.420\n長\n\n00:06.420 --> 00:06.660\nい\n\n00:06.660 --> 00:07.100\n時間\n\n00:07.100 --> 00:07.700\n用\n\n00:07.700 --> 00:08.040\nの\n\n00:08.040 --> 00:08.480\nテ\n\n00:08.480 --> 00:08.740\nスト\n\n00:08.740 --> 00:09.140\nです。\n\n00:10.000 --> 00:10.480\nあと\n\n00:10.480 --> 00:11.180\n20\n\n00:11.180 --> 00:11.620\n秒\n\n00:11.620 --> 00:12.080\nほど\n\n00:12.080 --> 00:12.780\nあります。\n\n00:14.020 --> 00:14.360\n今、\n\n00:14.680 --> 00:14.800\nホ\n\n00:14.800 --> 00:15.040\nーム\n\n00:15.040 --> 00:15.360\nパ\n\n00:15.360 --> 00:15.520\nイ\n\n00:15.520 --> 00:15.660\nロ\n\n00:15.660 --> 00:15.900\nット\n\n00:15.900 --> 00:16.280\nの\n\n00:16.280 --> 00:17.060\n音\n\n00:17.060 --> 00:17.440\n声\n\n00:17.440 --> 00:17.740\n入\n\n00:17.740 --> 00:18.140\n力\n\n00:18.140 --> 00:18.420\nテ\n\n00:18.420 --> 00:18.640\nスト\n\n00:18.640 --> 00:18.900\nの\n\n00:18.900 --> 00:19.320\n音\n\n00:19.320 --> 00:19.680\n声\n\n00:19.680 --> 00:19.980\nを\n\n00:19.980 --> 00:20.240\nと\n\n00:20.240 --> 00:20.520\nって\n\n00:20.520 --> 00:20.900\nいます。\n\n00:21.380 --> 00:21.680\n結\n\n00:21.680 --> 00:21.960\n構\n\n00:21.960 --> 00:22.340\n長\n\n00:22.340 --> 00:22.580\nい\n\n00:22.580 --> 00:23.060\n時間\n\n00:23.060 --> 00:23.360\n喋\n\n00:23.360 --> 00:23.720\nって\n\n00:23.720 --> 00:24.000\nいます。\n\n00:24.340 --> 00:24.700\n残\n\n00:24.700 --> 00:24.860\nり\n\n00:24.860 --> 00:25.060\n5\n\n00:25.060 --> 00:25.340\n秒\n\n00:25.340 --> 00:25.540\nく\n\n00:25.540 --> 00:25.800\nらい\n\n00:25.800 --> 00:26.200\nです。\n\n00:26.860 --> 00:27.100\nえ\n\n00:27.100 --> 00:27.380\nっと、\n\n00:27.920 --> 00:28.120\nもう\n\n00:28.120 --> 00:28.480\n話\n\n00:28.480 --> 00:28.740\nす\n\n00:28.740 --> 00:28.920\nこと\n\n00:28.920 --> 00:29.140\nが\n\n00:29.140 --> 00:29.380\nあり\n\n00:29.380 --> 00:29.760\nません。\n\n00:30.000 --> 00:30.260\n終\n\n00:30.260 --> 00:30.680\n了\n\n00:30.680 --> 00:31.040\nです。\n\n","usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"neurons":24.703679899129423}}
+PS C:\1\temp>
+大成功っぽいんだけど、どれくらいこれ使ってるんだ？
+最後らへんに24.703...とかあるけど、無料枠の何パーセントくらいになるんだろ？
+
+
+
+
+うん、これも大成功！ 🎉
+しかも今回は31.8秒でかなりちゃんと喋ってるから、実用寄りのデータが取れた。
+そして気になってる 24.703679899129423 は、まさに今回の Workers AI の Neurons消費量だね。
+今回の実測
+音声	長さ	Neurons
+test.m4a	約8.0秒	6.20
+test2.m4a	約31.8秒	24.70
+
+
+ざっくり、
+1秒あたり約0.78 Neurons
+くらい。
+なので、仮に同じペースなら：
+- 30秒 → 約23～25 Neurons
+- 1分 → 約46～47 Neurons
+- 5分 → 約234 Neurons
+- 10分 → 約467 Neurons
+くらい。
+じゃあ無料枠の何％？
+ここはちょっと注意。
+現在のWorkers AIのFreeプランには、1日10,000 Neuronsという無料利用枠がある。
+今回の24.7 Neuronsをそれに対して計算すると、
+24.7 ÷ 10,000 × 100 ≒ 0.247%
+つまり、
+🎙️ 約0.25%
+
+しか使ってない。
+8秒の方も約0.062%。
+2回合わせても、
+約30.9 Neurons → 約0.31%
+程度。
+かなり少ないｗｗｗ
+そして面白いのが「何回喋れるか」
+今回の31.8秒テストを1回の音声入力と考えると、
+10,000 ÷ 24.7 ≒ 405回
+なので、同程度の30秒音声なら1日400回前後が理論上の無料枠。
+もちろん実際には音声の長さ・モデル処理量などで変動するので、「400回使える」と保証する数字ではないけど、規模感としてはかなり余裕がある。
+しかもHomePilotのG2音声入力って、
+長押し → 喋る → タップ → 文字起こし → 確認 → send
+
+という想定だから、毎回30秒も喋るとは限らない。
+10～20秒程度の入力なら、さらに余裕。
+そして今回の結果、かなり重要
+俺が今回特に注目したいのはNeuronsよりこっち。
+8秒
+duration: 7.98 sec
+neurons: 6.20
+32秒
+duration: 31.79 sec
+neurons: 24.70
+かなり素直に音声長に比例してる。
+つまり現段階では、
+「長い音声を投げたら、とんでもない量のNeuronsを食う」
+みたいな挙動は見えてない。
+なので現在の4-0-A状況
+Cloudflare Worker
+        ↓
+Workers AI
+        ↓
+Whisper large-v3-turbo
+        ↓
+日本語音声
+        ↓
+8秒   → 成功 🟢
+32秒  → 成功 🟢
+そして無料枠消費も、
+今回2回合計
+約30.9 Neurons
+
+無料枠 10,000 Neurons/日
+        ↓
+約0.31%
+ほぼ誤差ｗｗｗ
+ただし、ここで一つ大事。
+今の30.9 Neuronsは「今回のテストで実際に消費した量」なので、無料枠の残量そのものではない。
+Cloudflare側で他のWorkers AI利用があれば、それも同じ無料枠に入る可能性がある。
+今回のSpeech Testだけなら、少なくともこの2回で無料枠を食い潰すような心配は全然ない。
+というわけで、俺の評価としては、
+「Workers AIを無料限定で使えるか？」→ 現時点ではかなり有望。
+そして、
+「日本語音声を実用的な長さで文字起こしできるか？」→ これもOK。
+なので次は予定通り、いよいよ一番怖いところ、
+Cloudflare Tunnelを挟んだら音声POSTはどうなる？？？
+
+だね。
+ここを試す価値がめちゃくちゃ高い。
+Phase 3でSSEに刺さった「あのトンネル」を、今度は音声の一本道POSTで殴りにいくわけだｗｗｗ
+
+
+
+
+
+
+
+PS C:\1\app\cloudflared>
+PS C:\1\app\cloudflared> .\cloudflared-windows-amd64.exe tunnel --url http://127.0.0.1:8787
+2026-08-30T12:02:49Z INF Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out. However, be aware that these account-less Tunnels have no uptime guarantee, are subject to the Cloudflare Online Services Terms of Use (https://www.cloudflare.com/website-terms/), and Cloudflare reserves the right to investigate your use of Tunnels for violations of such terms. If you intend to use Tunnels in production you should use a pre-created named tunnel by following: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps
+2026-08-30T12:02:49Z INF Requesting new quick Tunnel on trycloudflare.com...
+2026-08-30T12:02:54Z INF +--------------------------------------------------------------------------------------------+
+2026-08-30T12:02:54Z INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |
+2026-08-30T12:02:54Z INF |  https://prefix-attend-southeast-unless.trycloudflare.com                                  |
+2026-08-30T12:02:54Z INF +--------------------------------------------------------------------------------------------+
+2026-08-30T12:02:54Z INF Cannot determine default configuration path. No file [config.yml config.yaml] in [~/.cloudflared ~/.cloudflare-warp ~/cloudflare-warp]
+2026-08-30T12:02:54Z INF Version 2026.8.2 (Checksum c29eee2b121f5436a642eed69fd9767da7e7b8c510fa50aaa130337f931357b5)
+2026-08-30T12:02:54Z INF GOOS: windows, GOVersion: go1.26.4, GoArch: amd64
+2026-08-30T12:02:54Z INF Settings: map[ha-connections:1 protocol:quic url:http://127.0.0.1:8787]
+2026-08-30T12:02:54Z INF cloudflared will not automatically update on Windows systems.
+2026-08-30T12:02:54Z INF Generated Connector ID: 8637b252-6062-4927-bced-27fb2bdf0ee8
+2026-08-30T12:02:54Z INF Initial protocol quic
+2026-08-30T12:02:54Z INF ICMP proxy will use 192.168.0.2 as source for IPv4
+2026-08-30T12:02:54Z INF ICMP proxy will use 2402:6b00:fc1b:b500:4a4a:e904:5805:fee9 in zone Wi-Fi 2 as source for IPv6
+2026-08-30T12:02:54Z INF cloudflared does not support loading the system root certificate pool on Windows. Please use --origin-ca-pool <PATH> to specify the path to the certificate pool
+2026-08-30T12:02:54Z INF ICMP proxy will use 192.168.0.2 as source for IPv4
+2026-08-30T12:02:54Z INF Tunnel connection curve preferences: [X25519MLKEM768 CurveID(65074) CurveP256] connIndex=0 event=0 ip=2606:4700:a0::4
+2026-08-30T12:02:54Z INF ICMP proxy will use 2402:6b00:fc1b:b500:4a4a:e904:5805:fee9 in zone Wi-Fi 2 as source for IPv6
+2026-08-30T12:02:54Z INF Starting metrics server on 127.0.0.1:20241/metrics
+2026-08-30T12:02:54Z INF +-------------------------------------------------------------------------------------+
+2026-08-30T12:02:54Z INF |                               CONNECTIVITY PRE-CHECKS                               |
+2026-08-30T12:02:54Z INF +-------------------------------------------------------------------------------------+
+2026-08-30T12:02:54Z INF |  COMPONENT         TARGET                     STATUS  DETAILS                       |
+2026-08-30T12:02:54Z INF |  DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully     |
+2026-08-30T12:02:54Z INF |  DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully     |
+2026-08-30T12:02:54Z INF |  UDP Connectivity  region1.v2.argotunnel.com  PASS    QUIC connection successful    |
+2026-08-30T12:02:54Z INF |  UDP Connectivity  region2.v2.argotunnel.com  PASS    QUIC connection successful    |
+2026-08-30T12:02:54Z INF |  TCP Connectivity  region1.v2.argotunnel.com  PASS    HTTP/2 connection successful  |
+2026-08-30T12:02:54Z INF |  TCP Connectivity  region2.v2.argotunnel.com  PASS    HTTP/2 connection successful  |
+2026-08-30T12:02:54Z INF |  Cloudflare API    api.cloudflare.com:443     PASS    API is reachable              |
+2026-08-30T12:02:54Z INF |                                                                                     |
+2026-08-30T12:02:54Z INF |  SUMMARY: Environment is healthy. cloudflared will use 'quic' as primary protocol.  |
+2026-08-30T12:02:54Z INF +-------------------------------------------------------------------------------------+
+2026-08-30T12:02:54Z INF precheck component="DNS Resolution" details="DNS Resolved successfully" run_id=a595c51a-3cdc-42bf-a3b2-ba60d8f8dab5 status=pass target=region1.v2.argotunnel.com
+2026-08-30T12:02:54Z INF precheck component="DNS Resolution" details="DNS Resolved successfully" run_id=a595c51a-3cdc-42bf-a3b2-ba60d8f8dab5 status=pass target=region2.v2.argotunnel.com
+2026-08-30T12:02:54Z INF precheck component="UDP Connectivity" details="QUIC connection successful" run_id=a595c51a-3cdc-42bf-a3b2-ba60d8f8dab5 status=pass target=region1.v2.argotunnel.com
+2026-08-30T12:02:54Z INF precheck component="UDP Connectivity" details="QUIC connection successful" run_id=a595c51a-3cdc-42bf-a3b2-ba60d8f8dab5 status=pass target=region2.v2.argotunnel.com
+2026-08-30T12:02:54Z INF precheck component="TCP Connectivity" details="HTTP/2 connection successful" run_id=a595c51a-3cdc-42bf-a3b2-ba60d8f8dab5 status=pass target=region1.v2.argotunnel.com
+2026-08-30T12:02:54Z INF precheck component="TCP Connectivity" details="HTTP/2 connection successful" run_id=a595c51a-3cdc-42bf-a3b2-ba60d8f8dab5 status=pass target=region2.v2.argotunnel.com
+2026-08-30T12:02:54Z INF precheck component="Cloudflare API" details="API is reachable" run_id=a595c51a-3cdc-42bf-a3b2-ba60d8f8dab5 status=pass target=api.cloudflare.com:443
+2026-08-30T12:02:54Z INF precheck complete hard_fail=false run_id=a595c51a-3cdc-42bf-a3b2-ba60d8f8dab5 suggested_protocol=quic
+2026-08-30T12:02:54Z INF Registered tunnel connection connIndex=0 connection=ef42a365-b5cc-46e4-8640-e2855f327072 event=0 ip=2606:4700:a0::4 location=kix03 protocol=quic
+
+
+
+
+
+
+curl.exe -X POST `
+  -H "Content-Type: audio/mp4" `
+  --data-binary "@C:\1\temp\test2.m4a" `
+  https://prefix-attend-southeast-unless.trycloudflare.com/
+
+
+
+
+
+PS C:\1\temp> curl.exe -X POST `
+>>   -H "Content-Type: audio/mp4" `
+>>   --data-binary "@C:\1\temp\test2.m4a" `
+>>   https://prefix-attend-southeast-unless.trycloudflare.com/
+{"transcription_info":{"language":"ja","language_probability":0.99951171875,"duration":31.7866875,"duration_after_vad":31.7866875},"text":"こんにちは。これはホームパイロットのテストの音声のちょっと長い時間用のテストです。 あと20秒ほどあります。 今、ホームパイロットの音声入力テストの音声をとっています。 結構長い時間喋っています。残り5秒くらいです。 えっと、もう話すことがありません。 終了です。","word_count":6,"segments":[{"start":0.9999999999999987,"end":9.14,"text":"こんにちは。これはホームパイロットのテストの音声のちょっと長い時間用のテストです。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"こんにちは。","start":0.9999999999999987,"end":1.6},{"word":"これは","start":2.08,"end":2.4},{"word":"ホ","start":2.4,"end":2.76},{"word":"ーム","start":2.76,"end":3},{"word":"パ","start":3,"end":3.34},{"word":"イ","start":3.34,"end":3.56},{"word":"ロ","start":3.56,"end":3.68},{"word":"ット","start":3.68,"end":3.9},{"word":"の","start":3.9,"end":4.28},{"word":"テ","start":4.28,"end":4.38},{"word":"スト","start":4.38,"end":4.62},{"word":"の","start":4.62,"end":4.86},{"word":"音","start":4.86,"end":5.16},{"word":"声","start":5.16,"end":5.4},{"word":"の","start":5.4,"end":5.62},{"word":"ちょっと","start":5.62,"end":6},{"word":"長","start":6,"end":6.42},{"word":"い","start":6.42,"end":6.66},{"word":"時間","start":6.66,"end":7.1},{"word":"用","start":7.1,"end":7.7},{"word":"の","start":7.7,"end":8.04},{"word":"テ","start":8.04,"end":8.48},{"word":"スト","start":8.48,"end":8.74},{"word":"です。","start":8.74,"end":9.14}],"word_count":1},{"start":10,"end":12.78,"text":"あと20秒ほどあります。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"あと","start":10,"end":10.48},{"word":"20","start":10.48,"end":11.18},{"word":"秒","start":11.18,"end":11.62},{"word":"ほど","start":11.62,"end":12.08},{"word":"あります。","start":12.08,"end":12.78}],"word_count":1},{"start":14.02,"end":20.9,"text":"今、ホームパイロットの音声入力テストの音声をとっています。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"今、","start":14.02,"end":14.36},{"word":"ホ","start":14.68,"end":14.8},{"word":"ーム","start":14.8,"end":15.04},{"word":"パ","start":15.04,"end":15.36},{"word":"イ","start":15.36,"end":15.52},{"word":"ロ","start":15.52,"end":15.66},{"word":"ット","start":15.66,"end":15.9},{"word":"の","start":15.9,"end":16.28},{"word":"音","start":16.28,"end":17.06},{"word":"声","start":17.06,"end":17.44},{"word":"入","start":17.44,"end":17.74},{"word":"力","start":17.74,"end":18.14},{"word":"テ","start":18.14,"end":18.42},{"word":"スト","start":18.42,"end":18.64},{"word":"の","start":18.64,"end":18.9},{"word":"音","start":18.9,"end":19.32},{"word":"声","start":19.32,"end":19.68},{"word":"を","start":19.68,"end":19.98},{"word":"と","start":19.98,"end":20.24},{"word":"って","start":20.24,"end":20.52},{"word":"います。","start":20.52,"end":20.9}],"word_count":1},{"start":21.38,"end":26.2,"text":"結構長い時間喋っています。残り5秒くらいです。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"結","start":21.38,"end":21.68},{"word":"構","start":21.68,"end":21.96},{"word":"長","start":21.96,"end":22.34},{"word":"い","start":22.34,"end":22.58},{"word":"時間","start":22.58,"end":23.06},{"word":"喋","start":23.06,"end":23.36},{"word":"って","start":23.36,"end":23.72},{"word":"います。","start":23.72,"end":24},{"word":"残","start":24.34,"end":24.7},{"word":"り","start":24.7,"end":24.86},{"word":"5","start":24.86,"end":25.06},{"word":"秒","start":25.06,"end":25.34},{"word":"く","start":25.34,"end":25.54},{"word":"らい","start":25.54,"end":25.8},{"word":"です。","start":25.8,"end":26.2}],"word_count":1},{"start":26.86,"end":29.76,"text":"えっと、もう話すことがありません。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"え","start":26.86,"end":27.1},{"word":"っと、","start":27.1,"end":27.38},{"word":"もう","start":27.92,"end":28.12},{"word":"話","start":28.12,"end":28.48},{"word":"す","start":28.48,"end":28.74},{"word":"こと","start":28.74,"end":28.92},{"word":"が","start":28.92,"end":29.14},{"word":"あり","start":29.14,"end":29.38},{"word":"ません。","start":29.38,"end":29.76}],"word_count":1},{"start":30,"end":31.04,"text":"終了です。","temperature":0,"avg_logprob":-0.3069196343421936,"compression_ratio":0.625,"no_speech_prob":0,"words":[{"word":"終","start":30,"end":30.26},{"word":"了","start":30.26,"end":30.68},{"word":"です。","start":30.68,"end":31.04}],"word_count":1}],"vtt":"WEBVTT\n\n00:01.000 --> 00:01.600\nこんにちは。\n\n00:02.080 --> 00:02.400\nこれは\n\n00:02.400 --> 00:02.760\nホ\n\n00:02.760 --> 00:03.000\nーム\n\n00:03.000 --> 00:03.340\nパ\n\n00:03.340 --> 00:03.560\nイ\n\n00:03.560 --> 00:03.680\nロ\n\n00:03.680 --> 00:03.900\nット\n\n00:03.900 --> 00:04.280\nの\n\n00:04.280 --> 00:04.380\nテ\n\n00:04.380 --> 00:04.620\nスト\n\n00:04.620 --> 00:04.860\nの\n\n00:04.860 --> 00:05.160\n音\n\n00:05.160 --> 00:05.400\n声\n\n00:05.400 --> 00:05.620\nの\n\n00:05.620 --> 00:06.000\nちょっと\n\n00:06.000 --> 00:06.420\n長\n\n00:06.420 --> 00:06.660\nい\n\n00:06.660 --> 00:07.100\n時間\n\n00:07.100 --> 00:07.700\n用\n\n00:07.700 --> 00:08.040\nの\n\n00:08.040 --> 00:08.480\nテ\n\n00:08.480 --> 00:08.740\nスト\n\n00:08.740 --> 00:09.140\nです。\n\n00:10.000 --> 00:10.480\nあと\n\n00:10.480 --> 00:11.180\n20\n\n00:11.180 --> 00:11.620\n秒\n\n00:11.620 --> 00:12.080\nほど\n\n00:12.080 --> 00:12.780\nあります。\n\n00:14.020 --> 00:14.360\n今、\n\n00:14.680 --> 00:14.800\nホ\n\n00:14.800 --> 00:15.040\nーム\n\n00:15.040 --> 00:15.360\nパ\n\n00:15.360 --> 00:15.520\nイ\n\n00:15.520 --> 00:15.660\nロ\n\n00:15.660 --> 00:15.900\nット\n\n00:15.900 --> 00:16.280\nの\n\n00:16.280 --> 00:17.060\n音\n\n00:17.060 --> 00:17.440\n声\n\n00:17.440 --> 00:17.740\n入\n\n00:17.740 --> 00:18.140\n力\n\n00:18.140 --> 00:18.420\nテ\n\n00:18.420 --> 00:18.640\nスト\n\n00:18.640 --> 00:18.900\nの\n\n00:18.900 --> 00:19.320\n音\n\n00:19.320 --> 00:19.680\n声\n\n00:19.680 --> 00:19.980\nを\n\n00:19.980 --> 00:20.240\nと\n\n00:20.240 --> 00:20.520\nって\n\n00:20.520 --> 00:20.900\nいます。\n\n00:21.380 --> 00:21.680\n結\n\n00:21.680 --> 00:21.960\n構\n\n00:21.960 --> 00:22.340\n長\n\n00:22.340 --> 00:22.580\nい\n\n00:22.580 --> 00:23.060\n時間\n\n00:23.060 --> 00:23.360\n喋\n\n00:23.360 --> 00:23.720\nって\n\n00:23.720 --> 00:24.000\nいます。\n\n00:24.340 --> 00:24.700\n残\n\n00:24.700 --> 00:24.860\nり\n\n00:24.860 --> 00:25.060\n5\n\n00:25.060 --> 00:25.340\n秒\n\n00:25.340 --> 00:25.540\nく\n\n00:25.540 --> 00:25.800\nらい\n\n00:25.800 --> 00:26.200\nです。\n\n00:26.860 --> 00:27.100\nえ\n\n00:27.100 --> 00:27.380\nっと、\n\n00:27.920 --> 00:28.120\nもう\n\n00:28.120 --> 00:28.480\n話\n\n00:28.480 --> 00:28.740\nす\n\n00:28.740 --> 00:28.920\nこと\n\n00:28.920 --> 00:29.140\nが\n\n00:29.140 --> 00:29.380\nあり\n\n00:29.380 --> 00:29.760\nません。\n\n00:30.000 --> 00:30.260\n終\n\n00:30.260 --> 00:30.680\n了\n\n00:30.680 --> 00:31.040\nです。\n\n","usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"neurons":24.703679899129423}}
+PS C:\1\temp>
+
+
+
+
+PS C:\1\temp> curl.exe -X POST `
+>>   -H "Content-Type: audio/mp4" `
+>>   --data-binary "@C:\1\temp\test2.m4a" `
+>>   https://xxxxxxxxxxxxxxxxxx.trycloudflare.com/
+{"transcription_info":{"language":"ja","language_probability":0.99951171875,"duration":31.7866875,"duration_after_vad":31.7866875},"text":"こんにちは。これはホームパイロットのテストの音声のちょっと長い時間用のテストです。 あと20秒ほどあります。 今、ホームパイロットの音声入力テストの音声をとっています。 結構長い時間喋っています。残り5秒くらいです。 えっと、もう話すことがありません。 終了です。","word_count":6,"segments":[{"start":0.9999999999999987,"end":9.14,"text":"こんにちは。これはホームパイロットのテストの音声のちょっと長い時間用のテストです。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"こんにちは。","start":0.9999999999999987,"end":1.6},{"word":"これは","start":2.08,"end":2.4},{"word":"ホ","start":2.4,"end":2.76},{"word":"ーム","start":2.76,"end":3},{"word":"パ","start":3,"end":3.34},{"word":"イ","start":3.34,"end":3.56},{"word":"ロ","start":3.56,"end":3.68},{"word":"ット","start":3.68,"end":3.9},{"word":"の","start":3.9,"end":4.28},{"word":"テ","start":4.28,"end":4.38},{"word":"スト","start":4.38,"end":4.62},{"word":"の","start":4.62,"end":4.86},{"word":"音","start":4.86,"end":5.16},{"word":"声","start":5.16,"end":5.4},{"word":"の","start":5.4,"end":5.62},{"word":"ちょっと","start":5.62,"end":6},{"word":"長","start":6,"end":6.42},{"word":"い","start":6.42,"end":6.66},{"word":"時間","start":6.66,"end":7.1},{"word":"用","start":7.1,"end":7.7},{"word":"の","start":7.7,"end":8.04},{"word":"テ","start":8.04,"end":8.48},{"word":"スト","start":8.48,"end":8.74},{"word":"です。","start":8.74,"end":9.14}],"word_count":1},{"start":10,"end":12.78,"text":"あと20秒ほどあります。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"あと","start":10,"end":10.48},{"word":"20","start":10.48,"end":11.18},{"word":"秒","start":11.18,"end":11.62},{"word":"ほど","start":11.62,"end":12.08},{"word":"あります。","start":12.08,"end":12.78}],"word_count":1},{"start":14.02,"end":20.9,"text":"今、ホームパイロットの音声入力テストの音声をとっています。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"今、","start":14.02,"end":14.36},{"word":"ホ","start":14.68,"end":14.8},{"word":"ーム","start":14.8,"end":15.04},{"word":"パ","start":15.04,"end":15.36},{"word":"イ","start":15.36,"end":15.52},{"word":"ロ","start":15.52,"end":15.66},{"word":"ット","start":15.66,"end":15.9},{"word":"の","start":15.9,"end":16.28},{"word":"音","start":16.28,"end":17.06},{"word":"声","start":17.06,"end":17.44},{"word":"入","start":17.44,"end":17.74},{"word":"力","start":17.74,"end":18.14},{"word":"テ","start":18.14,"end":18.42},{"word":"スト","start":18.42,"end":18.64},{"word":"の","start":18.64,"end":18.9},{"word":"音","start":18.9,"end":19.32},{"word":"声","start":19.32,"end":19.68},{"word":"を","start":19.68,"end":19.98},{"word":"と","start":19.98,"end":20.24},{"word":"って","start":20.24,"end":20.52},{"word":"います。","start":20.52,"end":20.9}],"word_count":1},{"start":21.38,"end":26.2,"text":"結構長い時間喋っています。残り5秒くらいです。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"結","start":21.38,"end":21.68},{"word":"構","start":21.68,"end":21.96},{"word":"長","start":21.96,"end":22.34},{"word":"い","start":22.34,"end":22.58},{"word":"時間","start":22.58,"end":23.06},{"word":"喋","start":23.06,"end":23.36},{"word":"って","start":23.36,"end":23.72},{"word":"います。","start":23.72,"end":24},{"word":"残","start":24.34,"end":24.7},{"word":"り","start":24.7,"end":24.86},{"word":"5","start":24.86,"end":25.06},{"word":"秒","start":25.06,"end":25.34},{"word":"く","start":25.34,"end":25.54},{"word":"らい","start":25.54,"end":25.8},{"word":"です。","start":25.8,"end":26.2}],"word_count":1},{"start":26.86,"end":29.76,"text":"えっと、もう話すことがありません。","temperature":0,"avg_logprob":-0.160888668615371,"compression_ratio":1.7733990147783252,"no_speech_prob":0,"words":[{"word":"え","start":26.86,"end":27.1},{"word":"っと、","start":27.1,"end":27.38},{"word":"もう","start":27.92,"end":28.12},{"word":"話","start":28.12,"end":28.48},{"word":"す","start":28.48,"end":28.74},{"word":"こと","start":28.74,"end":28.92},{"word":"が","start":28.92,"end":29.14},{"word":"あり","start":29.14,"end":29.38},{"word":"ません。","start":29.38,"end":29.76}],"word_count":1},{"start":30,"end":31.04,"text":"終了です。","temperature":0,"avg_logprob":-0.3069196343421936,"compression_ratio":0.625,"no_speech_prob":0,"words":[{"word":"終","start":30,"end":30.26},{"word":"了","start":30.26,"end":30.68},{"word":"です。","start":30.68,"end":31.04}],"word_count":1}],"vtt":"WEBVTT\n\n00:01.000 --> 00:01.600\nこんにちは。\n\n00:02.080 --> 00:02.400\nこれは\n\n00:02.400 --> 00:02.760\nホ\n\n00:02.760 --> 00:03.000\nーム\n\n00:03.000 --> 00:03.340\nパ\n\n00:03.340 --> 00:03.560\nイ\n\n00:03.560 --> 00:03.680\nロ\n\n00:03.680 --> 00:03.900\nット\n\n00:03.900 --> 00:04.280\nの\n\n00:04.280 --> 00:04.380\nテ\n\n00:04.380 --> 00:04.620\nスト\n\n00:04.620 --> 00:04.860\nの\n\n00:04.860 --> 00:05.160\n音\n\n00:05.160 --> 00:05.400\n声\n\n00:05.400 --> 00:05.620\nの\n\n00:05.620 --> 00:06.000\nちょっと\n\n00:06.000 --> 00:06.420\n長\n\n00:06.420 --> 00:06.660\nい\n\n00:06.660 --> 00:07.100\n時間\n\n00:07.100 --> 00:07.700\n用\n\n00:07.700 --> 00:08.040\nの\n\n00:08.040 --> 00:08.480\nテ\n\n00:08.480 --> 00:08.740\nスト\n\n00:08.740 --> 00:09.140\nです。\n\n00:10.000 --> 00:10.480\nあと\n\n00:10.480 --> 00:11.180\n20\n\n00:11.180 --> 00:11.620\n秒\n\n00:11.620 --> 00:12.080\nほど\n\n00:12.080 --> 00:12.780\nあります。\n\n00:14.020 --> 00:14.360\n今、\n\n00:14.680 --> 00:14.800\nホ\n\n00:14.800 --> 00:15.040\nーム\n\n00:15.040 --> 00:15.360\nパ\n\n00:15.360 --> 00:15.520\nイ\n\n00:15.520 --> 00:15.660\nロ\n\n00:15.660 --> 00:15.900\nット\n\n00:15.900 --> 00:16.280\nの\n\n00:16.280 --> 00:17.060\n音\n\n00:17.060 --> 00:17.440\n声\n\n00:17.440 --> 00:17.740\n入\n\n00:17.740 --> 00:18.140\n力\n\n00:18.140 --> 00:18.420\nテ\n\n00:18.420 --> 00:18.640\nスト\n\n00:18.640 --> 00:18.900\nの\n\n00:18.900 --> 00:19.320\n音\n\n00:19.320 --> 00:19.680\n声\n\n00:19.680 --> 00:19.980\nを\n\n00:19.980 --> 00:20.240\nと\n\n00:20.240 --> 00:20.520\nって\n\n00:20.520 --> 00:20.900\nいます。\n\n00:21.380 --> 00:21.680\n結\n\n00:21.680 --> 00:21.960\n構\n\n00:21.960 --> 00:22.340\n長\n\n00:22.340 --> 00:22.580\nい\n\n00:22.580 --> 00:23.060\n時間\n\n00:23.060 --> 00:23.360\n喋\n\n00:23.360 --> 00:23.720\nって\n\n00:23.720 --> 00:24.000\nいます。\n\n00:24.340 --> 00:24.700\n残\n\n00:24.700 --> 00:24.860\nり\n\n00:24.860 --> 00:25.060\n5\n\n00:25.060 --> 00:25.340\n秒\n\n00:25.340 --> 00:25.540\nく\n\n00:25.540 --> 00:25.800\nらい\n\n00:25.800 --> 00:26.200\nです。\n\n00:26.860 --> 00:27.100\nえ\n\n00:27.100 --> 00:27.380\nっと、\n\n00:27.920 --> 00:28.120\nもう\n\n00:28.120 --> 00:28.480\n話\n\n00:28.480 --> 00:28.740\nす\n\n00:28.740 --> 00:28.920\nこと\n\n00:28.920 --> 00:29.140\nが\n\n00:29.140 --> 00:29.380\nあり\n\n00:29.380 --> 00:29.760\nません。\n\n00:30.000 --> 00:30.260\n終\n\n00:30.260 --> 00:30.680\n了\n\n00:30.680 --> 00:31.040\nです。\n\n","usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"neurons":24.703679899129423}}
+PS C:\1\temp>
+
+
+
+

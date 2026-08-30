@@ -6,6 +6,7 @@ import {
   handleHealth, handleRoot, handleDirectory, handleFile,
   handleOpenCodeProxy, handleOpenCodeProxyBody, handleOpenCodeSSE,
 } from './handlers.js';
+import { handleSpeechTranscribe } from './speech.js';
 
 const token = generateToken();
 
@@ -94,6 +95,17 @@ const server = createServer(async (request, response) => {
       return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
     }
     return handleFile(request, response, url);
+  }
+
+  // --- Speech ---
+  if (path === '/api/speech/transcribe') {
+    if (!verifyToken(requestToken, token)) {
+      return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+    if (request.method !== 'POST') {
+      return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed.');
+    }
+    return handleSpeechTranscribe(request, response);
   }
 
   // --- OpenCode Proxy ---

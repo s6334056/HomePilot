@@ -5,6 +5,15 @@ export const CONFIG = {
   MAX_FILE_SIZE: 10 * 1024 * 1024,
   OPENCODE_HOST: '127.0.0.1',
   OPENCODE_PORT: 4096,
+  WORKER_URL: process.env.HOMEPILOT_WORKER_URL || '',
+  WORKER_SECRET_TOKEN: process.env.HOMEPILOT_WORKER_SECRET_TOKEN || '',
+  MAX_AUDIO_SIZE: 5 * 1024 * 1024,
+  WORKER_TIMEOUT: 60_000,
+  ALLOWED_AUDIO_TYPES: new Set([
+    'audio/webm',
+    'audio/mp4',
+    'audio/wav',
+  ]),
   TEXT_EXTENSIONS: new Set([
     '.txt', '.md', '.json', '.js', '.ts', '.jsx', '.tsx', '.css', '.html',
     '.xml', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.env',
