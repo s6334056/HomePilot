@@ -4,6 +4,11 @@ const ALLOWED_CONTENT_TYPES = new Set([
 	"audio/wav",
 ]);
 
+function stripContentTypeParams(contentType: string): string {
+	const semicolon = contentType.indexOf(";");
+	return semicolon === -1 ? contentType : contentType.slice(0, semicolon).trim();
+}
+
 function errorResponse(status: number, code: string, message: string): Response {
 	return Response.json({ error: { code, message } }, { status });
 }
@@ -31,7 +36,8 @@ export default {
 		}
 
 		const contentType = request.headers.get("Content-Type") || "";
-		if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+		const baseContentType = stripContentTypeParams(contentType);
+		if (!ALLOWED_CONTENT_TYPES.has(baseContentType)) {
 			return errorResponse(
 				400,
 				"INVALID_REQUEST",

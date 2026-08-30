@@ -2,6 +2,11 @@ import { request as httpsRequest } from 'node:https';
 import { CONFIG } from './config.js';
 import { json, errorResponse } from './handlers.js';
 
+function stripContentTypeParams(contentType) {
+  const semicolon = contentType.indexOf(';');
+  return semicolon === -1 ? contentType : contentType.slice(0, semicolon).trim();
+}
+
 function readBodyWithLimit(request, maxSize) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -35,7 +40,8 @@ export async function handleSpeechTranscribe(request, response) {
   }
 
   const contentType = request.headers['content-type'];
-  if (!contentType || !CONFIG.ALLOWED_AUDIO_TYPES.has(contentType)) {
+  const baseContentType = contentType ? stripContentTypeParams(contentType) : '';
+  if (!baseContentType || !CONFIG.ALLOWED_AUDIO_TYPES.has(baseContentType)) {
     return errorResponse(response, 400, 'INVALID_REQUEST', `Unsupported Content-Type. Allowed: ${[...CONFIG.ALLOWED_AUDIO_TYPES].join(', ')}`);
   }
 

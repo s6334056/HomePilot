@@ -5,13 +5,22 @@ import { request as httpsRequest } from 'node:https';
 import { CONFIG } from './config.js';
 import { validatePath, isTextFile } from './pathValidator.js';
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+};
+
 export function json(response, statusCode, data) {
-  response.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
+  response.writeHead(statusCode, {
+    ...CORS_HEADERS,
+    'Content-Type': 'application/json; charset=utf-8',
+  });
   response.end(JSON.stringify(data));
 }
 
 export function noContent(response) {
-  response.writeHead(204);
+  response.writeHead(204, CORS_HEADERS);
   response.end();
 }
 
