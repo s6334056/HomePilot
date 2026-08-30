@@ -50,7 +50,7 @@ export function App() {
   const [fileContent, setFileContent] = useState<string>('');
 
   // Agent context (from Explorer)
-  const [agentContext, setAgentContext] = useState<AgentContext | null>(null);
+  const [_agentContext, setAgentContext] = useState<AgentContext | null>(null);
 
   // Screen state
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('explorer');
@@ -80,7 +80,7 @@ export function App() {
   const isInitializedRef = useRef(false);
   const explorerHistoryRef = useRef<ExplorerHistoryEntry[]>([]);
   const previousScreenRef = useRef<ScreenType>('explorer');
-  const prevIsDesktopRef = useRef<boolean>(() => window.innerWidth >= 1100);
+  const prevIsDesktopRef = useRef<boolean>(window.innerWidth >= 1100);
 
   const getRootPath = () => {
     if (isGatewayService(fileService)) {
@@ -306,7 +306,12 @@ export function App() {
       if (wasDesktop && !nowDesktop) {
         setPaneOrder((order) => {
           const leftPane = order[0];
-          setCurrentScreen(leftPane === 'explorer' ? 'explorer' : 'agent');
+          if (leftPane === 'explorer') {
+            // Preserve file_viewer state if currently viewing a file
+            setCurrentScreen((prev) => prev === 'file_viewer' ? 'file_viewer' : 'explorer');
+          } else {
+            setCurrentScreen('agent');
+          }
           return order;
         });
       }
@@ -316,8 +321,10 @@ export function App() {
         setCurrentScreen((prevScreen) => {
           setPaneOrder((order) => {
             const currentLeft = order[0];
+            // Treat file_viewer as explorer for pane ordering
+            const effectiveScreen = prevScreen === 'file_viewer' ? 'explorer' : prevScreen;
             // If current screen is already left pane, keep order
-            if (currentLeft === prevScreen) return order;
+            if (currentLeft === effectiveScreen) return order;
             // Otherwise swap so current screen becomes left
             return [order[1], order[0]];
           });
@@ -421,6 +428,7 @@ export function App() {
         currentPath={getNavbarPath()}
         mode="explorer"
         rootPath={isGatewayService(fileService) ? getRootPath() : undefined}
+        title={currentScreen === 'file_viewer' && selectedFile ? selectedFile.name : undefined}
         onBack={handleExplorerBack}
         canGoBack={canExplorerGoBack()}
         onReload={handleExplorerReload}
@@ -452,7 +460,6 @@ export function App() {
 
           {currentScreen === 'file_viewer' && selectedFile && (
             <FileViewer
-              file={selectedFile}
               content={fileContent}
             />
           )}

@@ -54,6 +54,11 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
               <RefreshCw size={18} />
             </button>
           </div>
+          {props.title && (
+            <div className="navbar-center">
+              <span className="navbar-title">{props.title}</span>
+            </div>
+          )}
           <div className="navbar-right">
             <button className="btn-icon navbar-btn-mobile-only" onClick={props.onOpenSettings} title="Settings">
               <Settings size={18} />

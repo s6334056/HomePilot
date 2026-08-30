@@ -82,21 +82,6 @@ function saveProcessingSessions(map: Record<string, ProcessingEntry>): void {
   }
 }
 
-function removeProcessingSession(sessionID: string): void {
-  try {
-    const raw = localStorage.getItem(PROCESSING_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        delete parsed[sessionID];
-        localStorage.setItem(PROCESSING_STORAGE_KEY, JSON.stringify(parsed));
-      }
-    }
-  } catch {
-    // ignore
-  }
-}
-
 function loadSettings(): AgentSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);

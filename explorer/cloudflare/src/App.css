@@ -371,51 +371,30 @@
 }
 
 /* File Viewer */
-.file-viewer-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+.file-viewer-container {
   display: flex;
   flex-direction: column;
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
 }
 
-.file-viewer-header {
-  background-color: var(--bg-sub);
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border);
-}
-
-.viewer-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.file-title {
-  font-weight: 600;
-}
-
-.file-path-sub {
-  font-size: 11px;
-  color: var(--text-muted);
+.file-viewer-content {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .file-content-body {
-  padding: 16px;
-  background-color: #050d05;
-  color: #e6edf3;
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
+  color: var(--text);
   white-space: pre-wrap;
-  word-break: break-all;
-  overflow: auto;
-  flex: 1;
+  word-break: break-word;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin: 0;
+  font-family: var(--font-mono);
 }
 
 /* Agent Panel */
