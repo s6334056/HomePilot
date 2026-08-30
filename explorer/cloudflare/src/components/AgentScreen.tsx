@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, Send, Wifi, WifiOff, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
+import { Plus, Mic, Send, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2, WifiOff } from 'lucide-react';
 import { OpenCodeSessionInfo, OpenCodeProviderModel, AgentContext } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
 import { Navbar } from './Navbar';
@@ -243,31 +243,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     });
   };
 
-  const getConnectionStatusIcon = () => {
-    switch (connectionStatus) {
-      case 'connected':
-        return <Wifi size={14} className="oc-status-connected" />;
-      case 'connecting':
-        return <Loader2 size={14} className="oc-status-connecting" />;
-      case 'reconnecting':
-        return <Loader2 size={14} className="oc-status-connecting" />;
-      case 'error':
-        return <AlertCircle size={14} className="oc-status-error" />;
-      default:
-        return <WifiOff size={14} className="oc-status-disconnected" />;
-    }
-  };
-
-  const getConnectionStatusText = () => {
-    switch (connectionStatus) {
-      case 'connected': return 'Connected';
-      case 'connecting': return 'Connecting...';
-      case 'reconnecting': return 'Reconnecting...';
-      case 'error': return 'Error';
-      default: return 'Disconnected';
-    }
-  };
-
   const formatSessionTitle = (session: OpenCodeSessionInfo): string => {
     if (session.title && session.title.trim()) {
       return session.title.length > 40
@@ -496,12 +471,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           showSwapButton={showSwapButton}
           onSwapPanes={onSwapPanes}
         />
-        <div className="oc-session-header">
-          <div className="oc-connection-status">
-            {getConnectionStatusIcon()}
-            <span>{getConnectionStatusText()}</span>
-          </div>
-        </div>
         {error && (
           <div className="oc-error-banner">
             <AlertCircle size={14} />
@@ -761,6 +730,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       <Navbar
         currentPath={currentPath}
         mode="agent"
+        title={formatSessionTitle(activeSession)}
+        modelId={activeSession.model?.id}
         onBack={handleToggleSessionList}
         onReload={handleReload}
         onOpenSettings={onOpenSettings}
@@ -770,13 +741,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         onSwapPanes={onSwapPanes}
       />
       <div className="oc-session-header">
-        <div className="oc-connection-status">
-          {getConnectionStatusIcon()}
-          <span>{getConnectionStatusText()}</span>
-          {activeSession.model && (
-            <span className="oc-session-model">{activeSession.model.id}</span>
-          )}
-        </div>
         <div className="oc-session-header-right">
           {sessionStatus && (
             <div className={`oc-session-status oc-session-status--${sessionStatus.type}`}>

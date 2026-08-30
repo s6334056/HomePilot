@@ -114,6 +114,26 @@
   gap: 4px;
 }
 
+.navbar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.navbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding: 0 12px;
+}
+
 .brand-group {
   display: flex;
   align-items: center;
@@ -172,6 +192,19 @@
   background-color: var(--bg-sub);
   padding: 2px 8px;
   border-radius: var(--radius);
+  margin-right: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.path-bar-model {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--accent);
+  background-color: var(--bg-sub);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 8px;
   margin-right: 8px;
   white-space: nowrap;
   flex-shrink: 0;

@@ -8,6 +8,8 @@ interface NavbarBaseProps {
   currentPath: string;
   mode: NavbarMode;
   rootPath?: string;
+  title?: string;
+  modelId?: string;
   showSettingsButton?: boolean;
   showSwapButton?: boolean;
   onSwapPanes?: () => void;
@@ -101,6 +103,11 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
             <RefreshCw size={18} />
           </button>
         </div>
+        {props.title && (
+          <div className="navbar-center">
+            <span className="navbar-title">{props.title}</span>
+          </div>
+        )}
         <div className="navbar-right">
           <button className="btn-icon navbar-btn-mobile-only" onClick={props.onOpenSettings} title="Settings">
             <Settings size={18} />
@@ -121,9 +128,9 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
         </div>
       </header>
       <nav className="path-bar">
-        {props.rootPath && (
-          <span className="path-bar-root" title={`Root: ${props.rootPath}`}>
-            Root: {truncatePath(props.rootPath)}
+        {props.modelId && (
+          <span className="path-bar-model" title={`Model: ${props.modelId}`}>
+            {props.modelId}
           </span>
         )}
         <span className="path-bar-text" title={props.currentPath}>
