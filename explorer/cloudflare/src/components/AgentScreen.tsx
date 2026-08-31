@@ -534,12 +534,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                       disabled={operatingSessionId === session.id}
                     >
                       <span className="agent-session-title">
-                        {unreadSessionIds.includes(session.id) && (
-                          <span className="agent-session-unread" />
-                        )}
-                        {processingSessionIds.includes(session.id) && (
-                          <span className="agent-session-processing" />
-                        )}
                         {formatSessionTitle(session)}
                       </span>
                       <span className="agent-session-date">

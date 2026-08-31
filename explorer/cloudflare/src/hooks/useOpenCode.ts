@@ -818,15 +818,18 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     const lastChecked = lastCheckedAtRef.current;
     const newUnreadIds: string[] = [];
 
+    // Filter out archived sessions - no need to track status for archived sessions
+    const activeSessions = sessions.filter((s) => !OpenCodeClient.isSessionArchived(s));
+
     // Initialize lastCheckedAt for sessions not yet tracked
-    for (const s of sessions) {
+    for (const s of activeSessions) {
       if (!(s.id in lastChecked)) {
         lastChecked[s.id] = now;
       }
     }
 
     // Clean up entries for sessions that no longer exist
-    const sessionIds = new Set(sessions.map((s) => s.id));
+    const sessionIds = new Set(activeSessions.map((s) => s.id));
     for (const id of Object.keys(lastChecked)) {
       if (!sessionIds.has(id)) {
         delete lastChecked[id];
@@ -836,17 +839,27 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     // Sessions that completed via REST API - remove from processing
     const completedSessionIds: string[] = [];
 
-    // Check each session's latest assistant message via REST API
-    for (const s of sessions) {
-      try {
-        const apiMessages = await client.getMessages(s.id);
+    // Check each session's latest assistant message via REST API (batched parallel)
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < activeSessions.length; i += BATCH_SIZE) {
+      const batch = activeSessions.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((s) => client.getMessages(s.id))
+      );
+
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j];
+        const s = batch[j];
+        if (result.status !== 'fulfilled') continue;
+
+        const apiMessages = result.value;
         if (apiMessages.length === 0) continue;
 
         // Find the latest assistant message
         let latestAssistantTime: number | undefined;
         let latestFinish: string | undefined;
-        for (let i = apiMessages.length - 1; i >= 0; i--) {
-          const msg = apiMessages[i];
+        for (let k = apiMessages.length - 1; k >= 0; k--) {
+          const msg = apiMessages[k];
           if (msg.info.role === 'assistant') {
             latestAssistantTime = msg.info.time?.completed ?? msg.info.time?.created;
             latestFinish = msg.info.finish;
@@ -866,8 +879,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         if (latestAssistantTime > (lastChecked[s.id] ?? 0) && latestFinish === 'stop') {
           newUnreadIds.push(s.id);
         }
-      } catch {
-        // Skip sessions that fail to load
       }
     }
 
