@@ -49,6 +49,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const modelListRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const lastHandledSpeechResultRef = useRef<string | null>(null);
 
   const speech = useSpeechRecognition({ gatewayUrl, gatewayToken });
 
@@ -102,10 +103,19 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   useEffect(() => {
     if (speech.state === 'completed' && speech.result) {
       const text = speech.result;
+      // Prevent duplicate insertion if effect re-fires with same result (React strict mode / deps change)
+      if (lastHandledSpeechResultRef.current === text) return;
+      lastHandledSpeechResultRef.current = text;
       setInputValue((prev) => (prev ? prev + ' ' + text : text));
-      speech.reset();
+      // Defer reset to next tick so inputValue update commits before state flips to idle.
+      // Include speech.result in deps to avoid missing transcription if result arrives after state.
+      const id = setTimeout(() => speech.reset(), 0);
+      return () => clearTimeout(id);
     }
-  }, [speech.state]);
+    if (speech.state === 'idle') {
+      lastHandledSpeechResultRef.current = null;
+    }
+  }, [speech.state, speech.result]);
 
   useEffect(() => {
     if (showModelSelect && !isLoadingModels && availableModels.length > 0) {

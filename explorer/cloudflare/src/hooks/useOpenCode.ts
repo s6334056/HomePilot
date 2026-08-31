@@ -265,9 +265,14 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           const newType = props.status?.type ?? '';
 
           // isSending: only relevant for the currently selected session
+          // Robust clear: if status returns to idle/empty, ensure isSending is cleared even if only one event arrived.
+          // Keep existing two-distinct-status logic as primary, but add idle shortcut for reliability.
           let isSendingUpdate = prev.isSending;
           if (prev.isSending && props.sessionID === prev.selectedSessionID) {
-            if (sendingStatusRef.current === null) {
+            if (newType === 'idle' || newType === '') {
+              isSendingUpdate = false;
+              sendingStatusRef.current = null;
+            } else if (sendingStatusRef.current === null) {
               sendingStatusRef.current = newType;
             } else if (newType !== sendingStatusRef.current) {
               isSendingUpdate = false;
