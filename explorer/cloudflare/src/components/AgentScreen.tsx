@@ -72,6 +72,16 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
   const activeSession = selectedSession;
 
+  const canGoBack = showSessionList ? false : !!selectedSessionID;
+
+  const hasFetchedSessionsRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (connectionStatus === 'connected' && !hasFetchedSessionsRef.current) {
+      hasFetchedSessionsRef.current = true;
+      actions.refreshAllSessions();
+    }
+  }, [connectionStatus, actions]);
+
   useEffect(() => {
     if (gatewayUrl && gatewayToken && !connected) {
       actions.connect(gatewayUrl, gatewayToken);
@@ -443,6 +453,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           currentPath={currentPath}
           mode="agent"
           onBack={handleToggleSessionList}
+          canGoBack={false}
           onReload={handleReload}
           onOpenSettings={onOpenSettings}
           onOpenExplorer={onOpenExplorer}
@@ -481,6 +492,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           currentPath={currentPath}
           mode="agent"
           onBack={handleToggleSessionList}
+          canGoBack={false}
           onReload={handleReload}
           onOpenSettings={onOpenSettings}
           onOpenExplorer={onOpenExplorer}
@@ -750,6 +762,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         title={formatSessionTitle(activeSession)}
         modelId={activeSession.model?.id}
         onBack={handleToggleSessionList}
+        canGoBack={canGoBack}
         onReload={handleReload}
         onOpenSettings={onOpenSettings}
         onOpenExplorer={onOpenExplorer}

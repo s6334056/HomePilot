@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { ArrowLeft, RefreshCw, Settings, Bot, FolderOpen, ArrowLeftRight } from 'lucide-react';
-import { truncatePath } from '../utils/pathUtils';
+import { truncatePath, computeHeadTailPath } from '../utils/pathUtils';
 
 export type NavbarMode = 'explorer' | 'agent';
 
@@ -27,6 +27,7 @@ interface ExplorerNavbarProps extends NavbarBaseProps {
 interface AgentNavbarProps extends NavbarBaseProps {
   mode: 'agent';
   onBack: () => void;
+  canGoBack?: boolean;
   onReload: () => void;
   onOpenSettings: () => void;
   onOpenExplorer: () => void;
@@ -35,7 +36,48 @@ interface AgentNavbarProps extends NavbarBaseProps {
 type NavbarProps = ExplorerNavbarProps | AgentNavbarProps;
 
 export const Navbar: React.FC<NavbarProps> = (props) => {
-  const displayPath = truncatePath(props.currentPath);
+  const pathBarRef = useRef<HTMLDivElement>(null);
+  const [pathBarWidth, setPathBarWidth] = useState<number>(0);
+
+  useEffect(() => {
+    const el = pathBarRef.current;
+    if (!el) return;
+    let active = true;
+    const observer = new ResizeObserver((entries) => {
+      if (!active) return;
+      for (const entry of entries) {
+        const w = entry.contentBoxSize?.[0]?.inlineSize ?? entry.contentRect.width;
+        setPathBarWidth(w);
+      }
+    });
+    observer.observe(el);
+    return () => { active = false; observer.disconnect(); };
+  }, []);
+
+  const [displayPath, setDisplayPath] = useState(() => truncatePath(props.currentPath));
+
+  useEffect(() => {
+    if (pathBarWidth <= 0) {
+      setDisplayPath(truncatePath(props.currentPath));
+      return;
+    }
+    const innerWidth = pathBarWidth - 32;
+
+    const badgeSelector = props.mode === 'explorer' ? '.path-bar-root' : '.path-bar-model';
+    const badgeEl = pathBarRef.current?.querySelector(badgeSelector);
+    const badgeWidth = badgeEl
+      ? badgeEl.getBoundingClientRect().width
+        + parseFloat(getComputedStyle(badgeEl).marginRight || '0')
+      : 0;
+
+    const available = innerWidth - badgeWidth;
+    if (available <= 0) {
+      setDisplayPath(truncatePath(props.currentPath));
+      return;
+    }
+    const result = computeHeadTailPath(props.currentPath, available);
+    setDisplayPath(result || props.currentPath);
+  }, [pathBarWidth, props.currentPath, props.rootPath, props.modelId, props.mode]);
 
   if (props.mode === 'explorer') {
     return (
@@ -78,7 +120,7 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
             )}
           </div>
         </header>
-        <nav className="path-bar">
+        <nav className="path-bar" ref={pathBarRef}>
           {props.rootPath && (
             <span className="path-bar-root" title={`Root: ${props.rootPath}`}>
               Root: {truncatePath(props.rootPath)}
@@ -100,6 +142,7 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
           <button
             className="btn-icon"
             onClick={props.onBack}
+            disabled={!props.canGoBack}
             title="Back to Sessions"
           >
             <ArrowLeft size={18} />
@@ -132,7 +175,7 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
           )}
         </div>
       </header>
-      <nav className="path-bar">
+      <nav className="path-bar" ref={pathBarRef}>
         {props.modelId && (
           <span className="path-bar-model" title={`Model: ${props.modelId}`}>
             {props.modelId}

@@ -27,6 +27,36 @@ export function truncatePath(path: string, maxLength: number = MAX_DISPLAY_LENGT
 }
 
 /**
+ * Compute a head...tail truncated path that fits within availableWidthPx.
+ * Keeps the tail (filename) portion longer to prioritize end visibility.
+ * Uses 7.2px per character (12px monospace font) with a 2-char safety margin.
+ */
+export function computeHeadTailPath(
+  path: string,
+  availableWidthPx: number,
+): string {
+  if (!path) return '';
+  const charWidth = 7.2;
+  const safetyMargin = 2;
+  const maxChars = Math.max(0, Math.floor(availableWidthPx / charWidth) - safetyMargin);
+  if (path.length <= maxChars) return path;
+
+  const ellipsisLen = 3;
+  const headBudget = Math.min(12, Math.floor((maxChars - ellipsisLen) * 0.4));
+  const tailBudget = maxChars - ellipsisLen - headBudget;
+
+  if (headBudget < 4 || tailBudget < 4) {
+    const minTail = Math.max(tailBudget, 6);
+    const tail = path.slice(-minTail);
+    return '...' + tail;
+  }
+
+  const head = path.slice(0, headBudget);
+  const tail = path.slice(-tailBudget);
+  return head + '...' + tail;
+}
+
+/**
  * Get a display name for a session, with fallback to first user message.
  * Multi-line content is collapsed to a single line.
  */
