@@ -142,8 +142,26 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     setIsLoadingModels(true);
     setModelError(null);
     try {
-      const providers = await client.getProviders();
-      const models = client.extractFreeModels(providers);
+      const [providers, config] = await Promise.all([
+        client.getProviders(),
+        client.getConfig(),
+      ]);
+
+      const allowedLmStudioModelIds = new Set<string>();
+      const configProviders = (config?.provider ?? {}) as Record<string, { models?: Record<string, unknown> }>;
+      const lmstudioConfig = configProviders?.lmstudio;
+      if (lmstudioConfig?.models) {
+        for (const modelId of Object.keys(lmstudioConfig.models)) {
+          allowedLmStudioModelIds.add(modelId);
+        }
+      }
+
+      const models = client.extractFreeModels(providers, allowedLmStudioModelIds);
+      models.sort((a, b) => {
+        const aLocal = a.providerID === 'lmstudio' ? 0 : 1;
+        const bLocal = b.providerID === 'lmstudio' ? 0 : 1;
+        return aLocal - bLocal;
+      });
       setAvailableModels(models);
       if (models.length > 0) {
         setSelectedModelIndex(lastSelectedModelIndexRef.current < models.length ? lastSelectedModelIndexRef.current : 0);
@@ -705,7 +723,9 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                         />
                         <div className="oc-model-select-info">
                           <span className="oc-model-select-name">{model.name}</span>
-                          <span className="oc-model-select-provider">OpenCode · Free</span>
+                          <span className="oc-model-select-provider">
+                            {model.providerID === 'lmstudio' ? 'LM Studio · Local' : 'OpenCode · Free'}
+                          </span>
                         </div>
                       </label>
                     ))}

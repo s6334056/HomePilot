@@ -59,6 +59,12 @@ const ROOT_FOLDER = process.argv[2] || process.env.HOMEPILOT_ROOT || envFile.ROO
 const WORKER_URL = process.env.HOMEPILOT_WORKER_URL || envFile.HOMEPILOT_WORKER_URL || '';
 const WORKER_SECRET_TOKEN = process.env.HOMEPILOT_WORKER_SECRET_TOKEN || envFile.HOMEPILOT_WORKER_SECRET_TOKEN || '';
 
+const LOCAL_MODEL = process.env.LOCAL_MODEL || envFile.LOCAL_MODEL || '';
+const LM_STUDIO_HOST = '127.0.0.1';
+const LM_STUDIO_PORT = 1234;
+const LM_STUDIO_URL = `http://${LM_STUDIO_HOST}:${LM_STUDIO_PORT}`;
+const LM_STUDIO_TIMEOUT = 60_000;
+
 let gatewayToken = null;
 let tunnelUrl = null;
 let gatewayListenAddress = null;
@@ -72,6 +78,7 @@ let shuttingDown = false;
 let gatewayTimeout = null;
 let tunnelTimeout = null;
 let opencodeTimeout = null;
+let lmStudioTimeout = null;
 
 // --- Validate root folder ---
 if (!existsSync(ROOT_FOLDER)) {
@@ -206,8 +213,129 @@ function checkGatewayReady() {
       clearTimeout(gatewayTimeout);
       gatewayTimeout = null;
     }
-    console.log('Gateway is ready. Starting OpenCode Server...');
+    console.log('Gateway is ready.');
+
+    if (LOCAL_MODEL) {
+      console.log(`Loading Local Model "${LOCAL_MODEL}" from LM Studio...`);
+      loadLocalModel()
+        .then(() => {
+          console.log(`Local Model "${LOCAL_MODEL}" is ready. Starting OpenCode Server...`);
+          startOpenCodeServer();
+        })
+        .catch((err) => {
+          console.error('');
+          console.error('========================================');
+          console.error('  HomePilot - Local Model Load Failed');
+          console.error('========================================');
+          console.error('');
+          console.error(`Failed to load Local Model "${LOCAL_MODEL}".`);
+          console.error('');
+          console.error('Cause:');
+          console.error(`  ${err.message}`);
+          console.error('');
+          console.error('Please check:');
+          console.error('  - LM Studio is running');
+          console.error(`  - Model "${LOCAL_MODEL}" exists in LM Studio`);
+          console.error('  - LM Studio Server is accessible at ' + LM_STUDIO_URL);
+          console.error('');
+          console.error('HomePilot cannot start without the Local Model.');
+          shutdown();
+        });
+      return;
+    }
+
+    console.log('Starting OpenCode Server...');
     startOpenCodeServer();
+  }
+}
+
+async function lmStudioFetch(path, options = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), LM_STUDIO_TIMEOUT);
+  try {
+    const res = await fetch(`${LM_STUDIO_URL}${path}`, {
+      ...options,
+      signal: controller.signal,
+    });
+    return res;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function loadLocalModel() {
+  let res;
+  try {
+    res = await lmStudioFetch('/api/v1/models');
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('LM Studio Server did not respond in time');
+    }
+    throw new Error(`Cannot connect to LM Studio Server at ${LM_STUDIO_URL}`);
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`LM Studio Server returned HTTP ${res.status}: ${body}`);
+  }
+
+  const data = await res.json();
+  const models = Array.isArray(data?.models) ? data.models : [];
+  const found = models.some((m) => {
+    const key = m?.key || '';
+    return key === LOCAL_MODEL;
+  });
+
+  if (!found) {
+    const available = models.map((m) => m?.key).filter(Boolean).join(', ');
+    throw new Error(
+      `Model "${LOCAL_MODEL}" does not exist in LM Studio.` +
+      (available ? ` Available models: ${available}` : '')
+    );
+  }
+
+  const targetModel = models.find((m) => (m?.key || '') === LOCAL_MODEL);
+  const instances = Array.isArray(targetModel?.loaded_instances) ? targetModel.loaded_instances : [];
+  const alreadyLoaded = instances.some((inst) => (inst?.id || '') === LOCAL_MODEL);
+
+  if (alreadyLoaded) {
+    console.log(`Local Model "${LOCAL_MODEL}" is already loaded.`);
+    return;
+  }
+
+  let loadRes;
+  try {
+    loadRes = await lmStudioFetch('/api/v1/models/load', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: LOCAL_MODEL }),
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('LM Studio model load request timed out');
+    }
+    throw new Error(`Failed to send model load request to LM Studio: ${err.message}`);
+  }
+
+  if (!loadRes.ok) {
+    const body = await loadRes.text().catch(() => '');
+    throw new Error(`LM Studio model load returned HTTP ${loadRes.status}: ${body}`);
+  }
+
+  let loadResult;
+  try {
+    loadResult = await loadRes.json();
+  } catch {
+    throw new Error('LM Studio model load returned an invalid response');
+  }
+
+  const status =
+    loadResult?.status ||
+    loadResult?.model?.status ||
+    loadResult?.data?.status ||
+    '';
+  if (status !== 'loaded' && status !== 'already_loaded') {
+    throw new Error(`LM Studio model load status was "${status || 'unknown'}"`);
   }
 }
 
@@ -393,6 +521,10 @@ function shutdown() {
   if (opencodeTimeout) {
     clearTimeout(opencodeTimeout);
     opencodeTimeout = null;
+  }
+  if (lmStudioTimeout) {
+    clearTimeout(lmStudioTimeout);
+    lmStudioTimeout = null;
   }
 
   console.log('');

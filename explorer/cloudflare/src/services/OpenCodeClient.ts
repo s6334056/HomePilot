@@ -237,21 +237,37 @@ export class OpenCodeClient {
     return [];
   }
 
-  extractFreeModels(providers: OpenCodeProvider[]): OpenCodeProviderModel[] {
+  async getConfig(): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>('GET', '/config');
+  }
+
+  extractFreeModels(
+    providers: OpenCodeProvider[],
+    allowedLmStudioModelIds: Set<string>,
+  ): OpenCodeProviderModel[] {
     const result: OpenCodeProviderModel[] = [];
     for (const provider of providers) {
+      if (provider.id !== 'opencode' && provider.id !== 'lmstudio') continue;
       if (!provider.models) continue;
+
       for (const [modelID, modelInfo] of Object.entries(provider.models)) {
-        const cost = modelInfo.cost;
-        const isFree =
-          (cost?.input === undefined || cost?.input === 0) &&
-          (cost?.output === undefined || cost?.output === 0);
-        if (!isFree) continue;
+        if (provider.id === 'opencode') {
+          const cost = modelInfo.cost;
+          const isFree =
+            (cost?.input === undefined || cost?.input === 0) &&
+            (cost?.output === undefined || cost?.output === 0);
+          if (!isFree) continue;
+        }
+
+        if (provider.id === 'lmstudio') {
+          if (!allowedLmStudioModelIds.has(modelID)) continue;
+        }
+
         result.push({
           providerID: provider.id,
           modelID,
           name: modelInfo.name || modelID,
-          cost,
+          cost: modelInfo.cost,
         });
       }
     }
