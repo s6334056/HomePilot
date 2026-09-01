@@ -240,7 +240,6 @@ export class OpenCodeClient {
   extractFreeModels(providers: OpenCodeProvider[]): OpenCodeProviderModel[] {
     const result: OpenCodeProviderModel[] = [];
     for (const provider of providers) {
-      if (provider.id !== 'opencode') continue;
       if (!provider.models) continue;
       for (const [modelID, modelInfo] of Object.entries(provider.models)) {
         const cost = modelInfo.cost;
