@@ -875,7 +875,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           <button
             className="btn-icon agent-send-btn"
             onClick={handleSendMessage}
-            disabled={!inputValue.trim() || !selectedSessionID || isSending}
+            disabled={!selectedSessionID || isSending}
             title="Send"
           >
             <Send size={18} />
