@@ -327,4 +327,44 @@ export class PageManager {
         break;
     }
   }
+
+  /**
+   * Destroy the PageManager and release all resources.
+   * Safe to call multiple times (idempotent).
+   */
+  public destroy(): void {
+    // Deactivate current page
+    if (this.currentPage) {
+      this.currentPage.onDeactivate();
+      this.currentPage = undefined;
+    }
+
+    // Clear menu mapping
+    this.menuItemIdMap.clear();
+
+    // Reset initialization state
+    this.isStartupCreated = false;
+    this.lastRenderedText = '';
+  }
+
+  /**
+   * Shut down the G2 PageContainer on the glasses.
+   * Used when closing the G2 Runtime from PWA side.
+   */
+  public async shutDownPageContainer(): Promise<void> {
+    if (this.bridge && this.isBridgeReady) {
+      try {
+        await this.bridge.shutDownPageContainer(0);
+      } catch (err) {
+        console.warn("[PageManager] shutDownPageContainer failed:", err);
+      }
+    }
+  }
+
+  /**
+   * Whether the PageManager has an active bridge connection.
+   */
+  public get isReady(): boolean {
+    return this.isBridgeReady;
+  }
 }

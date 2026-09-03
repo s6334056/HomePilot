@@ -9,6 +9,7 @@ import {
   Check,
   AlertCircle,
   Trash2,
+  Glasses,
 } from 'lucide-react';
 import {
   loadConnectionConfig,
@@ -17,17 +18,26 @@ import {
   ConnectionConfig,
 } from '../services/ConnectionConfig';
 import { QRScanner } from './QRScanner';
+import { G2RuntimeState } from '../hud/g2-runtime';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onReconnect: () => void;
+  isBridgeAvailable: boolean;
+  g2RuntimeState: G2RuntimeState;
+  onStartG2Runtime: () => void;
+  onStopG2Runtime: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   onReconnect,
+  isBridgeAvailable,
+  g2RuntimeState,
+  onStartG2Runtime,
+  onStopG2Runtime,
 }) => {
   const [config, setConfig] = useState<ConnectionConfig | null>(null);
   const [showQRScanner, setShowQRScanner] = useState<boolean>(false);
@@ -207,6 +217,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <AlertCircle size={14} />
               {error}
             </div>
+          )}
+
+          {/* G2 Glass Control */}
+          {isBridgeAvailable && (
+            <section className="settings-section">
+              <h3>G2 グラス</h3>
+              <p className="settings-description">
+                Even G2 グラス上で HomePilot を起動・停止します
+              </p>
+
+              <div className="settings-actions">
+                {g2RuntimeState === 'inactive' ? (
+                  <button
+                    className="btn btn-primary"
+                    onClick={onStartG2Runtime}
+                  >
+                    <Glasses size={14} />
+                    グラス起動
+                  </button>
+                ) : g2RuntimeState === 'active' ? (
+                  <button
+                    className="btn btn-danger"
+                    onClick={onStopG2Runtime}
+                  >
+                    <X size={14} />
+                    グラスを閉じる
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-secondary"
+                    disabled
+                  >
+                    {g2RuntimeState === 'starting' ? '起動中...' : '終了中...'}
+                  </button>
+                )}
+              </div>
+
+              {g2RuntimeState === 'active' && (
+                <div className="g2-status-active">
+                  <span className="status-dot active"></span>
+                  グラス起動中
+                </div>
+              )}
+            </section>
           )}
 
           {/* G2 Connection */}

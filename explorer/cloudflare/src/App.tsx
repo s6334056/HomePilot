@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { PageManager } from './hud/page-manager';
 import { ExplorerPage } from './hud/pages/explorer-page';
 import { FileViewerPage } from './hud/pages/file-viewer-page';
 import { MockFileSystemService } from './services/MockFileSystemService';
@@ -13,6 +12,7 @@ import { FileTable } from './components/FileTable';
 import { FileViewer } from './components/FileViewer';
 import { AgentScreen } from './components/AgentScreen';
 import { SettingsModal } from './components/SettingsModal';
+import { G2RuntimeManager, G2RuntimeState } from './hud/g2-runtime';
 import './App.css';
 
 type PaneType = 'explorer' | 'agent';
@@ -38,7 +38,12 @@ function isGatewayService(s: FileSystemService): s is GatewayFileSystemService {
 export function App() {
   const [fileService, setFileService] = useState<FileSystemService>(() => createFileService());
   const [agentService] = useState(() => new AgentService());
-  const [pageManager] = useState(() => new PageManager((status) => setG2Status(status)));
+
+  // G2 Runtime Manager (created once, manages lifecycle of all G2 resources)
+  const [g2Runtime] = useState(() => new G2RuntimeManager(
+    (status) => setG2Status(status),
+    (state) => setG2RuntimeState(state),
+  ));
 
   // Explorer state
   const [explorerPath, setExplorerPath] = useState<string>(() =>
@@ -56,8 +61,12 @@ export function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('explorer');
 
   // UI state
-  const [_g2Status, setG2Status] = useState<string>('Initializing G2 SDK...');
+  const [_g2Status, setG2Status] = useState<string>('Ready');
   const [showSettings, setShowSettings] = useState<boolean>(false);
+
+  // G2 Runtime state
+  const [g2RuntimeState, setG2RuntimeState] = useState<G2RuntimeState>('inactive');
+  const [isBridgeAvailable, setIsBridgeAvailable] = useState<boolean>(false);
 
   // 2-Pane layout state
   const [paneOrder, setPaneOrder] = useState<PaneOrder>(['explorer', 'agent']);
@@ -113,77 +122,72 @@ export function App() {
     return explorerHistoryRef.current.length > 0;
   };
 
+  // ── PWA Initialization ────────────────────────────────────
+  // Probe for G2 bridge on startup (does NOT start G2 Runtime)
   useEffect(() => {
     if (isInitializedRef.current) return;
     isInitializedRef.current = true;
 
     const init = async () => {
-      await pageManager.initialize();
+      // Probe for bridge availability (G2-capable environment detection)
+      const hasBridge = await g2Runtime.probeBridge();
+      setIsBridgeAvailable(hasBridge);
 
+      // Initialize PWA file service (independent of G2)
       if (isGatewayService(fileService)) {
         await (fileService as GatewayFileSystemService).initialize();
       }
 
       const rootPath = getRootPath();
       setExplorerPath(rootPath);
-
-      const explorerPage = new ExplorerPage(
-        rootPath,
-        fileService,
-        agentService,
-        (path, loadedItems, selected) => {
-          setExplorerPath(path);
-          setItems(loadedItems);
-          setSelectedIndex(selected);
-          setCurrentScreen('explorer');
-          setSelectedFile(null);
-        },
-        (file, content) => {
-          setSelectedFile(file);
-          setFileContent(content);
-          setCurrentScreen('file_viewer');
-        },
-        (context) => {
-          setAgentContext(context);
-          if (!isDesktop) {
-            setCurrentScreen('agent');
-          }
-        }
-      );
-
-      await pageManager.navigateTo(explorerPage);
     };
 
     init();
-  }, [fileService, agentService, pageManager]);
+  }, [fileService, g2Runtime]);
+
+  // ── G2 Runtime ────────────────────────────────────────────
+
+  const handleStartG2Runtime = useCallback(async () => {
+    await g2Runtime.startG2Runtime();
+  }, [g2Runtime]);
+
+  const handleStopG2Runtime = useCallback(async () => {
+    await g2Runtime.shutdownG2Runtime();
+  }, [g2Runtime]);
+
+  // Cleanup G2RuntimeManager on unmount
+  useEffect(() => {
+    return () => {
+      g2Runtime.destroy();
+    };
+  }, [g2Runtime]);
+
+  // ── PWA Navigation (independent of G2) ────────────────────
 
   // Internal navigate (no history management)
   const navigateToPath = async (path: string, restoreIndex?: number) => {
-    const page = new ExplorerPage(
-      path,
-      fileService,
-      agentService,
-      (newPath, loadedItems, selected) => {
-        setExplorerPath(newPath);
-        setItems(loadedItems);
-        setSelectedIndex(selected);
-        setCurrentScreen('explorer');
-        setSelectedFile(null);
-      },
-      (file, content) => {
-        setSelectedFile(file);
-        setFileContent(content);
-        setCurrentScreen('file_viewer');
-      },
-      (context) => {
-        setAgentContext(context);
-        if (!isDesktop) {
-          setCurrentScreen('agent');
-        }
-      },
-      restoreIndex
-    );
-    await pageManager.navigateTo(page);
+    const newService = fileService;
+    const rootPath = isGatewayService(newService)
+      ? (newService as GatewayFileSystemService).getRootPath()
+      : '/home';
+    const resolvedPath = path || rootPath;
+
+    setExplorerPath(resolvedPath);
+    setCurrentScreen('explorer');
+    setSelectedFile(null);
+
+    // Load directory for PWA display
+    try {
+      const loadedItems = await newService.getDirectory(resolvedPath);
+      setItems(loadedItems);
+      setSelectedIndex(restoreIndex != null
+        ? Math.max(0, Math.min(restoreIndex, loadedItems.length - 1))
+        : 0);
+    } catch (e) {
+      console.error('[App] Failed to load directory:', e);
+      setItems([]);
+      setSelectedIndex(0);
+    }
   };
 
   const handleOpenFile = async (file: FileSystemItem, index: number) => {
@@ -193,35 +197,6 @@ export function App() {
       setSelectedFile(file);
       setFileContent(content);
       setCurrentScreen('file_viewer');
-
-      const viewerPage = new FileViewerPage(
-        file,
-        explorerPath,
-        fileService,
-        agentService,
-        async () => {
-          // File viewer back → return to folder (no history push, this IS the back)
-          const prev = explorerHistoryRef.current.pop();
-          if (prev !== undefined) {
-            await navigateToPath(prev.path, prev.selectedIndex);
-          } else {
-            await navigateToPath(explorerPath);
-          }
-          return true;
-        },
-        (f, c) => {
-          setSelectedFile(f);
-          setFileContent(c);
-          setCurrentScreen('file_viewer');
-        },
-        (context) => {
-          setAgentContext(context);
-          if (!isDesktop) {
-            setCurrentScreen('agent');
-          }
-        }
-      );
-      await pageManager.navigateTo(viewerPage);
     } catch (e: any) {
       alert(`Failed to open file: ${e.message}`);
     }
@@ -246,8 +221,6 @@ export function App() {
   };
 
   // Agent/Explorer switching
-  // In 2-pane mode (desktop), both panes are always visible.
-  // These handlers only update screen visibility; Context is built at message send time.
   const handleOpenAgent = () => {
     if (!isDesktop) {
       previousScreenRef.current = currentScreen;
@@ -307,7 +280,6 @@ export function App() {
         setPaneOrder((order) => {
           const leftPane = order[0];
           if (leftPane === 'explorer') {
-            // Preserve file_viewer state if currently viewing a file
             setCurrentScreen((prev) => prev === 'file_viewer' ? 'file_viewer' : 'explorer');
           } else {
             setCurrentScreen('agent');
@@ -321,11 +293,8 @@ export function App() {
         setCurrentScreen((prevScreen) => {
           setPaneOrder((order) => {
             const currentLeft = order[0];
-            // Treat file_viewer as explorer for pane ordering
             const effectiveScreen = prevScreen === 'file_viewer' ? 'explorer' : prevScreen;
-            // If current screen is already left pane, keep order
             if (currentLeft === effectiveScreen) return order;
-            // Otherwise swap so current screen becomes left
             return [order[1], order[0]];
           });
           return prevScreen;
@@ -354,58 +323,17 @@ export function App() {
     setSelectedFile(null);
     explorerHistoryRef.current = [];
 
-    const explorerPage = new ExplorerPage(
-      rootPath,
-      newService,
-      agentService,
-      (path, loadedItems, selected) => {
-        setExplorerPath(path);
-        setItems(loadedItems);
-        setSelectedIndex(selected);
-        setCurrentScreen('explorer');
-        setSelectedFile(null);
-      },
-      (file, content) => {
-        setSelectedFile(file);
-        setFileContent(content);
-        setCurrentScreen('file_viewer');
-      },
-      (context) => {
-        setAgentContext(context);
-        if (!isDesktop) {
-          setCurrentScreen('agent');
-        }
-      }
-    );
-    await pageManager.navigateTo(explorerPage);
-  }, [agentService, pageManager]);
-
-  // Keyboard Navigation for PC testing
-  useEffect(() => {
-    const handleKeyDown = async (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
-
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        await pageManager.dispatchSimulatedEvent('scroll_up');
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        await pageManager.dispatchSimulatedEvent('scroll_down');
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        await pageManager.dispatchSimulatedEvent('click');
-      } else if (e.key === 'Backspace' || e.key === 'Escape') {
-        e.preventDefault();
-        await pageManager.dispatchSimulatedEvent('double_click');
-      } else if (e.key.toLowerCase() === 'a') {
-        e.preventDefault();
-        await pageManager.dispatchSimulatedEvent('long_press');
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pageManager]);
+    // Load initial directory for PWA display
+    try {
+      const loadedItems = await newService.getDirectory(rootPath);
+      setItems(loadedItems);
+      setSelectedIndex(0);
+    } catch (e) {
+      console.error('[App] Failed to load directory after reconnect:', e);
+      setItems([]);
+      setSelectedIndex(0);
+    }
+  }, []);
 
   // Determine the path to display in navbar
   const getNavbarPath = (): string => {
@@ -447,11 +375,6 @@ export function App() {
               selectedIndex={selectedIndex}
               onSelectItem={(idx) => {
                 setSelectedIndex(idx);
-                const page = pageManager.getCurrentPage();
-                if (page instanceof ExplorerPage) {
-                  (page as any).selectedIndex = idx;
-                  pageManager.renderCurrentPage();
-                }
               }}
               onOpenDirectory={handleOpenDirectory}
               onOpenFile={handleOpenFile}
@@ -512,7 +435,70 @@ export function App() {
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
         onReconnect={handleReconnect}
+        isBridgeAvailable={isBridgeAvailable}
+        g2RuntimeState={g2RuntimeState}
+        onStartG2Runtime={handleStartG2Runtime}
+        onStopG2Runtime={handleStopG2Runtime}
       />
+
+      {/* G2 Runtime Active Modal */}
+      {g2RuntimeState === 'active' && (
+        <div className="g2-active-overlay" onClick={(e) => e.stopPropagation()}>
+          <div className="g2-active-modal">
+            <div className="g2-active-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </div>
+            <h3>G2 グラス起動中</h3>
+            <p className="g2-active-description">
+              G2 Runtime が動作中です。<br/>
+              グラス側でアプリが表示されています。
+            </p>
+            <button
+              className="btn btn-danger g2-close-btn"
+              onClick={handleStopG2Runtime}
+            >
+              グラスを閉じる
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* G2 Starting Overlay */}
+      {g2RuntimeState === 'starting' && (
+        <div className="g2-active-overlay" onClick={(e) => e.stopPropagation()}>
+          <div className="g2-active-modal">
+            <div className="g2-active-icon g2-starting">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="spin">
+                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+              </svg>
+            </div>
+            <h3>G2 Runtime 起動中...</h3>
+            <p className="g2-active-description">
+              {_g2Status}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* G2 Stopping Overlay */}
+      {g2RuntimeState === 'stopping' && (
+        <div className="g2-active-overlay" onClick={(e) => e.stopPropagation()}>
+          <div className="g2-active-modal">
+            <div className="g2-active-icon g2-stopping">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="spin">
+                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+              </svg>
+            </div>
+            <h3>G2 Runtime 終了中...</h3>
+            <p className="g2-active-description">
+              リソースを解放しています...
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
