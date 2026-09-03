@@ -1,50 +1,37 @@
-import { useEffect, useState } from 'react';
-import './App.css';
+import { useEffect } from 'react';
 
-export function App() {
-  const [status, setStatus] = useState<string>('Initializing HomePilot Explorer...');
-  const [targetUrl, setTargetUrl] = useState<string>('');
-
+function App() {
   useEffect(() => {
-    console.log('[evenhub.App.tsx] Bootstrapping HomePilot Explorer on EvenHub...');
+    console.log(`[evenhub.App.tsx]useEffect start`);
+    console.log(`[evenhub.App.tsx]window.location:${JSON.stringify(window.location)}`);
 
-    // PWA endpoint: either from env or local default (port 5174)
-    const envPwaUrl = import.meta.env.VITE_PWA_URL;
-    const defaultLocalUrl = `${window.location.protocol}//${window.location.hostname}:5174`;
-    const pwaURL = envPwaUrl || defaultLocalUrl;
+    const pwaURL = 'https://homepilot.s6334056.workers.dev';
 
-    setTargetUrl(pwaURL);
-
+    const isLocalPort = window.location.port === '5173';
     const isTargetDomain = window.location.href.startsWith(pwaURL);
 
-    if (!isTargetDomain) {
-      setStatus(`Redirecting to HomePilot PWA (${pwaURL})...`);
-      // Keep query parameters (e.g. ?simulator=true)
-      const searchParams = window.location.search;
-      const destination = `${pwaURL}${searchParams}`;
-      console.log(`[evenhub.App.tsx] Navigating to: ${destination}`);
-      window.location.href = destination;
-    } else {
-      setStatus('Connected to HomePilot PWA.');
+    console.log(`[evenhub.App.tsx]isLocalPort:${isLocalPort}`);
+    if (isLocalPort) {
+      const newUrl = new URL(window.location.href);
+      const newPort = '5174';
+      newUrl.port = newPort;
+      newUrl.searchParams.set('mode', 'evenhub');
+      window.location.href = newUrl.toString();
+      return;
     }
+
+    console.log(`[evenhub.App.tsx]isTargetDomain:${isTargetDomain}`);
+    if (!isTargetDomain) {
+      const additionalParam = 'mode=evenhub';
+      const separator = window.location.search ? '&' : '?';
+      window.location.href = pwaURL + window.location.search + separator + additionalParam;
+      return;
+    }
+
+    console.log(`[evenhub.App.tsx]useEffect end`);
   }, []);
 
-  return (
-    <div className="evenhub-boot-container">
-      <div className="evenhub-card">
-        <div className="icon">🏠</div>
-        <h1>HomePilot Explorer</h1>
-        <p className="status-text">{status}</p>
-        {targetUrl && (
-          <div className="url-box">
-            <span>Target: </span>
-            <a href={targetUrl}>{targetUrl}</a>
-          </div>
-        )}
-        <div className="hint">Even Realities G2 Companion Service</div>
-      </div>
-    </div>
-  );
+  return <></>;
 }
 
 export default App;

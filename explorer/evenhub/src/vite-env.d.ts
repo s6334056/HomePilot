@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_PWA_URL: string;
+  readonly VITE_PWA_URL?: string;
 }
 
 interface ImportMeta {
