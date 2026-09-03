@@ -3,7 +3,7 @@ import {
   OpenCodeSessionInfo,
   OpenCodeProviderModel,
 } from '../../domain/types';
-import { OpenCodeMessageWithParts } from '../../hooks/useOpenCode';
+import { OpenCodeMessageWithParts } from './message-mapper';
 
 export type G2VoiceState = 'idle' | 'ready' | 'transcribing' | 'confirmation';
 

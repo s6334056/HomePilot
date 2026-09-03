@@ -41,30 +41,27 @@ function safeSetJSON(key: string, value: unknown): void {
  * - processingSessions: which sessions are in-progress
  *
  * Both apps run in the same browser origin, so localStorage is shared.
+ *
+ * IMPORTANT: No in-memory caching is used. Every read goes directly to
+ * localStorage to ensure cross-context consistency when PWA and G2
+ * operate simultaneously in the same browser tab.
  */
 export class AgentStateStore {
-  private lastCheckedCache: Record<string, number> | null = null;
-  private processingCache: Record<string, ProcessingEntry> | null = null;
-
   // ── LastChecked ──────────────────────────────────────────────
 
   loadLastChecked(): Record<string, number> {
-    if (this.lastCheckedCache) return this.lastCheckedCache;
     const raw = safeGetJSON<Record<string, unknown>>(LAST_CHECKED_KEY);
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      this.lastCheckedCache = {};
-      return this.lastCheckedCache;
+      return {};
     }
     const result: Record<string, number> = {};
     for (const [k, v] of Object.entries(raw)) {
       if (typeof v === 'number') result[k] = v;
     }
-    this.lastCheckedCache = result;
     return result;
   }
 
   saveLastChecked(map: Record<string, number>): void {
-    this.lastCheckedCache = map;
     safeSetJSON(LAST_CHECKED_KEY, map);
   }
 
@@ -83,11 +80,9 @@ export class AgentStateStore {
   // ── Processing Sessions ──────────────────────────────────────
 
   loadProcessing(): Record<string, ProcessingEntry> {
-    if (this.processingCache) return this.processingCache;
     const raw = safeGetJSON<Record<string, unknown>>(PROCESSING_KEY);
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      this.processingCache = {};
-      return this.processingCache;
+      return {};
     }
     const now = Date.now();
     const result: Record<string, ProcessingEntry> = {};
@@ -101,12 +96,10 @@ export class AgentStateStore {
         result[k] = entry;
       }
     }
-    this.processingCache = result;
     return result;
   }
 
   saveProcessing(map: Record<string, ProcessingEntry>): void {
-    this.processingCache = map;
     safeSetJSON(PROCESSING_KEY, map);
   }
 

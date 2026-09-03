@@ -1,7 +1,6 @@
 import {
   OpenCodeConnectionStatus,
   OpenCodeSessionInfo,
-  OpenCodeSessionStatus,
   OpenCodeMessageInfo,
   OpenCodeMessagePart,
   OpenCodeSSEEvent,
@@ -16,6 +15,32 @@ import { G2AgentState, createInitialG2AgentState } from './types';
 import { mapApiMessagesToWithParts, OpenCodeMessageWithParts } from './message-mapper';
 
 export type G2AgentStateListener = (state: G2AgentState) => void;
+
+/**
+ * Sort sessions by time.updated descending (most recent first).
+ * If time.updated is missing, treat as 0.
+ */
+function sortSessionsByUpdated(sessions: OpenCodeSessionInfo[]): OpenCodeSessionInfo[] {
+  return [...sessions].sort((a, b) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0));
+}
+
+/**
+ * Insert a session into a sorted list maintaining sort order.
+ */
+function insertSessionSorted(
+  sessions: OpenCodeSessionInfo[],
+  session: OpenCodeSessionInfo,
+): OpenCodeSessionInfo[] {
+  const updated = session.time?.updated ?? 0;
+  for (let i = 0; i < sessions.length; i++) {
+    if (updated > (sessions[i].time?.updated ?? 0)) {
+      const result = [...sessions];
+      result.splice(i, 0, session);
+      return result;
+    }
+  }
+  return [...sessions, session];
+}
 
 /**
  * G2AgentController manages Agent runtime state for the G2 glasses.
@@ -37,7 +62,6 @@ export class G2AgentController {
   private client: OpenCodeClient | null = null;
   private store: AgentStateStore;
   private disposers: Array<() => void> = [];
-  private sendingStatusRef: string | null = null;
 
   constructor(store?: AgentStateStore) {
     this.store = store || new AgentStateStore();
@@ -83,7 +107,6 @@ export class G2AgentController {
     this.disposers = [];
     this.client = null;
     this.listeners.clear();
-    this.sendingStatusRef = null;
   }
 
   // ── State Access ─────────────────────────────────────────────
@@ -118,14 +141,15 @@ export class G2AgentController {
     if (!this.client) return;
     try {
       const sessions = await this.client.getSessions();
-      this.updateState({ sessions, error: null });
+      const sorted = sortSessionsByUpdated(sessions);
+      this.updateState({ sessions: sorted, error: null });
 
       // Prune lastChecked for sessions that no longer exist
-      const activeIDs = new Set(sessions.map((s) => s.id));
+      const activeIDs = new Set(sorted.map((s) => s.id));
       this.store.pruneLastChecked(activeIDs);
 
       // Rebuild unread from persistent lastChecked + sessions
-      this.rebuildUnread(sessions);
+      this.rebuildUnread(sorted);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load sessions';
       this.updateState({ error: msg });
@@ -134,7 +158,6 @@ export class G2AgentController {
 
   async selectSession(sessionID: string): Promise<void> {
     if (!this.client) return;
-    this.sendingStatusRef = null;
 
     // Mark as checked (persistent)
     this.store.setLastChecked(sessionID, Date.now());
@@ -156,6 +179,10 @@ export class G2AgentController {
       const apiMessages = await this.client.getMessages(sessionID);
       const messages = mapApiMessagesToWithParts(apiMessages, sessionID);
       this.updateState({ messages, isLoadingMessages: false });
+
+      // After loading messages, check if this session should be removed from processing.
+      // Clear processing if the latest assistant message has finish === "stop".
+      this.checkAndClearProcessing(sessionID, messages);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load messages';
       this.updateState({ isLoadingMessages: false, error: msg });
@@ -171,7 +198,7 @@ export class G2AgentController {
         model: { id: model.modelID, providerID: model.providerID },
       });
       this.updateState({
-        sessions: [session, ...this.state.sessions],
+        sessions: insertSessionSorted(this.state.sessions, session),
       });
       return session.id;
     } catch (e: unknown) {
@@ -190,11 +217,12 @@ export class G2AgentController {
       const apiMessages = await this.client.getMessages(this.state.selectedSessionID);
       const messages = mapApiMessagesToWithParts(apiMessages, this.state.selectedSessionID);
       this.updateState({ messages, isLoadingMessages: false, error: null });
-      this.sendingStatusRef = null;
+
+      // After refresh, check if the selected session should be removed from processing
+      this.checkAndClearProcessing(this.state.selectedSessionID, messages);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load messages';
       this.updateState({ isLoadingMessages: false, error: msg });
-      this.sendingStatusRef = null;
     }
   }
 
@@ -241,7 +269,6 @@ export class G2AgentController {
       // SSE events will handle the real message updates
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to send message';
-      this.sendingStatusRef = null;
       this.store.clearProcessing(sessionID);
       this.updateState({
         messages: this.state.messages.filter(
@@ -343,7 +370,7 @@ export class G2AgentController {
     const exists = this.state.sessions.some((s) => s.id === props.sessionID);
     if (exists) return;
     this.updateState({
-      sessions: [newSession, ...this.state.sessions],
+      sessions: insertSessionSorted(this.state.sessions, newSession),
     });
   }
 
@@ -352,10 +379,14 @@ export class G2AgentController {
     if (!props?.sessionID) return;
     const mergedInfo = props.info;
 
+    // Re-sort: merge info, then re-sort the full list by time.updated
+    const updatedSessions = this.state.sessions.map((s) =>
+      s.id === props.sessionID ? { ...s, ...mergedInfo } : s
+    );
+    const sorted = sortSessionsByUpdated(updatedSessions);
+
     this.updateState({
-      sessions: this.state.sessions.map((s) =>
-        s.id === props.sessionID ? { ...s, ...mergedInfo } : s
-      ),
+      sessions: sorted,
       selectedSession:
         this.state.selectedSession?.id === props.sessionID
           ? { ...this.state.selectedSession, ...mergedInfo }
@@ -364,35 +395,17 @@ export class G2AgentController {
   }
 
   private handleSessionStatus(properties: Record<string, unknown>): void {
-    const props = properties as unknown as { sessionID: string; status: OpenCodeSessionStatus };
+    const props = properties as unknown as { sessionID: string; status: { type: string } };
     if (!props?.sessionID) return;
 
-    const newType = props.status?.type ?? '';
-
-    // Track sending status for the selected session
-    if (this.state.selectedSessionID === props.sessionID) {
-      if (newType === 'idle' || newType === '') {
-        this.sendingStatusRef = null;
-      } else if (this.sendingStatusRef === null) {
-        this.sendingStatusRef = newType;
-      } else if (newType !== this.sendingStatusRef) {
-        this.sendingStatusRef = null;
-      }
-    }
-
-    // Remove from processing on status change
-    if (
-      this.state.processingSessionIDs.includes(props.sessionID) &&
-      newType !== '' &&
-      newType !== 'idle'
-    ) {
-      this.store.clearProcessing(props.sessionID);
-      this.updateState({
-        processingSessionIDs: this.state.processingSessionIDs.filter(
-          (id) => id !== props.sessionID
-        ),
-      });
-    }
+    // NOTE: session.status is NOT used to clear processing.
+    // Processing is cleared when:
+    //   1. A message.updated event with finish === "stop" arrives (see handleMessageUpdated)
+    //   2. Messages are loaded via selectSession/refreshMessages and the latest
+    //      assistant message has finish === "stop" (see checkAndClearProcessing)
+    //
+    // This avoids the problem where session.status = "busy" arriving immediately
+    // after sendMessage would prematurely clear processing before the agent responds.
   }
 
   private handleMessageUpdated(properties: Record<string, unknown>): void {
@@ -402,6 +415,15 @@ export class G2AgentController {
       info: Partial<OpenCodeMessageInfo>;
     };
     if (!props?.sessionID || !props?.messageID) return;
+
+    // Processing clear must run regardless of selectedSessionID.
+    // If a non-selected session's agent finishes (finish==="stop"),
+    // processing should still be cleared.
+    if (props.info?.finish === 'stop' && props.info?.role === 'assistant') {
+      this.clearProcessingForSession(props.sessionID);
+    }
+
+    // Only update messages if this is the currently selected session
     if (this.state.selectedSessionID !== props.sessionID) return;
 
     let filteredMessages = this.state.messages;
@@ -418,22 +440,24 @@ export class G2AgentController {
     }
 
     const existingIdx = filteredMessages.findIndex((m) => m.id === props.messageID);
+    let updatedMessages: OpenCodeMessageWithParts[];
     if (existingIdx >= 0) {
       const updated = [...filteredMessages];
       updated[existingIdx] = { ...updated[existingIdx], ...props.info };
-      this.updateState({ messages: updated });
-      return;
+      updatedMessages = updated;
+    } else {
+      const newMsg: OpenCodeMessageWithParts = {
+        id: props.messageID,
+        role: props.info?.role || 'assistant',
+        sessionID: props.sessionID,
+        ...props.info,
+        parts: [],
+        contentText: '',
+      };
+      updatedMessages = [...filteredMessages, newMsg];
     }
 
-    const newMsg: OpenCodeMessageWithParts = {
-      id: props.messageID,
-      role: props.info?.role || 'assistant',
-      sessionID: props.sessionID,
-      ...props.info,
-      parts: [],
-      contentText: '',
-    };
-    this.updateState({ messages: [...filteredMessages, newMsg] });
+    this.updateState({ messages: updatedMessages });
   }
 
   private handleMessagePartUpdated(properties: Record<string, unknown>): void {
@@ -516,11 +540,61 @@ export class G2AgentController {
     this.updateState({ messages });
   }
 
+  // ── Processing Management ────────────────────────────────────
+
+  /**
+   * Check if a session's latest assistant message has finish === "stop",
+   * and if so, clear processing for that session.
+   * Called after loading messages (selectSession, refreshMessages).
+   */
+  private checkAndClearProcessing(sessionID: string, messages: OpenCodeMessageWithParts[]): void {
+    if (!this.state.processingSessionIDs.includes(sessionID)) return;
+
+    // Find the latest assistant message
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role === 'assistant') {
+        if (msg.finish === 'stop') {
+          this.clearProcessingForSession(sessionID);
+        }
+        // Whether finish is "stop" or not, we found the latest assistant message.
+        // If it's not "stop", the session is still actively processing.
+        break;
+      }
+    }
+  }
+
+  /**
+   * Clear processing state for a specific session (runtime + persistent).
+   */
+  private clearProcessingForSession(sessionID: string): void {
+    this.store.clearProcessing(sessionID);
+    if (this.state.processingSessionIDs.includes(sessionID)) {
+      this.updateState({
+        processingSessionIDs: this.state.processingSessionIDs.filter(
+          (id) => id !== sessionID
+        ),
+      });
+    }
+  }
+
   // ── Unread Rebuild ───────────────────────────────────────────
 
   /**
    * Rebuild unread state from sessions and persistent lastChecked.
-   * Used after initial session load or refresh.
+   *
+   * Uses session.time.updated as a preliminary indicator. This is the same
+   * approach the PWA uses before syncSessionStates() refines it.
+   *
+   * Note: session.time.updated reflects ALL session activity (including
+   * user messages), not just assistant responses. This means:
+   * - Sessions where the user sent a message but got no response yet
+   *   may appear as "unread" (false positive).
+   * - This is acceptable as a preliminary indicator. The Chat Page
+   *   can verify by loading messages and checking finish === "stop".
+   *
+   * A future enhancement could add a lightweight "last assistant completed"
+   * timestamp to avoid false positives without fetching all messages.
    */
   private rebuildUnread(sessions: OpenCodeSessionInfo[]): void {
     const lastChecked = this.store.loadLastChecked();
