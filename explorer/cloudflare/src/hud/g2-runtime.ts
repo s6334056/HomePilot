@@ -4,9 +4,11 @@ import {
   OsEventTypeList,
 } from '@evenrealities/even_hub_sdk';
 import { PageManager } from './page-manager';
+import { ExplorerPage } from './pages/explorer-page';
 import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
 import { OpenCodeClient } from '../services/OpenCodeClient';
 import { OpenCodeEventService } from '../services/OpenCodeEventService';
+import { AgentService } from '../services/AgentService';
 import { G2AgentController } from './g2-agent/g2-agent-controller';
 import { AgentStateStore } from './g2-agent/agent-state-store';
 import { resolveConfig } from '../services/ConnectionConfig';
@@ -235,6 +237,19 @@ export class G2RuntimeManager {
         this.g2AgentController = new G2AgentController(this.agentStateStore);
         this.g2AgentController.initialize(this.openCodeClient, this.openCodeEventService);
       }
+
+      // 7. Create ExplorerPage and navigate to it on G2
+      this.updateStatus('Loading G2 Explorer...');
+      const agentService = new AgentService();
+      const rootPath = this.gatewayService
+        ? this.gatewayService.getRootPath()
+        : '/home';
+      const explorerPage = new ExplorerPage(
+        rootPath,
+        this.gatewayService || undefined,
+        agentService,
+      );
+      await this.pageManager.navigateTo(explorerPage);
 
       this.setState('active');
       this.updateStatus('G2 Runtime active');
