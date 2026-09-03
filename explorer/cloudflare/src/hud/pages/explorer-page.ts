@@ -4,7 +4,6 @@ import { FileSystemItem, AgentContext } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
 import { AgentService } from "../../services/AgentService";
 import { FileViewerPage } from "./file-viewer-page";
-import { AgentPlaceholderPage } from "./agent-placeholder-page";
 
 export const G2_MAX_LIST_LINES = 9;
 export const G2_MAX_LINE_WIDTH = 56;
@@ -19,6 +18,7 @@ export class ExplorerPage extends BasePage {
   private onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void;
   private onFileViewerStateChange?: (file: FileSystemItem, content: string) => void;
   private onAgentStateChange?: (context: AgentContext) => void;
+  private onAgentSessionList?: () => Promise<void>;
   private initialRestoreIndex?: number;
 
   constructor(
@@ -28,7 +28,8 @@ export class ExplorerPage extends BasePage {
     onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void,
     onFileViewerStateChange?: (file: FileSystemItem, content: string) => void,
     onAgentStateChange?: (context: AgentContext) => void,
-    initialRestoreIndex?: number
+    initialRestoreIndex?: number,
+    onAgentSessionList?: () => Promise<void>,
   ) {
     super();
     this.pageType = "ExplorerPage";
@@ -39,6 +40,7 @@ export class ExplorerPage extends BasePage {
     this.onFileViewerStateChange = onFileViewerStateChange;
     this.onAgentStateChange = onAgentStateChange;
     this.initialRestoreIndex = initialRestoreIndex;
+    this.onAgentSessionList = onAgentSessionList;
   }
 
   public async afterRender(): Promise<void> {
@@ -141,10 +143,11 @@ export class ExplorerPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
-          { id: "refresh", title: "Refresh" },
-          { id: "home", title: "Home" },
-          { id: "parent", title: "Parent Dir" },
-          { id: "info", title: "File Info" },
+          { id: "refresh", title: "更新" },
+          { id: "home", title: "ホーム" },
+          { id: "parent", title: "親フォルダ" },
+          { id: "info", title: "ファイル情報" },
+          { id: "agent", title: "エージェント画面へ" },
         ],
       },
     };
@@ -186,40 +189,30 @@ export class ExplorerPage extends BasePage {
         item,
         this.currentPath,
         this.fileService,
-        this.agentService,
         () => this.navigate(this),
         this.onFileViewerStateChange,
-        this.onAgentStateChange
+        this.onAgentSessionList,
       );
       await this.navigate(viewerPage);
     }
   }
 
   public async onDoubleClick() {
-    // Double tap = Go to parent directory
     const parentPath = this.fileService.getParentPath(this.currentPath);
     if (parentPath !== this.currentPath) {
+      // Non-root: go to parent directory
       const restoreIndex = this.parentSelectedIndex;
       this.parentSelectedIndex = undefined;
       await this.loadDirectory(parentPath, restoreIndex);
       await this.navigate(this);
+    } else if (this.onAgentSessionList) {
+      // Root: navigate to Agent Session List
+      await this.onAgentSessionList();
     }
   }
 
   public async onLongPress() {
-    // Long press = Launch Agent with current context
-    const selectedItem = this.items[this.selectedIndex] || null;
-    const context = this.agentService.open({
-      path: this.currentPath,
-      item: selectedItem,
-      source: "explorer",
-    });
-
-    const agentPage = new AgentPlaceholderPage(context, () => this.navigate(this));
-    await this.navigate(agentPage);
-    if (this.onAgentStateChange) {
-      this.onAgentStateChange(context);
-    }
+    // G2-2: Long Press is reserved for future Voice Input
   }
 
   public async onMenuItemClick(menuId: string) {
@@ -243,6 +236,11 @@ export class ExplorerPage extends BasePage {
         this.notifyStatus(info);
         break;
       }
+      case "agent":
+        if (this.onAgentSessionList) {
+          await this.onAgentSessionList();
+        }
+        break;
     }
   }
 }

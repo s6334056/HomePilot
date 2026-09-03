@@ -3,8 +3,10 @@ import {
   waitForEvenAppBridge,
   OsEventTypeList,
 } from '@evenrealities/even_hub_sdk';
-import { PageManager } from './page-manager';
+import { PageManager, BasePage } from './page-manager';
 import { ExplorerPage } from './pages/explorer-page';
+import { AgentSessionListPage } from './g2-agent/pages/agent-session-list-page';
+import { AgentChatPage } from './g2-agent/pages/agent-chat-page';
 import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
 import { OpenCodeClient } from '../services/OpenCodeClient';
 import { OpenCodeEventService } from '../services/OpenCodeEventService';
@@ -46,6 +48,11 @@ export class G2RuntimeManager {
   private openCodeEventService: OpenCodeEventService | null = null;
   private g2AgentController: G2AgentController | null = null;
   private agentStateStore: AgentStateStore | null = null;
+  private agentService: AgentService | null = null;
+
+  // Agent Navigation state
+  private agentReturnPage: BasePage | null = null;
+  private sessionListPage: AgentSessionListPage | null = null;
 
   // Callback to notify App.tsx of state changes (for UI updates)
   private onStatusUpdate?: (status: string) => void;
@@ -239,15 +246,21 @@ export class G2RuntimeManager {
       }
 
       // 7. Create ExplorerPage and navigate to it on G2
+      // Gateway is always initialized before this point (step 3)
       this.updateStatus('Loading G2 Explorer...');
-      const agentService = new AgentService();
+      this.agentService = new AgentService();
       const rootPath = this.gatewayService
         ? this.gatewayService.getRootPath()
         : '/home';
       const explorerPage = new ExplorerPage(
         rootPath,
-        this.gatewayService || undefined,
-        agentService,
+        this.gatewayService!,
+        this.agentService,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        () => this.navigateToSessionList(),
       );
       await this.pageManager.navigateTo(explorerPage);
 
@@ -314,6 +327,11 @@ export class G2RuntimeManager {
       // 6. Clear gateway reference
       this.gatewayService = null;
 
+      // 7. Clear agent navigation state
+      this.agentReturnPage = null;
+      this.sessionListPage = null;
+      this.agentService = null;
+
       this.setState('inactive');
       this.updateStatus('G2 Runtime stopped');
       console.log('[G2RuntimeManager] G2 Runtime shut down successfully.');
@@ -345,6 +363,9 @@ export class G2RuntimeManager {
     }
     this.agentStateStore = null;
     this.gatewayService = null;
+    this.agentReturnPage = null;
+    this.sessionListPage = null;
+    this.agentService = null;
   }
 
   // ── Accessors for G2 Pages ────────────────────────────────
@@ -359,6 +380,79 @@ export class G2RuntimeManager {
 
   getG2AgentController(): G2AgentController | null {
     return this.g2AgentController;
+  }
+
+  // ── Agent Navigation ──────────────────────────────────────
+
+  /**
+   * Navigate from Explorer/FileViewer to Agent Session List.
+   * Saves the current page as agentReturnPage (the page to return to).
+   */
+  async navigateToSessionList(): Promise<void> {
+    if (!this.pageManager || !this.g2AgentController) return;
+
+    // Save the current page as the return point for Agent → Explorer/FileViewer
+    this.agentReturnPage = this.pageManager.getCurrentPage() || null;
+
+    // Create or reuse session list page
+    if (!this.sessionListPage) {
+      this.sessionListPage = new AgentSessionListPage(
+        this.g2AgentController,
+        (sessionID) => this.navigateToAgentChat(sessionID),
+        () => this.returnToExplorer(),
+      );
+    }
+
+    await this.pageManager.navigateTo(this.sessionListPage);
+  }
+
+  /**
+   * Navigate from Session List to Agent Chat for a specific session.
+   * Does NOT change agentReturnPage.
+   */
+  async navigateToAgentChat(sessionID: string): Promise<void> {
+    if (!this.pageManager || !this.g2AgentController) return;
+
+    await this.g2AgentController.selectSession(sessionID);
+
+    const chatPage = new AgentChatPage(
+      sessionID,
+      this.g2AgentController,
+      () => this.returnToSessionList(),
+      () => this.returnToExplorer(),
+    );
+
+    await this.pageManager.navigateTo(chatPage);
+  }
+
+  /**
+   * Navigate from Chat back to Session List.
+   * Reuses the same sessionListPage instance.
+   * Does NOT change agentReturnPage.
+   */
+  async returnToSessionList(): Promise<void> {
+    if (!this.pageManager || !this.sessionListPage) return;
+
+    // Refresh sessions when returning to list (session status may have changed)
+    if (this.g2AgentController) {
+      await this.g2AgentController.refreshSessions();
+    }
+
+    await this.pageManager.navigateTo(this.sessionListPage);
+  }
+
+  /**
+   * Navigate from Agent (Session List or Chat) back to the original
+   * Explorer/FileViewer page. Clears agentReturnPage and sessionListPage.
+   */
+  async returnToExplorer(): Promise<void> {
+    if (!this.pageManager || !this.agentReturnPage) return;
+
+    const returnPage = this.agentReturnPage;
+    this.agentReturnPage = null;
+    this.sessionListPage = null;
+
+    await this.pageManager.navigateTo(returnPage);
   }
 
   // ── Cleanup ───────────────────────────────────────────────

@@ -1,9 +1,7 @@
 import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../page-manager";
-import { FileSystemItem, AgentContext } from "../../domain/types";
+import { FileSystemItem } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
-import { AgentService } from "../../services/AgentService";
-import { AgentPlaceholderPage } from "./agent-placeholder-page";
 
 export const G2_VIEWER_LINES = 9;
 export const G2_VIEWER_MAX_WIDTH = 56;
@@ -16,12 +14,10 @@ interface WrappedLine {
 
 export class FileViewerPage extends BasePage {
   private file: FileSystemItem;
-  private parentPath: string;
   private fileService: FileSystemService;
-  private agentService: AgentService;
   private onBackToExplorer: () => Promise<boolean>;
   private onStateChange?: (file: FileSystemItem, content: string) => void;
-  private onAgentStateChange?: (context: AgentContext) => void;
+  private onAgentSessionList?: () => Promise<void>;
   private content: string = "";
   private lines: string[] = [];
   private wrappedLines: WrappedLine[] = [];
@@ -31,20 +27,17 @@ export class FileViewerPage extends BasePage {
     file: FileSystemItem,
     parentPath: string,
     fileService: FileSystemService,
-    agentService: AgentService,
     onBackToExplorer: () => Promise<boolean>,
     onStateChange?: (file: FileSystemItem, content: string) => void,
-    onAgentStateChange?: (context: AgentContext) => void
+    onAgentSessionList?: () => Promise<void>,
   ) {
     super();
     this.pageType = "FileViewerPage";
     this.file = file;
-    this.parentPath = parentPath;
     this.fileService = fileService;
-    this.agentService = agentService;
     this.onBackToExplorer = onBackToExplorer;
     this.onStateChange = onStateChange;
-    this.onAgentStateChange = onAgentStateChange;
+    this.onAgentSessionList = onAgentSessionList;
   }
 
   public async afterRender(): Promise<void> {
@@ -227,10 +220,10 @@ export class FileViewerPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
-          { id: "back", title: "Back to Explorer" },
-          { id: "agent", title: "Ask Agent" },
-          { id: "top", title: "Scroll to Top" },
-          { id: "bottom", title: "Scroll to Bottom" },
+          { id: "back", title: "戻る" },
+          { id: "agent", title: "エージェント画面へ" },
+          { id: "top", title: "先頭へ" },
+          { id: "bottom", title: "末尾へ" },
         ],
       },
     };
@@ -261,18 +254,7 @@ export class FileViewerPage extends BasePage {
   }
 
   public async onLongPress() {
-    const context = this.agentService.open({
-      path: this.parentPath,
-      selectedFile: this.file,
-      content: this.content,
-      source: "file_viewer",
-    });
-
-    const agentPage = new AgentPlaceholderPage(context, () => this.navigate(this));
-    await this.navigate(agentPage);
-    if (this.onAgentStateChange) {
-      this.onAgentStateChange(context);
-    }
+    // G2-2: Long Press is reserved for future Voice Input
   }
 
   public async onMenuItemClick(menuId: string) {
@@ -281,7 +263,9 @@ export class FileViewerPage extends BasePage {
         await this.onDoubleClick();
         break;
       case "agent":
-        await this.onLongPress();
+        if (this.onAgentSessionList) {
+          await this.onAgentSessionList();
+        }
         break;
       case "top":
         this.scrollPosition = 0;

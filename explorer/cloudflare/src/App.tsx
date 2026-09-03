@@ -1,9 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { ExplorerPage } from './hud/pages/explorer-page';
-import { FileViewerPage } from './hud/pages/file-viewer-page';
 import { MockFileSystemService } from './services/MockFileSystemService';
 import { GatewayFileSystemService } from './services/GatewayFileSystemService';
-import { AgentService } from './services/AgentService';
 import { FileSystemService } from './services/FileSystemService';
 import { resolveConfig } from './services/ConnectionConfig';
 import { FileSystemItem, ScreenType, AgentContext } from './domain/types';
@@ -37,7 +34,6 @@ function isGatewayService(s: FileSystemService): s is GatewayFileSystemService {
 
 export function App() {
   const [fileService, setFileService] = useState<FileSystemService>(() => createFileService());
-  const [agentService] = useState(() => new AgentService());
 
   // G2 Runtime Manager (created once, manages lifecycle of all G2 resources)
   const [g2Runtime] = useState(() => new G2RuntimeManager(
@@ -53,9 +49,6 @@ export function App() {
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [selectedFile, setSelectedFile] = useState<FileSystemItem | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
-
-  // Agent context (from Explorer)
-  const [_agentContext, setAgentContext] = useState<AgentContext | null>(null);
 
   // Screen state
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('explorer');
