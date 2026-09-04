@@ -5,6 +5,7 @@ import {
   json, noContent, errorResponse,
   handleHealth, handleRoot, handleDirectory, handleFile,
   handleOpenCodeProxy, handleOpenCodeProxyBody, handleOpenCodeSSE,
+  handleDiagSSE,
 } from './handlers.js';
 import { handleSpeechTranscribe } from './speech.js';
 
@@ -106,6 +107,11 @@ const server = createServer(async (request, response) => {
       return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed.');
     }
     return handleSpeechTranscribe(request, response);
+  }
+
+  // --- Diagnostic SSE test endpoint (no auth required) ---
+  if (path === '/api/diag/sse') {
+    return handleDiagSSE(request, response);
   }
 
   // --- OpenCode Proxy ---

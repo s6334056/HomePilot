@@ -3,6 +3,7 @@ import { MockFileSystemService } from './services/MockFileSystemService';
 import { GatewayFileSystemService } from './services/GatewayFileSystemService';
 import { FileSystemService } from './services/FileSystemService';
 import { resolveConfig } from './services/ConnectionConfig';
+import { runDiagSSETest } from './services/DiagSSETest';
 import { FileSystemItem, ScreenType, AgentContext } from './domain/types';
 import { Navbar } from './components/Navbar';
 import { FileTable } from './components/FileTable';
@@ -154,6 +155,11 @@ export function App() {
       g2Runtime.destroy();
     };
   }, [g2Runtime]);
+
+  // DIAG-SSE-TEST: handler for diagnostic button
+  const handleDiagSSE = useCallback(() => {
+    runDiagSSETest();
+  }, []);
 
   // ── PWA Navigation (independent of G2) ────────────────────
 
@@ -492,6 +498,28 @@ export function App() {
           </div>
         </div>
       )}
+
+      {/* DIAG-SSE-TEST: Temporary diagnostic button */}
+      <button
+        onClick={handleDiagSSE}
+        style={{
+          position: 'fixed',
+          bottom: 12,
+          right: 12,
+          zIndex: 9999,
+          padding: '6px 10px',
+          fontSize: 11,
+          background: '#333',
+          color: '#fff',
+          border: '1px solid #555',
+          borderRadius: 4,
+          cursor: 'pointer',
+          opacity: 0.7,
+        }}
+        title="DIAG-SSE-TEST: Run pure SSE diagnostic"
+      >
+        Diag SSE
+      </button>
     </div>
   );
 }

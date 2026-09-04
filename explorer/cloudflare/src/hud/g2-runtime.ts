@@ -10,7 +10,6 @@ import { AgentChatPage } from './g2-agent/pages/agent-chat-page';
 import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
 import { OpenCodeClient } from '../services/OpenCodeClient';
 import { OpenCodeEventService } from '../services/OpenCodeEventService';
-import { AgentService } from '../services/AgentService';
 import { G2AgentController } from './g2-agent/g2-agent-controller';
 import { AgentStateStore } from './g2-agent/agent-state-store';
 import { resolveConfig } from '../services/ConnectionConfig';
@@ -48,7 +47,6 @@ export class G2RuntimeManager {
   private openCodeEventService: OpenCodeEventService | null = null;
   private g2AgentController: G2AgentController | null = null;
   private agentStateStore: AgentStateStore | null = null;
-  private agentService: AgentService | null = null;
 
   // Agent Navigation state
   private agentReturnPage: BasePage | null = null;
@@ -248,15 +246,12 @@ export class G2RuntimeManager {
       // 7. Create ExplorerPage and navigate to it on G2
       // Gateway is always initialized before this point (step 3)
       this.updateStatus('Loading G2 Explorer...');
-      this.agentService = new AgentService();
       const rootPath = this.gatewayService
         ? this.gatewayService.getRootPath()
         : '/home';
       const explorerPage = new ExplorerPage(
         rootPath,
         this.gatewayService!,
-        this.agentService,
-        undefined,
         undefined,
         undefined,
         undefined,
@@ -330,7 +325,6 @@ export class G2RuntimeManager {
       // 7. Clear agent navigation state
       this.agentReturnPage = null;
       this.sessionListPage = null;
-      this.agentService = null;
 
       this.setState('inactive');
       this.updateStatus('G2 Runtime stopped');
@@ -365,7 +359,6 @@ export class G2RuntimeManager {
     this.gatewayService = null;
     this.agentReturnPage = null;
     this.sessionListPage = null;
-    this.agentService = null;
   }
 
   // ── Accessors for G2 Pages ────────────────────────────────

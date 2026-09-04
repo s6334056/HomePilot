@@ -11,6 +11,10 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
 };
 
+function ts() {
+  return new Date().toISOString().slice(11, 23);
+}
+
 export function json(response, statusCode, data) {
   response.writeHead(statusCode, {
     ...CORS_HEADERS,
@@ -209,7 +213,13 @@ export async function handleOpenCodeProxyBody(request, response, openCodePath) {
 }
 
 export function handleOpenCodeSSE(request, response, openCodePath) {
-  console.log(`[DIAG-SSE] 1. Received SSE request: ${request.method} ${openCodePath}`);
+  const diagId = Math.random().toString(36).slice(2, 8);
+  const startTime = Date.now();
+  let chunkSeq = 0;
+  let sseEventCount = 0;
+  let sseBuffer = Buffer.alloc(0);
+
+  console.log(`[${ts()}] [DIAG-SSE] [${diagId}] 1. Received SSE request: ${request.method} ${openCodePath}`);
 
   const options = {
     hostname: CONFIG.OPENCODE_HOST,
@@ -224,11 +234,11 @@ export function handleOpenCodeSSE(request, response, openCodePath) {
     },
   };
 
-  console.log(`[DIAG-SSE] 2. Connecting to OpenCode Server: http://${options.hostname}:${options.port}${options.path}`);
+  console.log(`[${ts()}] [DIAG-SSE] [${diagId}] 2. Connecting to OpenCode Server: http://${options.hostname}:${options.port}${options.path}`);
 
   const proxyReq = httpRequest(options, (proxyRes) => {
-    console.log(`[DIAG-SSE] 3. OpenCode Server responded: HTTP ${proxyRes.statusCode}`);
-    console.log(`[DIAG-SSE] 3a. OpenCode Server response headers:`, JSON.stringify(proxyRes.headers));
+    console.log(`[${ts()}] [DIAG-SSE] [${diagId}] 3. OpenCode Server responded: HTTP ${proxyRes.statusCode}`);
+    console.log(`[${ts()}] [DIAG-SSE] [${diagId}] 3a. OpenCode Server response headers:`, JSON.stringify(proxyRes.headers));
 
     const responseHeaders = {
       'Content-Type': 'text/event-stream',
@@ -239,26 +249,143 @@ export function handleOpenCodeSSE(request, response, openCodePath) {
       'Access-Control-Allow-Headers': 'Authorization, Content-Type',
     };
 
-    console.log(`[DIAG-SSE] 4. Gateway response headers:`, JSON.stringify(responseHeaders));
+    console.log(`[${ts()}] [DIAG-SSE] [${diagId}] 4. Gateway response headers:`, JSON.stringify(responseHeaders));
     response.writeHead(proxyRes.statusCode, responseHeaders);
-    console.log(`[DIAG-SSE] 5. SSE stream forwarding started`);
+    console.log(`[${ts()}] [DIAG-SSE] [${diagId}] 5. SSE stream forwarding started`);
 
-    proxyRes.pipe(response);
+    proxyRes.on('data', (chunk) => {
+      chunkSeq++;
+      const recvTime = ts();
+
+      // --- DIAG: chunk content analysis ---
+      const str = chunk.toString('utf-8');
+
+      // Escaped preview (first 120 chars, last 60 chars)
+      const previewHead = str.slice(0, 120).replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+      const previewTail = str.slice(-60).replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+      const preview = chunk.length > 180
+        ? `"${previewHead}...${previewTail}"`
+        : `"${str.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}"`;
+
+      // Line ending analysis
+      const lfCount = (str.match(/\n/g) || []).length;
+      const crCount = (str.match(/\r(?!\n)/g) || []).length;
+      const crlfCount = (str.match(/\r\n/g) || []).length;
+
+      // SSE field counts
+      const dataCount = (str.match(/^data:/gm) || []).length;
+      const eventCount = (str.match(/^event:/gm) || []).length;
+      const idCount = (str.match(/^id:/gm) || []).length;
+      const retryCount = (str.match(/^retry:/gm) || []).length;
+
+      // Event boundary detection: \n\n or \r\n\r\n
+      const doubleLf = str.includes('\n\n');
+      const doubleCrLf = str.includes('\r\n\r\n');
+      const hasEventBoundary = doubleLf || doubleCrLf;
+
+      // Does chunk start at event boundary? (buffer was empty or ended with boundary)
+      const startsAtBoundary = sseBuffer.length === 0;
+      // Does chunk end at event boundary?
+      const endsAtBoundary = hasEventBoundary && (
+        str.endsWith('\n\n') || str.endsWith('\r\n\r\n')
+      );
+
+      // Append to buffer and count complete events
+      sseBuffer = Buffer.concat([sseBuffer, chunk]);
+      const bufStr = sseBuffer.toString('utf-8');
+      const completeEvents = (bufStr.match(/\n\n/g) || []).length + (bufStr.match(/\r\n\r\n/g) || []).length;
+      const prevEventCount = sseEventCount;
+      sseEventCount = completeEvents;
+      const newEvents = sseEventCount - prevEventCount;
+
+      // Check for incomplete fragment at buffer tail
+      const lastBoundary = Math.max(bufStr.lastIndexOf('\n\n'), bufStr.lastIndexOf('\r\n\r\n'));
+      const tailAfterBoundary = lastBoundary >= 0 ? bufStr.slice(lastBoundary + (bufStr[lastBoundary] === '\r' ? 4 : 2)) : bufStr;
+      const hasIncompleteFragment = tailAfterBoundary.length > 0;
+
+      console.log(`[${recvTime}] [DIAG-SSE] [${diagId}] chunk seq=${chunkSeq} bytes=${chunk.length} lf=${lfCount} cr=${crCount} crlf=${crlfCount} data_fields=${dataCount} event_fields=${eventCount} id_fields=${idCount} retry_fields=${retryCount} boundary=${hasEventBoundary} starts_at_boundary=${startsAtBoundary} ends_at_boundary=${endsAtBoundary} new_events=${newEvents} total_events=${sseEventCount} incomplete_fragment=${hasIncompleteFragment} fragment_bytes=${tailAfterBoundary.length}`);
+      console.log(`[${recvTime}] [DIAG-SSE] [${diagId}] chunk preview: ${preview}`);
+
+      // Write to client
+      response.write(chunk);
+      const writeTime = ts();
+      console.log(`[${writeTime}] [DIAG-SSE] [${diagId}] chunk seq=${chunkSeq} written`);
+    });
 
     proxyRes.on('end', () => {
-      console.log(`[DIAG-SSE] 7. OpenCode Server closed connection`);
+      const elapsed = Date.now() - startTime;
+      const bufStr = sseBuffer.toString('utf-8');
+      const remainingBytes = bufStr.length;
+      console.log(`[${ts()}] [DIAG-SSE] [${diagId}] 7. OpenCode Server closed connection elapsed=${elapsed}ms total_chunks=${chunkSeq} total_events=${sseEventCount} remaining_buffer_bytes=${remainingBytes}`);
+      if (remainingBytes > 0) {
+        const tailPreview = bufStr.slice(-200).replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+        console.log(`[${ts()}] [DIAG-SSE] [${diagId}] remaining buffer tail: "${tailPreview}"`);
+      }
     });
   });
 
   proxyReq.on('error', (err) => {
-    console.log(`[DIAG-SSE] ERROR: OpenCode Server connection error: ${err.message}`);
+    const elapsed = Date.now() - startTime;
+    console.log(`[${ts()}] [DIAG-SSE] [${diagId}] ERROR: OpenCode Server connection error: ${err.message} elapsed=${elapsed}ms`);
     errorResponse(response, 502, 'BAD_GATEWAY', 'OpenCode Server is not reachable.');
   });
 
   proxyReq.end();
 
   request.on('close', () => {
-    console.log(`[DIAG-SSE] 6. Client disconnected`);
+    const elapsed = Date.now() - startTime;
+    console.log(`[${ts()}] [DIAG-SSE] [${diagId}] 6. Client disconnected elapsed=${elapsed}ms total_chunks=${chunkSeq} total_events=${sseEventCount}`);
     proxyReq.destroy();
+  });
+}
+
+// --- DIAG-SSE-TEST: Pure SSE test endpoint (no OpenCode Server dependency) ---
+
+export function handleDiagSSE(request, response) {
+  const diagId = Math.random().toString(36).slice(2, 8);
+  const startTime = Date.now();
+  let seq = 0;
+
+  console.log(`[${ts()}] [DIAG-SSE-TEST] [${diagId}] connection started from ${request.socket.remoteAddress}`);
+
+  const responseHeaders = {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  };
+
+  response.writeHead(200, responseHeaders);
+  console.log(`[${ts()}] [DIAG-SSE-TEST] [${diagId}] response headers sent`);
+
+  function writeEvent(data) {
+    seq++;
+    const payload = `data: ${JSON.stringify(data)}\n\n`;
+    const bytes = Buffer.byteLength(payload);
+    response.write(payload);
+    console.log(`[${ts()}] [DIAG-SSE-TEST] [${diagId}] write seq=${seq} bytes=${bytes} type=${data.type}`);
+  }
+
+  // Send hello event immediately
+  writeEvent({ type: 'hello', seq: 1, ts: new Date().toISOString(), source: 'gateway-diag' });
+
+  // Send heartbeat events at 3-second intervals
+  const interval = setInterval(() => {
+    writeEvent({ type: 'heartbeat', seq: seq + 1, ts: new Date().toISOString() });
+    if (seq >= 4) {
+      clearInterval(interval);
+      const elapsed = Date.now() - startTime;
+      console.log(`[${ts()}] [DIAG-SSE-TEST] [${diagId}] test complete, sending final event elapsed=${elapsed}ms total_events=${seq}`);
+      writeEvent({ type: 'done', seq: seq + 1, ts: new Date().toISOString(), total_events: seq + 1 });
+      response.end();
+    }
+  }, 3000);
+
+  request.on('close', () => {
+    clearInterval(interval);
+    const elapsed = Date.now() - startTime;
+    console.log(`[${ts()}] [DIAG-SSE-TEST] [${diagId}] client disconnected elapsed=${elapsed}ms total_events=${seq}`);
   });
 }

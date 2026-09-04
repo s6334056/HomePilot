@@ -25,7 +25,6 @@ export class FileViewerPage extends BasePage {
 
   constructor(
     file: FileSystemItem,
-    parentPath: string,
     fileService: FileSystemService,
     onBackToExplorer: () => Promise<boolean>,
     onStateChange?: (file: FileSystemItem, content: string) => void,

@@ -1,8 +1,7 @@
 import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../page-manager";
-import { FileSystemItem, AgentContext } from "../../domain/types";
+import { FileSystemItem } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
-import { AgentService } from "../../services/AgentService";
 import { FileViewerPage } from "./file-viewer-page";
 
 export const G2_MAX_LIST_LINES = 9;
@@ -14,20 +13,16 @@ export class ExplorerPage extends BasePage {
   private selectedIndex: number = 0;
   private parentSelectedIndex?: number;
   private fileService: FileSystemService;
-  private agentService: AgentService;
   private onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void;
   private onFileViewerStateChange?: (file: FileSystemItem, content: string) => void;
-  private onAgentStateChange?: (context: AgentContext) => void;
   private onAgentSessionList?: () => Promise<void>;
   private initialRestoreIndex?: number;
 
   constructor(
     currentPath: string,
     fileService: FileSystemService,
-    agentService: AgentService,
     onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void,
     onFileViewerStateChange?: (file: FileSystemItem, content: string) => void,
-    onAgentStateChange?: (context: AgentContext) => void,
     initialRestoreIndex?: number,
     onAgentSessionList?: () => Promise<void>,
   ) {
@@ -35,10 +30,8 @@ export class ExplorerPage extends BasePage {
     this.pageType = "ExplorerPage";
     this.currentPath = currentPath;
     this.fileService = fileService;
-    this.agentService = agentService;
     this.onStateChange = onStateChange;
     this.onFileViewerStateChange = onFileViewerStateChange;
-    this.onAgentStateChange = onAgentStateChange;
     this.initialRestoreIndex = initialRestoreIndex;
     this.onAgentSessionList = onAgentSessionList;
   }
@@ -187,7 +180,6 @@ export class ExplorerPage extends BasePage {
       // Navigate to File Viewer
       const viewerPage = new FileViewerPage(
         item,
-        this.currentPath,
         this.fileService,
         () => this.navigate(this),
         this.onFileViewerStateChange,

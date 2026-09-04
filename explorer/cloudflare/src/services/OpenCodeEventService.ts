@@ -42,6 +42,8 @@ export class OpenCodeEventService {
   }
 
   disconnect(): void {
+    console.log(`[SSE-CLIENT] disconnect() called`);
+    console.log(`[SSE-CLIENT] readyState before disconnect: ${this.eventSource?.readyState ?? 'no EventSource'}`);
     if (this.heartbeatTimer) {
       clearTimeout(this.heartbeatTimer);
       this.heartbeatTimer = null;
@@ -51,6 +53,7 @@ export class OpenCodeEventService {
       this.reconnectTimer = null;
     }
     if (this.eventSource) {
+      console.log(`[SSE-CLIENT] EventSource.close()`);
       this.eventSource.close();
       this.eventSource = null;
     }
@@ -60,6 +63,7 @@ export class OpenCodeEventService {
 
   private openSSE(): void {
     if (this.eventSource) {
+      console.log(`[SSE-CLIENT] Closing existing EventSource before opening new one`);
       this.eventSource.close();
     }
 
@@ -69,6 +73,8 @@ export class OpenCodeEventService {
       const sseUrl = `${this.gatewayUrl}/api/opencode/event?token=${encodeURIComponent(this.gatewayToken)}`;
       console.log(`[SSE-CLIENT] Opening EventSource: ${this.gatewayUrl}/api/opencode/event?token=***`);
       this.eventSource = new EventSource(sseUrl);
+      console.log(`[SSE-CLIENT] EventSource created`);
+      console.log(`[SSE-CLIENT] readyState after create: ${this.eventSource.readyState} (CONNECTING=0, OPEN=1, CLOSED=2)`);
     } catch (e) {
       console.log(`[SSE-CLIENT] EventSource constructor failed:`, e);
       this.handleError();
@@ -76,7 +82,9 @@ export class OpenCodeEventService {
     }
 
     this.eventSource.onopen = () => {
-      console.log(`[SSE-CLIENT] onopen - connected`);
+      console.log(`[SSE-CLIENT] onopen`);
+      console.log(`[SSE-CLIENT] readyState: ${this.eventSource?.readyState}`);
+      console.log(`[SSE-CLIENT] connected state: ${this._connected}`);
       this._connected = true;
       this.reconnectAttempts = 0;
       this.notifyConnection('connected');
@@ -84,12 +92,20 @@ export class OpenCodeEventService {
     };
 
     this.eventSource.onmessage = (event: MessageEvent) => {
+      console.log(`[SSE-CLIENT] onmessage`);
+      console.log(`[SSE-CLIENT] readyState: ${this.eventSource?.readyState}`);
+      console.log(`[SSE-CLIENT] event data length: ${event.data?.length ?? 'null'}`);
       this.resetHeartbeat();
       this.handleRawEvent(event.data);
     };
 
     this.eventSource.onerror = () => {
-      console.log(`[SSE-CLIENT] onerror - readyState: ${this.eventSource?.readyState}`);
+      const readyState = this.eventSource?.readyState;
+      const readyStateName = readyState === 0 ? 'CONNECTING' : readyState === 1 ? 'OPEN' : readyState === 2 ? 'CLOSED' : 'UNKNOWN';
+      console.log(`[SSE-CLIENT] onerror`);
+      console.log(`[SSE-CLIENT] readyState: ${readyState} (${readyStateName})`);
+      console.log(`[SSE-CLIENT] url: ${this.gatewayUrl}/api/opencode/event?token=***`);
+      console.log(`[SSE-CLIENT] connected before error: ${this._connected}`);
       this.handleError();
     };
   }
@@ -131,9 +147,14 @@ export class OpenCodeEventService {
   }
 
   private handleError(): void {
+    const readyState = this.eventSource?.readyState;
+    const readyStateName = readyState === 0 ? 'CONNECTING' : readyState === 1 ? 'OPEN' : readyState === 2 ? 'CLOSED' : 'UNKNOWN';
     console.log(`[SSE-CLIENT] handleError - closing connection, scheduling reconnect`);
+    console.log(`[SSE-CLIENT] readyState at error: ${readyState} (${readyStateName})`);
+    console.log(`[SSE-CLIENT] connected before close: ${this._connected}`);
     this._connected = false;
     if (this.eventSource) {
+      console.log(`[SSE-CLIENT] EventSource.close() in handleError`);
       this.eventSource.close();
       this.eventSource = null;
     }
