@@ -1,7 +1,5 @@
 import {
   OpenCodeSessionInfo,
-  OpenCodeMessageInfo,
-  OpenCodeMessagePart,
   OpenCodeProviderModel,
   AgentContext,
 } from '../../domain/types';
@@ -239,7 +237,12 @@ export class G2AgentController {
 
     try {
       await this.client.sendMessage(sessionID, formattedMessage);
-      // Optimistic messages shown; refresh via explicit action to get official state
+      // POST success: fetch official message state via GET (single fetch, no polling)
+      const apiMessages = await this.client.getMessages(sessionID);
+      const messages = mapApiMessagesToWithParts(apiMessages, sessionID);
+      this.updateState({ messages });
+      // Check if the latest assistant message has finish === "stop" to clear processing
+      this.checkAndClearProcessing(sessionID, messages);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to send message';
       this.store.clearProcessing(sessionID);

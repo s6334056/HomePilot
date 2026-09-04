@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   OpenCodeSessionInfo,
   OpenCodeMessageInfo,
@@ -258,6 +258,15 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         isLoadingMessages: false,
         isSending: false,
       }));
+      // Also check for any new pending permissions/questions while we're at it
+      try {
+        const pendingPermissions = await client.getPendingPermissions();
+        setState((prev) => ({ ...prev, pendingPermissions }));
+      } catch { /* non-critical */ }
+      try {
+        const pendingQuestions = await client.getPendingQuestions();
+        setState((prev) => ({ ...prev, pendingQuestions }));
+      } catch { /* non-critical */ }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load messages';
       setState((prev) => ({ ...prev, isLoadingMessages: false, isSending: false, error: msg }));
@@ -393,7 +402,54 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
 
     try {
       await client.sendMessage(sessionID, formattedMessage);
-      // Optimistic messages shown; refresh via explicit action to get official state
+      // POST success: fetch official message state via GET (single fetch, no polling)
+      const apiMessages = await client.getMessages(sessionID);
+      const msgWithParts: OpenCodeMessageWithParts[] = apiMessages.map((m) => {
+        const parts: OpenCodeMessagePart[] = m.parts.map((p) => ({
+          id: p.id,
+          type: p.type,
+          messageID: p.messageID || m.info.id,
+          sessionID: p.sessionID || sessionID,
+          text: p.text,
+          tool: p.tool,
+          callID: p.callID,
+          state: p.state,
+          time: p.time,
+        }));
+        const contentText = parts
+          .filter((p) => p.type === 'text' && p.text)
+          .map((p) => p.text)
+          .join('');
+        return { ...m.info, parts, contentText };
+      });
+      setState((prev) => ({
+        ...prev,
+        messages: msgWithParts,
+        isSending: false,
+      }));
+      // Check if the latest assistant message has finish === "stop" to clear processing
+      for (let i = msgWithParts.length - 1; i >= 0; i--) {
+        if (msgWithParts[i].role === 'assistant') {
+          if (msgWithParts[i].finish === 'stop') {
+            delete processingDataRef.current[sessionID];
+            saveProcessingSessions(processingDataRef.current);
+            setState((prev) => ({
+              ...prev,
+              processingSessionIds: prev.processingSessionIds.filter((id) => id !== sessionID),
+            }));
+          }
+          break;
+        }
+      }
+      // Also check for any new pending permissions/questions
+      try {
+        const pp = await client.getPendingPermissions();
+        setState((prev) => ({ ...prev, pendingPermissions: pp }));
+      } catch { /* non-critical */ }
+      try {
+        const pq = await client.getPendingQuestions();
+        setState((prev) => ({ ...prev, pendingQuestions: pq }));
+      } catch { /* non-critical */ }
     } catch (e: unknown) {
       // On error: remove the processing placeholder and optimistic user message
       const msg = e instanceof Error ? e.message : 'Failed to send message';

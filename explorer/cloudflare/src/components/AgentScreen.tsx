@@ -59,6 +59,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     selectedSession,
     messages,
     pendingPermissions,
+    pendingQuestions,
     isLoadingSessions,
     isLoadingArchivedSessions,
     isLoadingMessages,
@@ -376,6 +377,63 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 Always Allow
               </button>
             )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderQuestionDialog = () => {
+    if (pendingQuestions.length === 0) return null;
+    const q = pendingQuestions[0];
+    const handleAnswer = (answer: string | string[]) => {
+      actions.respondQuestion(q.id, answer);
+    };
+    return (
+      <div className="oc-dialog-overlay">
+        <div className="oc-dialog">
+          <div className="oc-dialog-header">
+            <AlertCircle size={18} />
+            <span>{q.header || 'Question'}</span>
+          </div>
+          <div className="oc-dialog-body">
+            <div className="oc-dialog-question-text">{q.question}</div>
+            {q.options && q.options.length > 0 && (
+              <div className="oc-dialog-options">
+                {q.options.map((opt, i) => (
+                  <button
+                    key={i}
+                    className="oc-btn oc-btn-option"
+                    onClick={() => handleAnswer(opt.label)}
+                  >
+                    {opt.label}
+                    {opt.description && <span className="oc-option-desc">{opt.description}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!q.options && (
+              <div className="oc-dialog-free-input">
+                <input
+                  type="text"
+                  className="oc-input"
+                  placeholder="回答を入力..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                      handleAnswer((e.target as HTMLInputElement).value.trim());
+                    }
+                  }}
+                />
+              </div>
+            )}
+          </div>
+          <div className="oc-dialog-actions">
+            <button
+              className="oc-btn oc-btn-deny"
+              onClick={() => handleAnswer('')}
+            >
+              Skip
+            </button>
           </div>
         </div>
       </div>
@@ -826,6 +884,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       </div>
 
       {renderPermissionDialog()}
+      {renderQuestionDialog()}
 
       {(speech.state === 'recording' || speech.state === 'transcribing' || (speech.state === 'error' && speech.error)) && (
         <div className="oc-dialog-overlay">

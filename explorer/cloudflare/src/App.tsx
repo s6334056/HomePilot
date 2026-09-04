@@ -499,27 +499,29 @@ export function App() {
         </div>
       )}
 
-      {/* DIAG-API-TEST: Temporary diagnostic button */}
-      <button
-        onClick={handleDiagAPI}
-        style={{
-          position: 'fixed',
-          bottom: 12,
-          right: 12,
-          zIndex: 9999,
-          padding: '6px 10px',
-          fontSize: 11,
-          background: '#333',
-          color: '#fff',
-          border: '1px solid #555',
-          borderRadius: 4,
-          cursor: 'pointer',
-          opacity: 0.7,
-        }}
-        title="DIAG-API-TEST: Test OpenCode HTTP API reachability"
-      >
-        Diag API
-      </button>
+      {/* DIAG-API-TEST: 開発用Diag API UIを一時非表示 — スマートフォン送信ボタンとの重複回避 */}
+      {false && (
+        <button
+          onClick={handleDiagAPI}
+          style={{
+            position: 'fixed',
+            bottom: 12,
+            right: 12,
+            zIndex: 9999,
+            padding: '6px 10px',
+            fontSize: 11,
+            background: '#333',
+            color: '#fff',
+            border: '1px solid #555',
+            borderRadius: 4,
+            cursor: 'pointer',
+            opacity: 0.7,
+          }}
+          title="DIAG-API-TEST: Test OpenCode HTTP API reachability"
+        >
+          Diag API
+        </button>
+      )}
     </div>
   );
 }
