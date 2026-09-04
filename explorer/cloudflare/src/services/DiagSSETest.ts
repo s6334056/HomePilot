@@ -1,74 +1,50 @@
-// DIAG-SSE-TEST: Temporary diagnostic EventSource test
-// This module tests whether EventSource/SSE works in the current WebView/browser
-// by connecting to the Gateway's pure diagnostic SSE endpoint (no OpenCode dependency).
+// DIAG-API-TEST: Temporary diagnostic — tests OpenCode HTTP API reachability from WebView
+// Uses existing OpenCodeClient.getSessions() via existing Gateway proxy path.
 // TO BE REMOVED after diagnosis is complete.
 
 import { resolveConfig } from './ConnectionConfig';
+import { OpenCodeClient } from './OpenCodeClient';
 
-export function runDiagSSETest(): void {
+export async function runDiagAPITest(): Promise<void> {
   const config = resolveConfig();
+
+  console.log(`[DIAG-API-TEST] starting OpenCode API test`);
+
   if (config.mode !== 'gateway' || !config.gatewayToken) {
-    console.log(`[DIAG-SSE-TEST] skipped: no gateway config`);
+    console.log(`[DIAG-API-TEST] skipped: no gateway config (mode=${config.mode})`);
     return;
   }
 
-  const diagUrl = `${config.gatewayUrl}/api/diag/sse`;
+  const client = new OpenCodeClient({
+    gatewayUrl: config.gatewayUrl,
+    gatewayToken: config.gatewayToken,
+  });
 
-  console.log(`[DIAG-SSE-TEST] starting diagnostic SSE test`);
-  console.log(`[DIAG-SSE-TEST] url: ${config.gatewayUrl}/api/diag/sse`);
-
-  let eventSource: EventSource;
+  const testUrl = `${config.gatewayUrl}/api/opencode/experimental/session?archived=true`;
+  console.log(`[DIAG-API-TEST] GET ${testUrl}`);
 
   try {
-    console.log(`[DIAG-SSE-TEST] creating EventSource...`);
-    eventSource = new EventSource(diagUrl);
-    console.log(`[DIAG-SSE-TEST] EventSource created`);
-    console.log(`[DIAG-SSE-TEST] readyState after create: ${eventSource.readyState} (CONNECTING=0, OPEN=1, CLOSED=2)`);
-  } catch (e) {
-    console.log(`[DIAG-SSE-TEST] EventSource constructor FAILED:`, e);
-    return;
+    console.log(`[DIAG-API-TEST] calling client.getSessions()...`);
+    const sessions = await client.getSessions();
+    console.log(`[DIAG-API-TEST] getSessions() returned ${sessions.length} sessions`);
+
+    if (sessions.length > 0) {
+      const first = sessions[0];
+      console.log(`[DIAG-API-TEST] first session: id=${first.id} title=${first.title ?? '(no title)'}`);
+    }
+
+    console.log(`[DIAG-API-TEST] SUCCESS - OpenCode HTTP API is reachable from this WebView`);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.log(`[DIAG-API-TEST] FAILED: ${msg}`);
+    if (msg.includes('fetch')) {
+      console.log(`[DIAG-API-TEST] hint: fetch itself failed — network/CORS/TLS issue`);
+    } else if (msg.includes('401') || msg.includes('403')) {
+      console.log(`[DIAG-API-TEST] hint: auth error — token mismatch`);
+    } else if (msg.includes('502')) {
+      console.log(`[DIAG-API-TEST] hint: Gateway cannot reach OpenCode Server`);
+    } else if (msg.includes('OpenCode API error')) {
+      console.log(`[DIAG-API-TEST] hint: OpenCode Server returned an error`);
+    }
   }
-
-  eventSource.onopen = () => {
-    console.log(`[DIAG-SSE-TEST] onopen`);
-    console.log(`[DIAG-SSE-TEST] readyState: ${eventSource.readyState}`);
-  };
-
-  eventSource.onmessage = (event: MessageEvent) => {
-    console.log(`[DIAG-SSE-TEST] onmessage`);
-    console.log(`[DIAG-SSE-TEST] readyState: ${eventSource.readyState}`);
-    console.log(`[DIAG-SSE-TEST] event data length: ${event.data?.length ?? 'null'}`);
-    try {
-      const parsed = JSON.parse(event.data);
-      console.log(`[DIAG-SSE-TEST] event type: ${parsed.type}, seq: ${parsed.seq}`);
-      if (parsed.type === 'done') {
-        console.log(`[DIAG-SSE-TEST] test complete - SSE is WORKING in this WebView`);
-        eventSource.close();
-        console.log(`[DIAG-SSE-TEST] EventSource closed`);
-      }
-    } catch {
-      console.log(`[DIAG-SSE-TEST] raw event data: ${event.data}`);
-    }
-  };
-
-  eventSource.onerror = () => {
-    const readyState = eventSource.readyState;
-    const readyStateName = readyState === 0 ? 'CONNECTING' : readyState === 1 ? 'OPEN' : readyState === 2 ? 'CLOSED' : 'UNKNOWN';
-    console.log(`[DIAG-SSE-TEST] onerror`);
-    console.log(`[DIAG-SSE-TEST] readyState: ${readyState} (${readyStateName})`);
-    console.log(`[DIAG-SSE-TEST] url: ${config.gatewayUrl}/api/diag/sse`);
-    if (readyState === 2) {
-      console.log(`[DIAG-SSE-TEST] EventSource CLOSED - SSE may NOT be working in this WebView`);
-    }
-  };
-
-  // Safety timeout: close after 15 seconds if nothing happens
-  setTimeout(() => {
-    const readyState = eventSource.readyState;
-    console.log(`[DIAG-SSE-TEST] safety timeout - readyState: ${readyState}`);
-    if (readyState !== 2) {
-      eventSource.close();
-      console.log(`[DIAG-SSE-TEST] EventSource closed by safety timeout`);
-    }
-  }, 15000);
 }

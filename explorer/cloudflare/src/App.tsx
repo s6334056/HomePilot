@@ -3,7 +3,7 @@ import { MockFileSystemService } from './services/MockFileSystemService';
 import { GatewayFileSystemService } from './services/GatewayFileSystemService';
 import { FileSystemService } from './services/FileSystemService';
 import { resolveConfig } from './services/ConnectionConfig';
-import { runDiagSSETest } from './services/DiagSSETest';
+import { runDiagAPITest } from './services/DiagSSETest';
 import { FileSystemItem, ScreenType, AgentContext } from './domain/types';
 import { Navbar } from './components/Navbar';
 import { FileTable } from './components/FileTable';
@@ -156,9 +156,9 @@ export function App() {
     };
   }, [g2Runtime]);
 
-  // DIAG-SSE-TEST: handler for diagnostic button
-  const handleDiagSSE = useCallback(() => {
-    runDiagSSETest();
+  // DIAG-API-TEST: handler for diagnostic button
+  const handleDiagAPI = useCallback(() => {
+    runDiagAPITest();
   }, []);
 
   // ── PWA Navigation (independent of G2) ────────────────────
@@ -499,9 +499,9 @@ export function App() {
         </div>
       )}
 
-      {/* DIAG-SSE-TEST: Temporary diagnostic button */}
+      {/* DIAG-API-TEST: Temporary diagnostic button */}
       <button
-        onClick={handleDiagSSE}
+        onClick={handleDiagAPI}
         style={{
           position: 'fixed',
           bottom: 12,
@@ -516,9 +516,9 @@ export function App() {
           cursor: 'pointer',
           opacity: 0.7,
         }}
-        title="DIAG-SSE-TEST: Run pure SSE diagnostic"
+        title="DIAG-API-TEST: Test OpenCode HTTP API reachability"
       >
-        Diag SSE
+        Diag API
       </button>
     </div>
   );
