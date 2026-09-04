@@ -7,6 +7,31 @@
     <meta name="description" content="HomePilot File Explorer for PC, Smartphone, and Even Realities G2" />
     <meta name="theme-color" content="#0d1117" />
     <link rel="manifest" href="/manifest.json" />
+
+    <script defer src="https://syamcspublic.github.io/ConsoleJS/Console.js"></script>
+    <style>
+      .Console_js_line {
+        color: black !important;
+      }
+      .Console_js_str {
+        color: black !important;
+      }
+    </style>
+    <script>
+      window.addEventListener("DOMContentLoaded", async () => {
+        await Console.promise;
+        await Console.settings({
+          storage: false,
+          show: false,
+          pos: "left-bottom",
+          posx: -65,
+          posy: 65,
+        })
+        console.log(`[index.html]version:0.0.1`);
+        console.log(`[index.html]location.href:${location.href}`);
+      })
+    </script>
+
   </head>
   <body>
     <div id="root"></div>
