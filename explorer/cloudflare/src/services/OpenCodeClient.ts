@@ -6,6 +6,8 @@ import {
   OpenCodeProvider,
   OpenCodeProviderModel,
   OpenCodeModelCost,
+  OpenCodePermissionRequest,
+  OpenCodeQuestionRequest,
 } from '../domain/types';
 
 export interface OpenCodeClientMessage {
@@ -278,8 +280,58 @@ export class OpenCodeClient {
     return result;
   }
 
-  getEventSource(): EventSource {
-    return new EventSource(`${this.gatewayUrl}/api/opencode/event?token=${encodeURIComponent(this.gatewayToken)}`);
+  async getPendingPermissions(): Promise<OpenCodePermissionRequest[]> {
+    const data = await this.request<unknown>('GET', '/permission');
+    if (Array.isArray(data)) {
+      return data.map((item: Record<string, unknown>) => ({
+        id: (item.id as string) || '',
+        sessionID: (item.sessionID as string) || '',
+        permission: (item.permission as string) || '',
+        patterns: Array.isArray(item.patterns) ? item.patterns as string[] : [],
+        metadata: item.metadata as Record<string, unknown> | undefined,
+        always: Array.isArray(item.always) ? item.always as string[] : undefined,
+        tool: item.tool as { messageID?: string; callID?: string } | undefined,
+      }));
+    }
+    if (data && typeof data === 'object' && 'value' in data && Array.isArray((data as Record<string, unknown>).value)) {
+      return ((data as { value: Array<Record<string, unknown>> }).value).map((item) => ({
+        id: (item.id as string) || '',
+        sessionID: (item.sessionID as string) || '',
+        permission: (item.permission as string) || '',
+        patterns: Array.isArray(item.patterns) ? item.patterns as string[] : [],
+        metadata: item.metadata as Record<string, unknown> | undefined,
+        always: Array.isArray(item.always) ? item.always as string[] : undefined,
+        tool: item.tool as { messageID?: string; callID?: string } | undefined,
+      }));
+    }
+    return [];
+  }
+
+  async getPendingQuestions(): Promise<OpenCodeQuestionRequest[]> {
+    const data = await this.request<unknown>('GET', '/question');
+    if (Array.isArray(data)) {
+      return data.map((item: Record<string, unknown>) => ({
+        id: (item.id as string) || '',
+        sessionID: (item.sessionID as string) || '',
+        question: (item.question as string) || '',
+        header: item.header as string | undefined,
+        options: Array.isArray(item.options) ? item.options as Array<{ label: string; description?: string }> : undefined,
+        multiple: item.multiple as boolean | undefined,
+        tool: item.tool as { messageID?: string; callID?: string } | undefined,
+      }));
+    }
+    if (data && typeof data === 'object' && 'value' in data && Array.isArray((data as Record<string, unknown>).value)) {
+      return ((data as { value: Array<Record<string, unknown>> }).value).map((item) => ({
+        id: (item.id as string) || '',
+        sessionID: (item.sessionID as string) || '',
+        question: (item.question as string) || '',
+        header: item.header as string | undefined,
+        options: Array.isArray(item.options) ? item.options as Array<{ label: string; description?: string }> : undefined,
+        multiple: item.multiple as boolean | undefined,
+        tool: item.tool as { messageID?: string; callID?: string } | undefined,
+      }));
+    }
+    return [];
   }
 
   getGatewayUrl(): string {

@@ -9,7 +9,6 @@ import { AgentSessionListPage } from './g2-agent/pages/agent-session-list-page';
 import { AgentChatPage } from './g2-agent/pages/agent-chat-page';
 import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
 import { OpenCodeClient } from '../services/OpenCodeClient';
-import { OpenCodeEventService } from '../services/OpenCodeEventService';
 import { G2AgentController } from './g2-agent/g2-agent-controller';
 import { AgentStateStore } from './g2-agent/agent-state-store';
 import { resolveConfig } from '../services/ConnectionConfig';
@@ -29,7 +28,7 @@ export type G2RuntimeStateListener = (state: G2RuntimeState) => void;
  *   - User taps "グラス起動" in Settings
  *   - App is launched from G2 menu (glassesMenu)
  *
- * When not active, no G2 resources (PageManager, Gateway, OpenCode SSE,
+ * When not active, no G2 resources (PageManager, Gateway, OpenCodeClient,
  * G2AgentController) are created or running.
  */
 export class G2RuntimeManager {
@@ -44,7 +43,6 @@ export class G2RuntimeManager {
   private pageManager: PageManager | null = null;
   private gatewayService: GatewayFileSystemService | null = null;
   private openCodeClient: OpenCodeClient | null = null;
-  private openCodeEventService: OpenCodeEventService | null = null;
   private g2AgentController: G2AgentController | null = null;
   private agentStateStore: AgentStateStore | null = null;
 
@@ -181,9 +179,8 @@ export class G2RuntimeManager {
    * 2. PageManager creation + initialize()
    * 3. GatewayFileSystemService initialize()
    * 4. OpenCodeClient creation
-   * 5. OpenCodeEventService creation + connect()
-   * 6. G2AgentController creation + initialize()
-   * 7. Navigate to G2 Explorer
+   * 5. G2AgentController creation + initialize()
+   * 6. Navigate to G2 Explorer
    */
   async startG2Runtime(): Promise<void> {
     // Prevent double-start
@@ -230,20 +227,14 @@ export class G2RuntimeManager {
         });
       }
 
-      // 5. Create and connect OpenCodeEventService
-      if (config.mode === 'gateway' && config.gatewayToken) {
-        this.openCodeEventService = new OpenCodeEventService();
-        this.openCodeEventService.connect(config.gatewayUrl, config.gatewayToken);
-      }
-
-      // 6. Create and initialize G2AgentController
-      if (this.openCodeClient && this.openCodeEventService) {
+      // 5. Create and initialize G2AgentController
+      if (this.openCodeClient) {
         this.agentStateStore = new AgentStateStore();
         this.g2AgentController = new G2AgentController(this.agentStateStore);
-        this.g2AgentController.initialize(this.openCodeClient, this.openCodeEventService);
+        this.g2AgentController.initialize(this.openCodeClient);
       }
 
-      // 7. Create ExplorerPage and navigate to it on G2
+      // 6. Create ExplorerPage and navigate to it on G2
       // Gateway is always initialized before this point (step 3)
       this.updateStatus('Loading G2 Explorer...');
       const rootPath = this.gatewayService
@@ -275,9 +266,8 @@ export class G2RuntimeManager {
    *
    * Cleanup order (reverse of initialization):
    * 1. G2AgentController.dispose()
-   * 2. OpenCodeEventService.disconnect()
-   * 3. PageManager.destroy() + shutDownPageContainer()
-   * 4. Reset all references
+   * 2. PageManager.destroy() + shutDownPageContainer()
+   * 3. Reset all references
    */
   async shutdownG2Runtime(): Promise<void> {
     if (this.state === 'inactive' || this.state === 'stopping') {
@@ -295,17 +285,10 @@ export class G2RuntimeManager {
         this.g2AgentController = null;
       }
 
-      // 2. Disconnect OpenCodeEventService
-      if (this.openCodeEventService) {
-        this.openCodeEventService.disconnect();
-        this.openCodeEventService.destroy();
-        this.openCodeEventService = null;
-      }
-
-      // 3. Release OpenCodeClient reference
+      // 2. Release OpenCodeClient reference
       this.openCodeClient = null;
 
-      // 4. Destroy PageManager and shut down page container
+      // 3. Destroy PageManager and shut down page container
       if (this.pageManager) {
         try {
           await this.pageManager.shutDownPageContainer();
@@ -316,13 +299,13 @@ export class G2RuntimeManager {
         this.pageManager = null;
       }
 
-      // 5. Clear agent state store reference
+      // 4. Clear agent state store reference
       this.agentStateStore = null;
 
-      // 6. Clear gateway reference
+      // 5. Clear gateway reference
       this.gatewayService = null;
 
-      // 7. Clear agent navigation state
+      // 6. Clear agent navigation state
       this.agentReturnPage = null;
       this.sessionListPage = null;
 
@@ -345,10 +328,6 @@ export class G2RuntimeManager {
     if (this.g2AgentController) {
       try { this.g2AgentController.dispose(); } catch { /* ignore */ }
       this.g2AgentController = null;
-    }
-    if (this.openCodeEventService) {
-      try { this.openCodeEventService.disconnect(); this.openCodeEventService.destroy(); } catch { /* ignore */ }
-      this.openCodeEventService = null;
     }
     this.openCodeClient = null;
     if (this.pageManager) {

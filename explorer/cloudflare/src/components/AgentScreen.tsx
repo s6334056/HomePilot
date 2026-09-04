@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, Send, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2, WifiOff, Square } from 'lucide-react';
+import { Plus, Mic, Send, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2, Square } from 'lucide-react';
 import { OpenCodeSessionInfo, OpenCodeProviderModel, AgentContext } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -34,7 +34,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const [showSessionList, setShowSessionList] = useState<boolean>(true);
   const [inputValue, setInputValue] = useState<string>('');
   const [connected, setConnected] = useState<boolean>(false);
-  const [hasConnected, setHasConnected] = useState<boolean>(false);
   const [showArchivedSessions, setShowArchivedSessions] = useState<boolean>(false);
   const [operatingSessionId, setOperatingSessionId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -54,13 +53,11 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const speech = useSpeechRecognition({ gatewayUrl, gatewayToken });
 
   const {
-    connectionStatus,
     sessions,
     archivedSessions,
     selectedSessionID,
     selectedSession,
     messages,
-    sessionStatus,
     pendingPermissions,
     isLoadingSessions,
     isLoadingArchivedSessions,
@@ -77,11 +74,11 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
   const hasFetchedSessionsRef = useRef<boolean>(false);
   useEffect(() => {
-    if (connectionStatus === 'connected' && !hasFetchedSessionsRef.current) {
+    if (!hasFetchedSessionsRef.current) {
       hasFetchedSessionsRef.current = true;
       actions.refreshAllSessions();
     }
-  }, [connectionStatus, actions]);
+  }, [actions]);
 
   useEffect(() => {
     if (gatewayUrl && gatewayToken && !connected) {
@@ -89,12 +86,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       setConnected(true);
     }
   }, [gatewayUrl, gatewayToken, connected, actions]);
-
-  useEffect(() => {
-    if (connectionStatus === 'connected') {
-      setHasConnected(true);
-    }
-  }, [connectionStatus]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -251,11 +242,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     const textarea = e.target;
     textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
-  };
-
-  const handleReconnect = () => {
-    setConnected(false);
-    actions.disconnect();
   };
 
   const handleReload = onReload || (() => {
@@ -473,45 +459,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
     return null;
   };
-
-  if (!hasConnected && (connectionStatus === 'disconnected' || connectionStatus === 'connecting')) {
-    return (
-      <div className="agent-screen">
-        <Navbar
-          currentPath={currentPath}
-          mode="agent"
-          onBack={handleToggleSessionList}
-          canGoBack={false}
-          onReload={handleReload}
-          onOpenSettings={onOpenSettings}
-          onOpenExplorer={onOpenExplorer}
-          showSettingsButton={showSettingsButton}
-          showSwapButton={showSwapButton}
-          onSwapPanes={onSwapPanes}
-        />
-        <div className="oc-connecting-screen">
-          <div className="oc-connecting-content">
-            {connectionStatus === 'connecting' ? (
-              <>
-                <Loader2 size={32} className="oc-spinning" />
-                <p>Connecting to OpenCode Server...</p>
-                <p className="oc-connecting-url">{gatewayUrl}</p>
-              </>
-            ) : (
-              <>
-                <WifiOff size={32} />
-                <p>Not connected to OpenCode Server</p>
-                <p className="oc-connecting-url">{gatewayUrl}</p>
-                <button className="oc-btn oc-btn-connect" onClick={handleReconnect}>
-                  Connect
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (showSessionList || !selectedSessionID) {
     return (
@@ -796,11 +743,6 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       />
       <div className="oc-session-header">
         <div className="oc-session-header-right">
-          {sessionStatus && (
-            <div className={`oc-session-status oc-session-status--${sessionStatus.type}`}>
-              {sessionStatus.type}
-            </div>
-          )}
         </div>
       </div>
       {error && (

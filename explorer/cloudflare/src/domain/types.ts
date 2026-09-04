@@ -64,8 +64,6 @@ export interface AgentSettings {
 // OpenCode Types (verified against OpenCode v1.18.21)
 // ============================================================
 
-export type OpenCodeConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
-
 export interface OpenCodeModel {
   id: string;
   providerID: string;
@@ -105,12 +103,6 @@ export interface OpenCodeSessionInfo {
   tokens?: OpenCodeTokenUsage;
   time?: OpenCodeSessionTime;
   summary?: OpenCodeSessionSummary;
-}
-
-export type OpenCodeSessionStatusType = string;
-
-export interface OpenCodeSessionStatus {
-  type: OpenCodeSessionStatusType;
 }
 
 export type OpenCodeMessageRole = 'user' | 'assistant';
@@ -196,86 +188,6 @@ export interface OpenCodeToolCallInfo {
   tool: string;
   state: OpenCodeToolState;
 }
-
-// SSE Event Types (verified from actual SSE data)
-
-export interface OpenCodeSSEEvent {
-  directory?: string;
-  project?: string;
-  payload: {
-    id: string;
-    type: string;
-    properties?: Record<string, unknown>;
-    syncEvent?: {
-      id: string;
-      type: string;
-      seq: number;
-      aggregateID: string;
-      data: Record<string, unknown>;
-    };
-  };
-}
-
-export interface OpenCodeSessionCreatedProperties {
-  sessionID: string;
-  info: OpenCodeSessionInfo;
-}
-
-export interface OpenCodeSessionUpdatedProperties {
-  sessionID: string;
-  info: Partial<OpenCodeSessionInfo>;
-}
-
-export interface OpenCodeSessionStatusProperties {
-  sessionID: string;
-  status: OpenCodeSessionStatus;
-}
-
-export interface OpenCodeMessageUpdatedProperties {
-  sessionID: string;
-  messageID: string;
-  info: Partial<OpenCodeMessageInfo>;
-}
-
-export interface OpenCodeMessagePartUpdatedProperties {
-  sessionID: string;
-  messageID: string;
-  partID: string;
-  info: Partial<OpenCodeMessagePart>;
-}
-
-export interface OpenCodeMessagePartDeltaProperties {
-  sessionID: string;
-  messageID: string;
-  partID: string;
-  field: string;
-  delta: string;
-}
-
-export interface OpenCodePermissionAskedProperties {
-  id: string;
-  sessionID: string;
-  permission: string;
-  patterns: string[];
-  metadata?: Record<string, unknown>;
-  always?: string[];
-  tool?: {
-    messageID?: string;
-    callID?: string;
-  };
-}
-
-// Union type for all known event types
-export type OpenCodeEventType =
-  | 'server.heartbeat'
-  | 'session.created'
-  | 'session.updated'
-  | 'session.status'
-  | 'message.updated'
-  | 'message.part.updated'
-  | 'message.part.delta'
-  | 'permission.asked'
-  | string; // unknown events handled gracefully
 
 // ============================================================
 // OpenCode Project / Provider / Model Types

@@ -1,18 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  OpenCodeConnectionStatus,
   OpenCodeSessionInfo,
-  OpenCodeSessionStatus,
   OpenCodeMessageInfo,
   OpenCodeMessagePart,
   OpenCodePermissionRequest,
   OpenCodeQuestionRequest,
-  OpenCodeSSEEvent,
   AgentSettings,
   AgentContext,
 } from '../domain/types';
 import { OpenCodeClient } from '../services/OpenCodeClient';
-import { OpenCodeEventService } from '../services/OpenCodeEventService';
 import { formatMessageWithContext } from '../services/AgentContextFormatter';
 
 const SETTINGS_STORAGE_KEY = 'homepilot-agent-settings';
@@ -100,13 +96,11 @@ export interface OpenCodeMessageWithParts extends OpenCodeMessageInfo {
 }
 
 export interface OpenCodeState {
-  connectionStatus: OpenCodeConnectionStatus;
   sessions: OpenCodeSessionInfo[];
   archivedSessions: OpenCodeSessionInfo[];
   selectedSessionID: string | null;
   selectedSession: OpenCodeSessionInfo | null;
   messages: OpenCodeMessageWithParts[];
-  sessionStatus: OpenCodeSessionStatus | null;
   pendingPermissions: OpenCodePermissionRequest[];
   pendingQuestions: OpenCodeQuestionRequest[];
   isLoadingSessions: boolean;
@@ -136,18 +130,18 @@ export interface OpenCodeActions {
   restoreSession: (sessionID: string) => Promise<boolean>;
   deleteSession: (sessionID: string) => Promise<boolean>;
   syncSessionStates: (sessions: OpenCodeSessionInfo[]) => Promise<void>;
+  refreshPendingPermissions: () => Promise<void>;
+  refreshPendingQuestions: () => Promise<void>;
 }
 
 export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   const processingData = loadProcessingSessions();
   const [state, setState] = useState<OpenCodeState>({
-    connectionStatus: 'disconnected',
     sessions: [],
     archivedSessions: [],
     selectedSessionID: null,
     selectedSession: null,
     messages: [],
-    sessionStatus: null,
     pendingPermissions: [],
     pendingQuestions: [],
     isLoadingSessions: false,
@@ -160,10 +154,8 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   });
 
   const clientRef = useRef<OpenCodeClient | null>(null);
-  const eventServiceRef = useRef<OpenCodeEventService | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
-  const sendingStatusRef = useRef<string | null>(null);
   const lastCheckedAtRef = useRef<Record<string, number>>(loadLastCheckedAt());
   const processingDataRef = useRef<Record<string, ProcessingEntry>>(processingData);
 
@@ -172,292 +164,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       clientRef.current = new OpenCodeClient({ gatewayUrl, gatewayToken });
     }
     return clientRef.current;
-  }, []);
-
-  const processEvent = useCallback((event: OpenCodeSSEEvent) => {
-    const payload = event.payload;
-    if (!payload) return;
-
-    const isSyncEvent = !!payload.syncEvent;
-    const eventType = isSyncEvent ? payload.syncEvent!.type : payload.type;
-    const properties = isSyncEvent
-      ? payload.syncEvent!.data
-      : (payload.properties || {}) as Record<string, unknown>;
-
-    setState((prev) => {
-      switch (eventType) {
-        case 'session.created': {
-          const props = properties as unknown as { sessionID: string; info: OpenCodeSessionInfo };
-          if (!props?.sessionID) return prev;
-          const newSession = props.info || { id: props.sessionID };
-          const isArchived = OpenCodeClient.isSessionArchived(newSession);
-          if (isArchived) {
-            const exists = prev.archivedSessions.some((s) => s.id === props.sessionID);
-            if (exists) return prev;
-            return {
-              ...prev,
-              archivedSessions: [newSession, ...prev.archivedSessions],
-            };
-          } else {
-            const exists = prev.sessions.some((s) => s.id === props.sessionID);
-            if (exists) return prev;
-            return {
-              ...prev,
-              sessions: [newSession, ...prev.sessions],
-            };
-          }
-        }
-
-        case 'session.updated': {
-          const props = properties as unknown as { sessionID: string; info: Partial<OpenCodeSessionInfo> };
-          if (!props?.sessionID) return prev;
-          const mergedInfo = props.info;
-          const wasActive = prev.sessions.some((s) => s.id === props.sessionID);
-          const wasArchived = prev.archivedSessions.some((s) => s.id === props.sessionID);
-          const updatedSession = wasActive
-            ? prev.sessions.find((s) => s.id === props.sessionID)
-            : wasArchived
-              ? prev.archivedSessions.find((s) => s.id === props.sessionID)
-              : null;
-          const merged = updatedSession ? { ...updatedSession, ...mergedInfo } : mergedInfo as OpenCodeSessionInfo;
-          const nowArchived = OpenCodeClient.isSessionArchived(merged);
-          if (wasActive && nowArchived) {
-            return {
-              ...prev,
-              sessions: prev.sessions.filter((s) => s.id !== props.sessionID),
-              archivedSessions: [merged, ...prev.archivedSessions],
-              selectedSession:
-                prev.selectedSession?.id === props.sessionID
-                  ? { ...prev.selectedSession, ...mergedInfo }
-                  : prev.selectedSession,
-            };
-          }
-          if (wasArchived && !nowArchived) {
-            return {
-              ...prev,
-              archivedSessions: prev.archivedSessions.filter((s) => s.id !== props.sessionID),
-              sessions: [merged, ...prev.sessions],
-              selectedSession:
-                prev.selectedSession?.id === props.sessionID
-                  ? { ...prev.selectedSession, ...mergedInfo }
-                  : prev.selectedSession,
-            };
-          }
-          return {
-            ...prev,
-            sessions: prev.sessions.map((s) =>
-              s.id === props.sessionID ? { ...s, ...mergedInfo } : s
-            ),
-            archivedSessions: prev.archivedSessions.map((s) =>
-              s.id === props.sessionID ? { ...s, ...mergedInfo } : s
-            ),
-            selectedSession:
-              prev.selectedSession?.id === props.sessionID
-                ? { ...prev.selectedSession, ...mergedInfo }
-                : prev.selectedSession,
-          };
-        }
-
-        case 'session.status': {
-          const props = properties as unknown as { sessionID: string; status: OpenCodeSessionStatus };
-          if (!props?.sessionID) return prev;
-
-          const newType = props.status?.type ?? '';
-
-          // isSending: only relevant for the currently selected session
-          // Robust clear: if status returns to idle/empty, ensure isSending is cleared even if only one event arrived.
-          // Keep existing two-distinct-status logic as primary, but add idle shortcut for reliability.
-          let isSendingUpdate = prev.isSending;
-          if (prev.isSending && props.sessionID === prev.selectedSessionID) {
-            if (newType === 'idle' || newType === '') {
-              isSendingUpdate = false;
-              sendingStatusRef.current = null;
-            } else if (sendingStatusRef.current === null) {
-              sendingStatusRef.current = newType;
-            } else if (newType !== sendingStatusRef.current) {
-              isSendingUpdate = false;
-              sendingStatusRef.current = null;
-            }
-          }
-
-          // Only update sessionStatus for the selected session
-          const sessionStatusUpdate =
-            props.sessionID === prev.selectedSessionID ? props.status : prev.sessionStatus;
-
-          // Remove from processing on status change
-          let processingUpdate = prev.processingSessionIds;
-          if (prev.processingSessionIds.includes(props.sessionID) && newType !== '' && newType !== 'idle') {
-            processingUpdate = prev.processingSessionIds.filter((id) => id !== props.sessionID);
-            delete processingDataRef.current[props.sessionID];
-            saveProcessingSessions(processingDataRef.current);
-          }
-
-          return {
-            ...prev,
-            sessionStatus: sessionStatusUpdate,
-            isSending: isSendingUpdate,
-            processingSessionIds: processingUpdate,
-          };
-        }
-
-        case 'message.updated': {
-          const props = properties as unknown as {
-            sessionID: string;
-            messageID: string;
-            info: Partial<OpenCodeMessageInfo>;
-          };
-          if (!props?.sessionID || !props?.messageID) return prev;
-
-          // Only update messages for the currently selected session
-          if (prev.selectedSessionID !== props.sessionID) return prev;
-
-          // Remove optimistic messages when real ones arrive
-          let filteredMessages = prev.messages;
-          if (props.info?.role === 'user') {
-            // Remove optimistic user messages
-            filteredMessages = filteredMessages.filter(
-              (m) => !(m.id.startsWith('temp-user-') && m.sessionID === props.sessionID)
-            );
-          } else if (props.info?.role === 'assistant') {
-            // Remove optimistic assistant messages (processing placeholders)
-            filteredMessages = filteredMessages.filter(
-              (m) => !(m.id.startsWith('temp-assistant-') && m.sessionID === props.sessionID)
-            );
-          }
-
-          const existingIdx = filteredMessages.findIndex((m) => m.id === props.messageID);
-          if (existingIdx >= 0) {
-            const updated = [...filteredMessages];
-            updated[existingIdx] = {
-              ...updated[existingIdx],
-              ...props.info,
-            };
-            return { ...prev, messages: updated };
-          }
-
-          const newMsg: OpenCodeMessageWithParts = {
-            id: props.messageID,
-            role: props.info?.role || 'assistant',
-            sessionID: props.sessionID,
-            ...props.info,
-            parts: [],
-            contentText: '',
-          };
-          return { ...prev, messages: [...filteredMessages, newMsg] };
-        }
-
-        case 'message.part.updated': {
-          const props = properties as unknown as {
-            sessionID: string;
-            messageID: string;
-            partID: string;
-            info: Partial<OpenCodeMessagePart>;
-          };
-          if (!props?.sessionID || !props?.messageID || !props?.partID) return prev;
-          if (prev.selectedSessionID !== props.sessionID) return prev;
-
-          return {
-            ...prev,
-            messages: prev.messages.map((msg) => {
-              if (msg.id !== props.messageID) return msg;
-              const partIdx = msg.parts.findIndex((p) => p.id === props.partID);
-              const partData: OpenCodeMessagePart = {
-                id: props.partID,
-                type: props.info?.type || 'text',
-                messageID: props.messageID,
-                sessionID: props.sessionID,
-                ...props.info,
-              };
-              let newParts: OpenCodeMessagePart[];
-              if (partIdx >= 0) {
-                newParts = [...msg.parts];
-                newParts[partIdx] = { ...newParts[partIdx], ...partData };
-              } else {
-                newParts = [...msg.parts, partData];
-              }
-              const contentText = newParts
-                .filter((p) => p.type === 'text' && p.text)
-                .map((p) => p.text)
-                .join('');
-              return { ...msg, parts: newParts, contentText };
-            }),
-          };
-        }
-
-        case 'message.part.delta': {
-          const props = properties as unknown as {
-            sessionID: string;
-            messageID: string;
-            partID: string;
-            field: string;
-            delta: string;
-          };
-          if (!props?.sessionID || !props?.messageID || !props?.partID) return prev;
-          if (prev.selectedSessionID !== props.sessionID) return prev;
-          if (props.field !== 'text') return prev;
-
-          return {
-            ...prev,
-            messages: prev.messages.map((msg) => {
-              if (msg.id !== props.messageID) return msg;
-              const partIdx = msg.parts.findIndex((p) => p.id === props.partID);
-              let newParts: OpenCodeMessagePart[];
-              if (partIdx >= 0) {
-                newParts = [...msg.parts];
-                const existingPart = newParts[partIdx];
-                newParts[partIdx] = {
-                  ...existingPart,
-                  text: (existingPart.text || '') + props.delta,
-                };
-              } else {
-                newParts = [
-                  ...msg.parts,
-                  {
-                    id: props.partID,
-                    type: 'text',
-                    messageID: props.messageID,
-                    sessionID: props.sessionID,
-                    text: props.delta,
-                  },
-                ];
-              }
-              const contentText = newParts
-                .filter((p) => p.type === 'text' && p.text)
-                .map((p) => p.text)
-                .join('');
-              return { ...msg, parts: newParts, contentText };
-            }),
-          };
-        }
-
-        case 'permission.asked': {
-          const props = properties as unknown as OpenCodePermissionRequest;
-          if (!props?.id) return prev;
-          const exists = prev.pendingPermissions.some((p) => p.id === props.id);
-          if (exists) return prev;
-
-          return {
-            ...prev,
-            pendingPermissions: [...prev.pendingPermissions, props],
-          };
-        }
-
-        case 'question.asked': {
-          const props = properties as unknown as OpenCodeQuestionRequest;
-          if (!props?.id) return prev;
-          const exists = prev.pendingQuestions.some((q) => q.id === props.id);
-          if (exists) return prev;
-
-          return {
-            ...prev,
-            pendingQuestions: [...prev.pendingQuestions, props],
-          };
-        }
-
-        default:
-          return prev;
-      }
-    });
   }, []);
 
   const refreshSessions = useCallback(async () => {
@@ -552,18 +258,15 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         isLoadingMessages: false,
         isSending: false,
       }));
-      sendingStatusRef.current = null;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load messages';
       setState((prev) => ({ ...prev, isLoadingMessages: false, isSending: false, error: msg }));
-      sendingStatusRef.current = null;
     }
   }, []);
 
   const selectSession = useCallback(async (sessionID: string) => {
     const client = clientRef.current;
     if (!client) return;
-    sendingStatusRef.current = null;
     // Mark session as checked
     lastCheckedAtRef.current[sessionID] = Date.now();
     saveLastCheckedAt(lastCheckedAtRef.current);
@@ -573,7 +276,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       selectedSessionID: sessionID,
       selectedSession: prev.sessions.find((s) => s.id === sessionID) || prev.archivedSessions.find((s) => s.id === sessionID) || null,
       messages: [],
-      sessionStatus: null,
       isLoadingMessages: true,
       error: null,
       unreadSessionIds: prev.unreadSessionIds.filter((id) => id !== sessionID),
@@ -614,13 +316,11 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   }, []);
 
   const clearSelection = useCallback(() => {
-    sendingStatusRef.current = null;
     setState((prev) => ({
       ...prev,
       selectedSessionID: null,
       selectedSession: null,
       messages: [],
-      sessionStatus: null,
       isLoadingMessages: false,
     }));
   }, []);
@@ -693,12 +393,10 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
 
     try {
       await client.sendMessage(sessionID, formattedMessage);
-      // Success: SSE events will update the real messages
-      // The optimistic messages will be replaced when real ones arrive
+      // Optimistic messages shown; refresh via explicit action to get official state
     } catch (e: unknown) {
       // On error: remove the processing placeholder and optimistic user message
       const msg = e instanceof Error ? e.message : 'Failed to send message';
-      sendingStatusRef.current = null;
       // Remove from processing on error
       delete processingDataRef.current[sessionID];
       saveProcessingSessions(processingDataRef.current);
@@ -762,7 +460,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           selectedSessionID: null,
           selectedSession: null,
           messages: [],
-          sessionStatus: null,
         }));
       }
       await refreshAllSessions();
@@ -800,7 +497,6 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
           selectedSessionID: null,
           selectedSession: null,
           messages: [],
-          sessionStatus: null,
         }));
       }
       // Clean up lastCheckedAt entry
@@ -918,58 +614,45 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     });
   }, []);
 
+  const refreshPendingPermissions = useCallback(async () => {
+    const client = clientRef.current;
+    if (!client) return;
+    try {
+      const pendingPermissions = await client.getPendingPermissions();
+      setState((prev) => ({ ...prev, pendingPermissions }));
+    } catch {
+      // Silently ignore - pending permissions are non-critical
+    }
+  }, []);
+
+  const refreshPendingQuestions = useCallback(async () => {
+    const client = clientRef.current;
+    if (!client) return;
+    try {
+      const pendingQuestions = await client.getPendingQuestions();
+      setState((prev) => ({ ...prev, pendingQuestions }));
+    } catch {
+      // Silently ignore - pending questions are non-critical
+    }
+  }, []);
+
   const connect = useCallback((gatewayUrl: string, gatewayToken: string) => {
     const client = getClient(gatewayUrl, gatewayToken);
     clientRef.current = client;
-
-    let eventService = eventServiceRef.current;
-    if (!eventService) {
-      eventService = new OpenCodeEventService();
-      eventServiceRef.current = eventService;
-    }
-
-    eventService.onEvent(processEvent);
-    eventService.onConnectionChange((status) => {
-      setState((prev) => ({
-        ...prev,
-        connectionStatus: status === 'connected' ? 'connected'
-          : status === 'reconnecting' ? 'reconnecting'
-          : status === 'error' ? 'error'
-          : 'disconnected',
-      }));
-    });
-
-    setState((prev) => ({ ...prev, connectionStatus: 'connecting' }));
-    eventService.connect(gatewayUrl, gatewayToken);
-  }, [getClient, processEvent]);
+  }, [getClient]);
 
   const disconnect = useCallback(() => {
-    if (eventServiceRef.current) {
-      eventServiceRef.current.disconnect();
-    }
-    sendingStatusRef.current = null;
     setState((prev) => ({
       ...prev,
-      connectionStatus: 'disconnected',
       sessions: [],
       archivedSessions: [],
       selectedSessionID: null,
       selectedSession: null,
       messages: [],
-      sessionStatus: null,
       pendingPermissions: [],
       pendingQuestions: [],
       processingSessionIds: [],
     }));
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (eventServiceRef.current) {
-        eventServiceRef.current.destroy();
-        eventServiceRef.current = null;
-      }
-    };
   }, []);
 
   const actions: OpenCodeActions = {
@@ -989,6 +672,8 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     restoreSession,
     deleteSession,
     syncSessionStates,
+    refreshPendingPermissions,
+    refreshPendingQuestions,
     getClient: () => clientRef.current,
   };
 

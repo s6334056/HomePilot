@@ -1,5 +1,4 @@
 import {
-  OpenCodeConnectionStatus,
   OpenCodeSessionInfo,
   OpenCodeProviderModel,
 } from '../../domain/types';
@@ -8,8 +7,6 @@ import { OpenCodeMessageWithParts } from './message-mapper';
 export type G2VoiceState = 'idle' | 'ready' | 'transcribing' | 'confirmation';
 
 export interface G2AgentState {
-  connectionStatus: OpenCodeConnectionStatus;
-
   sessions: OpenCodeSessionInfo[];
   selectedSessionID: string | null;
   selectedSession: OpenCodeSessionInfo | null;
@@ -30,7 +27,6 @@ export interface G2AgentState {
 }
 
 export const createInitialG2AgentState = (): G2AgentState => ({
-  connectionStatus: 'disconnected',
   sessions: [],
   selectedSessionID: null,
   selectedSession: null,

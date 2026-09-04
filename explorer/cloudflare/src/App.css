@@ -61,7 +61,7 @@
   }
 }
 
-/* Mobile: hide inactive pane (keeps AgentScreen mounted for SSE lifecycle) */
+/* Mobile: hide inactive pane (keeps AgentScreen mounted for state lifecycle) */
 @media (max-width: 1099px) {
   .app-layout {
     grid-template-columns: 1fr !important;

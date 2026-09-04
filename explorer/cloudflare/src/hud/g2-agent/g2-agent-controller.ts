@@ -1,14 +1,11 @@
 import {
-  OpenCodeConnectionStatus,
   OpenCodeSessionInfo,
   OpenCodeMessageInfo,
   OpenCodeMessagePart,
-  OpenCodeSSEEvent,
   OpenCodeProviderModel,
   AgentContext,
 } from '../../domain/types';
 import { OpenCodeClient } from '../../services/OpenCodeClient';
-import { OpenCodeEventService } from '../../services/OpenCodeEventService';
 import { formatMessageWithContext } from '../../services/AgentContextFormatter';
 import { AgentStateStore } from './agent-state-store';
 import { G2AgentState, createInitialG2AgentState } from './types';
@@ -46,10 +43,10 @@ function insertSessionSorted(
  * G2AgentController manages Agent runtime state for the G2 glasses.
  *
  * Architecture:
- *   G2 Pages → G2AgentController → OpenCodeClient / OpenCodeEventService
+ *   G2 Pages → G2AgentController → OpenCodeClient
  *
  * This is a plain TypeScript class (not a React hook).
- * It subscribes to SSE events via OpenCodeEventService and maintains
+ * It uses HTTP-only communication via OpenCodeClient and maintains
  * an independent G2AgentState that G2 Pages can observe.
  *
  * Persistent state (lastChecked, processing) is managed via AgentStateStore,
@@ -61,7 +58,6 @@ export class G2AgentController {
   private listeners: Set<G2AgentStateListener> = new Set();
   private client: OpenCodeClient | null = null;
   private store: AgentStateStore;
-  private disposers: Array<() => void> = [];
 
   constructor(store?: AgentStateStore) {
     this.store = store || new AgentStateStore();
@@ -72,39 +68,16 @@ export class G2AgentController {
   // ── Lifecycle ────────────────────────────────────────────────
 
   /**
-   * Initialize the controller with existing OpenCodeClient and
-   * OpenCodeEventService instances. These are shared with the PWA.
+   * Initialize the controller with an existing OpenCodeClient instance.
+   * This is shared with the PWA.
    *
    * @param client - Existing OpenCodeClient instance
-   * @param eventService - Existing OpenCodeEventService instance
    */
-  initialize(client: OpenCodeClient, eventService: OpenCodeEventService): void {
+  initialize(client: OpenCodeClient): void {
     this.client = client;
-
-    // Subscribe to SSE events
-    const eventDisposer = eventService.onEvent((event) => this.processEvent(event));
-    this.disposers.push(eventDisposer);
-
-    // Subscribe to connection status changes
-    const connectionDisposer = eventService.onConnectionChange((status) => {
-      const connectionStatus: OpenCodeConnectionStatus =
-        status === 'connected' ? 'connected'
-          : status === 'reconnecting' ? 'reconnecting'
-          : status === 'error' ? 'error'
-          : 'disconnected';
-      this.updateState({ connectionStatus });
-    });
-    this.disposers.push(connectionDisposer);
-
-    // Set initial connection status
-    if (eventService.connected) {
-      this.updateState({ connectionStatus: 'connected' });
-    }
   }
 
   dispose(): void {
-    for (const d of this.disposers) d();
-    this.disposers = [];
     this.client = null;
     this.listeners.clear();
   }
@@ -266,7 +239,7 @@ export class G2AgentController {
 
     try {
       await this.client.sendMessage(sessionID, formattedMessage);
-      // SSE events will handle the real message updates
+      // Optimistic messages shown; refresh via explicit action to get official state
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to send message';
       this.store.clearProcessing(sessionID);
@@ -323,221 +296,6 @@ export class G2AgentController {
 
   setTranscript(transcript: string): void {
     this.updateState({ transcript });
-  }
-
-  // ── SSE Event Processing ─────────────────────────────────────
-
-  private processEvent(event: OpenCodeSSEEvent): void {
-    const payload = event.payload;
-    if (!payload) return;
-
-    const isSyncEvent = !!payload.syncEvent;
-    const eventType = isSyncEvent ? payload.syncEvent!.type : payload.type;
-    const properties = isSyncEvent
-      ? payload.syncEvent!.data
-      : (payload.properties || {}) as Record<string, unknown>;
-
-    switch (eventType) {
-      case 'session.created':
-        this.handleSessionCreated(properties);
-        break;
-      case 'session.updated':
-        this.handleSessionUpdated(properties);
-        break;
-      case 'session.status':
-        this.handleSessionStatus(properties);
-        break;
-      case 'message.updated':
-        this.handleMessageUpdated(properties);
-        break;
-      case 'message.part.updated':
-        this.handleMessagePartUpdated(properties);
-        break;
-      case 'message.part.delta':
-        this.handleMessagePartDelta(properties);
-        break;
-      case 'permission.asked':
-        // Permission handling reserved for future G2 Permission Page
-        break;
-    }
-  }
-
-  private handleSessionCreated(properties: Record<string, unknown>): void {
-    const props = properties as unknown as { sessionID: string; info: OpenCodeSessionInfo };
-    if (!props?.sessionID) return;
-    const newSession = props.info || { id: props.sessionID };
-    if (OpenCodeClient.isSessionArchived(newSession)) return;
-    const exists = this.state.sessions.some((s) => s.id === props.sessionID);
-    if (exists) return;
-    this.updateState({
-      sessions: insertSessionSorted(this.state.sessions, newSession),
-    });
-  }
-
-  private handleSessionUpdated(properties: Record<string, unknown>): void {
-    const props = properties as unknown as { sessionID: string; info: Partial<OpenCodeSessionInfo> };
-    if (!props?.sessionID) return;
-    const mergedInfo = props.info;
-
-    // Re-sort: merge info, then re-sort the full list by time.updated
-    const updatedSessions = this.state.sessions.map((s) =>
-      s.id === props.sessionID ? { ...s, ...mergedInfo } : s
-    );
-    const sorted = sortSessionsByUpdated(updatedSessions);
-
-    this.updateState({
-      sessions: sorted,
-      selectedSession:
-        this.state.selectedSession?.id === props.sessionID
-          ? { ...this.state.selectedSession, ...mergedInfo }
-          : this.state.selectedSession,
-    });
-  }
-
-  private handleSessionStatus(properties: Record<string, unknown>): void {
-    const props = properties as unknown as { sessionID: string; status: { type: string } };
-    if (!props?.sessionID) return;
-
-    // NOTE: session.status is NOT used to clear processing.
-    // Processing is cleared when:
-    //   1. A message.updated event with finish === "stop" arrives (see handleMessageUpdated)
-    //   2. Messages are loaded via selectSession/refreshMessages and the latest
-    //      assistant message has finish === "stop" (see checkAndClearProcessing)
-    //
-    // This avoids the problem where session.status = "busy" arriving immediately
-    // after sendMessage would prematurely clear processing before the agent responds.
-  }
-
-  private handleMessageUpdated(properties: Record<string, unknown>): void {
-    const props = properties as unknown as {
-      sessionID: string;
-      messageID: string;
-      info: Partial<OpenCodeMessageInfo>;
-    };
-    if (!props?.sessionID || !props?.messageID) return;
-
-    // Processing clear must run regardless of selectedSessionID.
-    // If a non-selected session's agent finishes (finish==="stop"),
-    // processing should still be cleared.
-    if (props.info?.finish === 'stop' && props.info?.role === 'assistant') {
-      this.clearProcessingForSession(props.sessionID);
-    }
-
-    // Only update messages if this is the currently selected session
-    if (this.state.selectedSessionID !== props.sessionID) return;
-
-    let filteredMessages = this.state.messages;
-
-    // Remove optimistic messages when real ones arrive
-    if (props.info?.role === 'user') {
-      filteredMessages = filteredMessages.filter(
-        (m) => !(m.id.startsWith('temp-user-') && m.sessionID === props.sessionID)
-      );
-    } else if (props.info?.role === 'assistant') {
-      filteredMessages = filteredMessages.filter(
-        (m) => !(m.id.startsWith('temp-assistant-') && m.sessionID === props.sessionID)
-      );
-    }
-
-    const existingIdx = filteredMessages.findIndex((m) => m.id === props.messageID);
-    let updatedMessages: OpenCodeMessageWithParts[];
-    if (existingIdx >= 0) {
-      const updated = [...filteredMessages];
-      updated[existingIdx] = { ...updated[existingIdx], ...props.info };
-      updatedMessages = updated;
-    } else {
-      const newMsg: OpenCodeMessageWithParts = {
-        id: props.messageID,
-        role: props.info?.role || 'assistant',
-        sessionID: props.sessionID,
-        ...props.info,
-        parts: [],
-        contentText: '',
-      };
-      updatedMessages = [...filteredMessages, newMsg];
-    }
-
-    this.updateState({ messages: updatedMessages });
-  }
-
-  private handleMessagePartUpdated(properties: Record<string, unknown>): void {
-    const props = properties as unknown as {
-      sessionID: string;
-      messageID: string;
-      partID: string;
-      info: Partial<OpenCodeMessagePart>;
-    };
-    if (!props?.sessionID || !props?.messageID || !props?.partID) return;
-    if (this.state.selectedSessionID !== props.sessionID) return;
-
-    const messages = this.state.messages.map((msg) => {
-      if (msg.id !== props.messageID) return msg;
-      const partIdx = msg.parts.findIndex((p) => p.id === props.partID);
-      const partData: OpenCodeMessagePart = {
-        id: props.partID,
-        type: props.info?.type || 'text',
-        messageID: props.messageID,
-        sessionID: props.sessionID,
-        ...props.info,
-      };
-      let newParts: OpenCodeMessagePart[];
-      if (partIdx >= 0) {
-        newParts = [...msg.parts];
-        newParts[partIdx] = { ...newParts[partIdx], ...partData };
-      } else {
-        newParts = [...msg.parts, partData];
-      }
-      const contentText = newParts
-        .filter((p) => p.type === 'text' && p.text)
-        .map((p) => p.text)
-        .join('');
-      return { ...msg, parts: newParts, contentText };
-    });
-    this.updateState({ messages });
-  }
-
-  private handleMessagePartDelta(properties: Record<string, unknown>): void {
-    const props = properties as unknown as {
-      sessionID: string;
-      messageID: string;
-      partID: string;
-      field: string;
-      delta: string;
-    };
-    if (!props?.sessionID || !props?.messageID || !props?.partID) return;
-    if (this.state.selectedSessionID !== props.sessionID) return;
-    if (props.field !== 'text') return;
-
-    const messages = this.state.messages.map((msg) => {
-      if (msg.id !== props.messageID) return msg;
-      const partIdx = msg.parts.findIndex((p) => p.id === props.partID);
-      let newParts: OpenCodeMessagePart[];
-      if (partIdx >= 0) {
-        newParts = [...msg.parts];
-        const existingPart = newParts[partIdx];
-        newParts[partIdx] = {
-          ...existingPart,
-          text: (existingPart.text || '') + props.delta,
-        };
-      } else {
-        newParts = [
-          ...msg.parts,
-          {
-            id: props.partID,
-            type: 'text',
-            messageID: props.messageID,
-            sessionID: props.sessionID,
-            text: props.delta,
-          },
-        ];
-      }
-      const contentText = newParts
-        .filter((p) => p.type === 'text' && p.text)
-        .map((p) => p.text)
-        .join('');
-      return { ...msg, parts: newParts, contentText };
-    });
-    this.updateState({ messages });
   }
 
   // ── Processing Management ────────────────────────────────────

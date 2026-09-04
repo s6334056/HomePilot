@@ -4,8 +4,7 @@ import { generateToken, verifyToken } from './token.js';
 import {
   json, noContent, errorResponse,
   handleHealth, handleRoot, handleDirectory, handleFile,
-  handleOpenCodeProxy, handleOpenCodeProxyBody, handleOpenCodeSSE,
-  handleDiagSSE,
+  handleOpenCodeProxy, handleOpenCodeProxyBody,
 } from './handlers.js';
 import { handleSpeechTranscribe } from './speech.js';
 
@@ -109,11 +108,6 @@ const server = createServer(async (request, response) => {
     return handleSpeechTranscribe(request, response);
   }
 
-  // --- Diagnostic SSE test endpoint (no auth required) ---
-  if (path === '/api/diag/sse') {
-    return handleDiagSSE(request, response);
-  }
-
   // --- OpenCode Proxy ---
   if (path.startsWith('/api/opencode/')) {
     if (!verifyToken(requestToken, token)) {
@@ -121,10 +115,6 @@ const server = createServer(async (request, response) => {
     }
 
     const openCodePath = path.slice('/api/opencode'.length) + url.search;
-
-    if (path === '/api/opencode/event') {
-      return handleOpenCodeSSE(request, response, openCodePath);
-    }
 
     if (request.method === 'GET') {
       return handleOpenCodeProxy(request, response, openCodePath);
