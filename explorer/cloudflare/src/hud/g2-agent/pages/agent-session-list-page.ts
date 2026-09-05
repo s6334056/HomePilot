@@ -5,6 +5,7 @@ import { OpenCodeSessionInfo } from "../../../domain/types";
 
 const LIST_MAX_LINES = 9;
 const LIST_MAX_WIDTH = 56;
+const NEW_SESSION_LABEL = "+ New Session";
 
 function formatTimestamp(updated?: number): string {
   if (!updated) return "";
@@ -25,6 +26,7 @@ function formatTimestamp(updated?: number): string {
 export class AgentSessionListPage extends BasePage {
   private controller: G2AgentController;
   private onSelect: (sessionID: string) => Promise<void>;
+  private onModelSelect: () => Promise<void>;
   private onReturnToExplorer: () => Promise<void>;
   private currentPath: string;
   private sessions: OpenCodeSessionInfo[] = [];
@@ -33,6 +35,7 @@ export class AgentSessionListPage extends BasePage {
   constructor(
     controller: G2AgentController,
     onSelect: (sessionID: string) => Promise<void>,
+    onModelSelect: () => Promise<void>,
     onReturnToExplorer: () => Promise<void>,
     currentPath: string = "",
   ) {
@@ -40,6 +43,7 @@ export class AgentSessionListPage extends BasePage {
     this.pageType = "AgentSessionListPage";
     this.controller = controller;
     this.onSelect = onSelect;
+    this.onModelSelect = onModelSelect;
     this.onReturnToExplorer = onReturnToExplorer;
     this.currentPath = currentPath;
   }
@@ -48,6 +52,7 @@ export class AgentSessionListPage extends BasePage {
     try {
       await this.controller.refreshSessions();
       this.sessions = this.controller.getState().sessions;
+      this.selectedIndex = 0;
       await this.renderPage();
     } catch (e) {
       console.error('[AgentSessionListPage] afterRender error:', e);
@@ -56,35 +61,36 @@ export class AgentSessionListPage extends BasePage {
 
   public render(): PageRenderResult {
     const total = this.sessions.length;
-    const pageIndicator = total > 0 ? `[${this.selectedIndex + 1}/${total}]` : "[0/0]";
+    const pageIndicator = `[${this.selectedIndex}/${total}]`;
     const headerContent = this.buildHeaderLine(this.currentPath || "Sessions", pageIndicator, LIST_MAX_WIDTH, "[Sessions]");
 
-    let bodyText = "";
+    const totalItems = total + 1;
+    const selected = Math.max(0, Math.min(this.selectedIndex, totalItems - 1));
+    const halfWindow = Math.floor(LIST_MAX_LINES / 2);
+    let start = Math.max(0, selected - halfWindow);
+    let end = start + LIST_MAX_LINES;
 
-    if (total > 0) {
-      const selected = Math.max(0, Math.min(this.selectedIndex, total - 1));
-      const halfWindow = Math.floor(LIST_MAX_LINES / 2);
-      let start = Math.max(0, selected - halfWindow);
-      let end = start + LIST_MAX_LINES;
+    if (end > totalItems) {
+      end = totalItems;
+      start = Math.max(0, end - LIST_MAX_LINES);
+    }
 
-      if (end > total) {
-        end = total;
-        start = Math.max(0, end - LIST_MAX_LINES);
-      }
-
-      const visible = this.sessions.slice(start, end);
-      const lines = visible.map((session, idx) => {
-        const actualIdx = start + idx;
-        const isFocused = actualIdx === selected;
-        const pointer = isFocused ? "> " : "  ";
+    const lines: string[] = [];
+    for (let i = start; i < end; i++) {
+      const isFocused = i === selected;
+      const pointer = isFocused ? "> " : "  ";
+      if (i === 0) {
+        lines.push(`${pointer}${NEW_SESSION_LABEL}`);
+      } else {
+        const session = this.sessions[i - 1];
         const title = this.truncateName(session.title || "Untitled", LIST_MAX_WIDTH - this.getStringWidth(pointer) - 8);
         const date = formatTimestamp(session.time?.updated);
         const datePart = this.truncateName(date, 8);
-        return `${pointer}${title} ${datePart}`;
-      });
-
-      bodyText = lines.join("\n");
+        lines.push(`${pointer}${title} ${datePart}`);
+      }
     }
+
+    const bodyText = lines.join("\n");
 
     const headerProp = new TextContainerProperty({
       containerID: 1,
@@ -126,18 +132,20 @@ export class AgentSessionListPage extends BasePage {
   }
 
   public async onScrollUp() {
-    if (this.sessions.length === 0) return;
+    const totalItems = this.sessions.length + 1;
+    if (totalItems <= 1) return;
     if (this.selectedIndex > 0) {
       this.selectedIndex--;
     } else {
-      this.selectedIndex = this.sessions.length - 1;
+      this.selectedIndex = totalItems - 1;
     }
     await this.renderPage();
   }
 
   public async onScrollDown() {
-    if (this.sessions.length === 0) return;
-    if (this.selectedIndex < this.sessions.length - 1) {
+    const totalItems = this.sessions.length + 1;
+    if (totalItems <= 1) return;
+    if (this.selectedIndex < totalItems - 1) {
       this.selectedIndex++;
     } else {
       this.selectedIndex = 0;
@@ -146,9 +154,13 @@ export class AgentSessionListPage extends BasePage {
   }
 
   public async onClick() {
-    const session = this.sessions[this.selectedIndex];
-    if (!session) return;
-    await this.onSelect(session.id);
+    if (this.selectedIndex === 0) {
+      await this.onModelSelect();
+    } else {
+      const session = this.sessions[this.selectedIndex - 1];
+      if (!session) return;
+      await this.onSelect(session.id);
+    }
   }
 
   public async onDoubleClick() {
@@ -167,6 +179,7 @@ export class AgentSessionListPage extends BasePage {
       case "refresh":
         await this.controller.refreshSessions();
         this.sessions = this.controller.getState().sessions;
+        this.selectedIndex = 0;
         await this.renderPage();
         break;
     }

@@ -6,6 +6,7 @@ import {
 import { PageManager, BasePage } from './page-manager';
 import { ExplorerPage } from './pages/explorer-page';
 import { AgentSessionListPage } from './g2-agent/pages/agent-session-list-page';
+import { AgentModelSelectPage } from './g2-agent/pages/agent-model-select-page';
 import { AgentChatPage } from './g2-agent/pages/agent-chat-page';
 import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
 import { OpenCodeClient } from '../services/OpenCodeClient';
@@ -49,6 +50,7 @@ export class G2RuntimeManager {
   // Agent Navigation state
   private agentReturnPage: BasePage | null = null;
   private sessionListPage: AgentSessionListPage | null = null;
+  private modelSelectPage: AgentModelSelectPage | null = null;
   private agentCurrentPath: string = '';
 
   // Callback to notify App.tsx of state changes (for UI updates)
@@ -298,6 +300,7 @@ export class G2RuntimeManager {
     // 6. Clear agent navigation state
     this.agentReturnPage = null;
     this.sessionListPage = null;
+    this.modelSelectPage = null;
     this.agentCurrentPath = '';
 
       this.setState('inactive');
@@ -326,6 +329,7 @@ export class G2RuntimeManager {
     this.gatewayService = null;
     this.agentReturnPage = null;
     this.sessionListPage = null;
+    this.modelSelectPage = null;
     this.agentCurrentPath = '';
   }
 
@@ -369,6 +373,7 @@ export class G2RuntimeManager {
       this.sessionListPage = new AgentSessionListPage(
         this.g2AgentController,
         (sessionID) => this.navigateToAgentChat(sessionID),
+        () => this.navigateToModelSelect(),
         () => this.returnToExplorer(),
         this.agentCurrentPath,
       );
@@ -397,12 +402,30 @@ export class G2RuntimeManager {
   }
 
   /**
+   * Navigate from Session List to Model Select.
+   * Does NOT change agentReturnPage.
+   */
+  async navigateToModelSelect(): Promise<void> {
+    if (!this.pageManager || !this.g2AgentController) return;
+
+    this.modelSelectPage = new AgentModelSelectPage(
+      this.g2AgentController,
+      (sessionID) => this.navigateToAgentChat(sessionID),
+      () => this.returnToSessionList(),
+    );
+
+    await this.pageManager.navigateTo(this.modelSelectPage);
+  }
+
+  /**
    * Navigate from Chat back to Session List.
    * Reuses the same sessionListPage instance.
    * Does NOT change agentReturnPage.
    */
   async returnToSessionList(): Promise<void> {
     if (!this.pageManager || !this.sessionListPage) return;
+
+    this.modelSelectPage = null;
 
     // Refresh sessions when returning to list (session status may have changed)
     if (this.g2AgentController) {
@@ -422,6 +445,7 @@ export class G2RuntimeManager {
     const returnPage = this.agentReturnPage;
     this.agentReturnPage = null;
     this.sessionListPage = null;
+    this.modelSelectPage = null;
 
     await this.pageManager.navigateTo(returnPage);
   }
