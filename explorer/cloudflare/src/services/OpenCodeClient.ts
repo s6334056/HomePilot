@@ -31,8 +31,6 @@ export class OpenCodeClient {
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const url = `${this.gatewayUrl}/api/opencode${path}`;
-    const hasAuth = !!this.gatewayToken;
-    console.log(`[OpenCodeClient] request START method=${method} path=${path} auth=${hasAuth}`);
     const headers: Record<string, string> = {
       'Accept': 'application/json',
       'Authorization': `Bearer ${this.gatewayToken}`,
@@ -47,11 +45,8 @@ export class OpenCodeClient {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
 
-    console.log(`[OpenCodeClient] response method=${method} path=${path} status=${response.status}`);
-
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error');
-      console.log(`[OpenCodeClient] error body: ${errorText.substring(0, 200)}`);
       throw new Error(`OpenCode API error ${response.status}: ${errorText}`);
     }
 

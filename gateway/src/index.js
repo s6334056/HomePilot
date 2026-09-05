@@ -56,25 +56,6 @@ const server = createServer(async (request, response) => {
   const path = url.pathname;
   const requestToken = extractTokenFromRequest(request, url);
 
-  // Diagnostic: log token extraction for OpenCode routes
-  if (path.startsWith('/api/opencode/')) {
-    const hasHeader = !!(request.headers.authorization);
-    const queryToken = url.searchParams.get('token');
-    const headerToken = extractToken(request);
-    console.log(`[DIAG] ${request.method} ${path}`);
-    console.log(`[DIAG] Authorization header present: ${hasHeader}`);
-    console.log(`[DIAG] Header token: ${headerToken ? headerToken.slice(0, 4) + '...' : 'null'}`);
-    console.log(`[DIAG] Query token: ${queryToken ? queryToken.slice(0, 4) + '...' : 'null'}`);
-    console.log(`[DIAG] requestToken: ${requestToken ? requestToken.slice(0, 4) + '...' : 'null'}`);
-    console.log(`[DIAG] verifyToken result: ${verifyToken(requestToken, token)}`);
-    console.log(`[DIAG] Origin: ${request.headers.origin ?? 'none'}`);
-    console.log(`[DIAG] Referer: ${request.headers.referer ?? 'none'}`);
-    console.log(`[DIAG] User-Agent: ${request.headers['user-agent'] ?? 'none'}`);
-    console.log(`[DIAG] Sec-Fetch-Site: ${request.headers['sec-fetch-site'] ?? 'none'}`);
-    console.log(`[DIAG] Sec-Fetch-Mode: ${request.headers['sec-fetch-mode'] ?? 'none'}`);
-    console.log(`[DIAG] Sec-Fetch-Dest: ${request.headers['sec-fetch-dest'] ?? 'none'}`);
-  }
-
   if (path === '/api/health') {
     if (!verifyToken(requestToken, token)) {
       return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');

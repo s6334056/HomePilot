@@ -3,7 +3,6 @@ import { MockFileSystemService } from './services/MockFileSystemService';
 import { GatewayFileSystemService } from './services/GatewayFileSystemService';
 import { FileSystemService } from './services/FileSystemService';
 import { resolveConfig } from './services/ConnectionConfig';
-import { runDiagAPITest } from './services/DiagSSETest';
 import { FileSystemItem, ScreenType, AgentContext } from './domain/types';
 import { Navbar } from './components/Navbar';
 import { FileTable } from './components/FileTable';
@@ -155,11 +154,6 @@ export function App() {
       g2Runtime.destroy();
     };
   }, [g2Runtime]);
-
-  // DIAG-API-TEST: handler for diagnostic button
-  const handleDiagAPI = useCallback(() => {
-    runDiagAPITest();
-  }, []);
 
   // ── PWA Navigation (independent of G2) ────────────────────
 
@@ -497,30 +491,6 @@ export function App() {
             </p>
           </div>
         </div>
-      )}
-
-      {/* DIAG-API-TEST: 開発用Diag API UIを一時非表示 — スマートフォン送信ボタンとの重複回避 */}
-      {false && (
-        <button
-          onClick={handleDiagAPI}
-          style={{
-            position: 'fixed',
-            bottom: 12,
-            right: 12,
-            zIndex: 9999,
-            padding: '6px 10px',
-            fontSize: 11,
-            background: '#333',
-            color: '#fff',
-            border: '1px solid #555',
-            borderRadius: 4,
-            cursor: 'pointer',
-            opacity: 0.7,
-          }}
-          title="DIAG-API-TEST: Test OpenCode HTTP API reachability"
-        >
-          Diag API
-        </button>
       )}
     </div>
   );

@@ -111,16 +111,14 @@ export class G2RuntimeManager {
     try {
       const bridge = await waitForEvenAppBridge();
       if (bridge) {
-        // Verify bridge is actually responsive
         await bridge.getDeviceInfo();
         this.bridge = bridge;
         this.isBridgeProbed = true;
-        console.log('[G2RuntimeManager] Bridge detected and responsive.');
         this.setupBridgeEventListeners();
         return true;
       }
     } catch (e) {
-      console.log('[G2RuntimeManager] Bridge not available (browser/simulator):', e);
+      // Bridge not available (browser/simulator)
     }
 
     this.isBridgeProbed = true;
@@ -147,7 +145,6 @@ export class G2RuntimeManager {
 
     // Listen for launch source (glassesMenu vs appMenu)
     this.launchSourceUnsubscribe = this.bridge.onLaunchSource((source) => {
-      console.log(`[G2RuntimeManager] Launch source: ${source}`);
       if (source === 'glassesMenu') {
         this.startG2Runtime();
       }
@@ -161,7 +158,6 @@ export class G2RuntimeManager {
           type === OsEventTypeList.SYSTEM_EXIT_EVENT ||
           type === OsEventTypeList.ABNORMAL_EXIT_EVENT
         ) {
-          console.log(`[G2RuntimeManager] G2 exit event received (type: ${type})`);
           this.shutdownG2Runtime();
         }
       }
@@ -185,7 +181,6 @@ export class G2RuntimeManager {
   async startG2Runtime(): Promise<void> {
     // Prevent double-start
     if (this.state === 'starting' || this.state === 'active') {
-      console.log(`[G2RuntimeManager] startG2Runtime() ignored — state: ${this.state}`);
       return;
     }
 
@@ -206,10 +201,7 @@ export class G2RuntimeManager {
       // 2. Create and initialize PageManager
       this.updateStatus('Initializing G2 SDK...');
       this.pageManager = new PageManager((status) => this.updateStatus(status));
-      const bridgeReady = await this.pageManager.initialize();
-      if (!bridgeReady) {
-        console.warn('[G2RuntimeManager] PageManager initialized in browser standalone mode');
-      }
+      await this.pageManager.initialize();
 
       // 3. Initialize Gateway
       this.updateStatus('Connecting to Gateway...');
@@ -252,9 +244,7 @@ export class G2RuntimeManager {
 
       this.setState('active');
       this.updateStatus('G2 Runtime active');
-      console.log('[G2RuntimeManager] G2 Runtime started successfully.');
     } catch (err) {
-      console.error('[G2RuntimeManager] Failed to start G2 Runtime:', err);
       this.updateStatus(`G2 start failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
       await this.cleanupG2Resources();
       this.setState('inactive');
@@ -271,7 +261,6 @@ export class G2RuntimeManager {
    */
   async shutdownG2Runtime(): Promise<void> {
     if (this.state === 'inactive' || this.state === 'stopping') {
-      console.log(`[G2RuntimeManager] shutdownG2Runtime() ignored — state: ${this.state}`);
       return;
     }
 
@@ -311,10 +300,7 @@ export class G2RuntimeManager {
 
       this.setState('inactive');
       this.updateStatus('G2 Runtime stopped');
-      console.log('[G2RuntimeManager] G2 Runtime shut down successfully.');
     } catch (err) {
-      console.error('[G2RuntimeManager] Error during shutdown:', err);
-      // Force cleanup even on error
       await this.cleanupG2Resources();
       this.setState('inactive');
     }
@@ -361,21 +347,12 @@ export class G2RuntimeManager {
    * Saves the current page as agentReturnPage (the page to return to).
    */
   async navigateToSessionList(): Promise<void> {
-    console.log('[G2RuntimeManager] navigateToSessionList START');
-    if (!this.pageManager || !this.g2AgentController) {
-      console.log('[G2RuntimeManager] navigateToSessionList ABORT: pageManager or g2AgentController is null');
-      return;
-    }
-
-    // Diagnostic: reset render counter so Loading page shows again on re-entry
-    this.sessionListPage = null;
+    if (!this.pageManager || !this.g2AgentController) return;
 
     const currentPage = this.pageManager.getCurrentPage();
-    console.log(`[G2RuntimeManager] currentPage=${currentPage?.pageType ?? 'none'}`);
 
     // Save the current page as the return point for Agent → Explorer/FileViewer
     this.agentReturnPage = currentPage || null;
-    console.log(`[G2RuntimeManager] agentReturnPage saved: ${this.agentReturnPage?.pageType ?? 'null'}`);
 
     // Create or reuse session list page
     if (!this.sessionListPage) {
@@ -384,20 +361,9 @@ export class G2RuntimeManager {
         (sessionID) => this.navigateToAgentChat(sessionID),
         () => this.returnToExplorer(),
       );
-      console.log('[G2RuntimeManager] sessionListPage CREATE');
-    } else {
-      console.log('[G2RuntimeManager] sessionListPage REUSE');
     }
 
-    console.log('[G2RuntimeManager] pageManager.navigateTo START');
-    try {
-      await this.pageManager.navigateTo(this.sessionListPage);
-      console.log('[G2RuntimeManager] pageManager.navigateTo END');
-    } catch (e) {
-      console.error('[G2RuntimeManager] pageManager.navigateTo ERROR:', e);
-      throw e;
-    }
-    console.log('[G2RuntimeManager] navigateToSessionList END');
+    await this.pageManager.navigateTo(this.sessionListPage);
   }
 
   /**
