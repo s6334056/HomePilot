@@ -145,6 +145,10 @@ export class PageManager {
   private onStatusUpdate?: (status: string) => void;
   private lastRenderedText: string = '';
   private menuItemIdMap: Map<number, string> = new Map();
+  /** Diagnostic: true while createStartUpPageContainer or rebuildPageContainer is executing */
+  private isRendering: boolean = false;
+  /** Diagnostic: when true, next renderCurrentPage() uses createStartUpPageContainer instead of rebuild */
+  private diagForceCreateStartUp: boolean = false;
 
   constructor(onStatusUpdate?: (status: string) => void) {
     this.onStatusUpdate = onStatusUpdate;
@@ -172,30 +176,69 @@ export class PageManager {
     return this.currentPage;
   }
 
+  /**
+   * Diagnostic: Force next renderCurrentPage() to use createStartUpPageContainer
+   * instead of rebuildPageContainer. Used to test the Loading → real page pattern.
+   */
+  public resetStartUpForDiag(): void {
+    console.log('[PageManager] resetStartUpForDiag: forcing createStartUpPageContainer on next render');
+    this.isStartupCreated = false;
+    this.diagForceCreateStartUp = true;
+  }
+
   public async navigateTo(page: BasePage): Promise<boolean> {
+    console.log(`[PageManager] navigateTo START → ${page.pageType}`);
+
     if (this.currentPage) {
+      console.log(`[PageManager] deactivate START ← ${this.currentPage.pageType}`);
       this.currentPage.onDeactivate();
+      console.log(`[PageManager] deactivate END`);
+    } else {
+      console.log('[PageManager] no currentPage to deactivate');
     }
 
     this.currentPage = page;
+    console.log('[PageManager] page.init START');
     page.init(
       (nextPage) => this.navigateTo(nextPage),
       () => this.renderCurrentPage(),
       this.bridge!,
       (status) => this.updateStatus(status)
     );
+    console.log('[PageManager] page.init END');
 
     // First render (may be empty if data not loaded yet)
+    console.log('[PageManager] renderCurrentPage #1 START');
     await this.renderCurrentPage();
+    console.log('[PageManager] renderCurrentPage #1 END');
+
+    // Wait for G2 native side to settle after rebuildPageContainer.
+    // DocsReader4EH uses the same pattern: rebuild → 200ms wait → afterRender.
+    // Without this delay, the native side may not finish processing the container
+    // rebuild before afterRender triggers data load + second render.
+    console.log('[PageManager] waiting 200ms for native side to settle');
+    await new Promise(resolve => setTimeout(resolve, 200));
+
     // afterRender loads data (e.g., directory listing), then re-render with data
+    console.log('[PageManager] page.afterRender START');
     await page.afterRender();
+    console.log('[PageManager] page.afterRender END');
+
     // Re-render after data is loaded
+    console.log('[PageManager] renderCurrentPage #2 START');
     await this.renderCurrentPage();
+    console.log('[PageManager] renderCurrentPage #2 END');
+
+    console.log('[PageManager] navigateTo END');
     return true;
   }
 
   public async renderCurrentPage(): Promise<void> {
-    if (!this.currentPage) return;
+    console.log(`[PageManager] renderCurrentPage START (currentPage=${this.currentPage?.pageType ?? 'none'})`);
+    if (!this.currentPage) {
+      console.log('[PageManager] renderCurrentPage ABORT: no currentPage');
+      return;
+    }
 
     const renderResult = this.currentPage.render();
     const textContainers = renderResult.textObject || [];
@@ -204,13 +247,16 @@ export class PageManager {
       .map((t) => (t as unknown as { content?: string }).content ?? '')
       .join('\n');
     this.lastRenderedText = plainText;
+    console.log(`[PageManager] render() done, textContainers=${textContainers.length}`);
 
     if (!this.isBridgeReady || !this.bridge) {
+      console.log('[PageManager] renderCurrentPage END (no bridge, skipped G2 render)');
       return;
     }
 
     // Build MenuContainerProperty from page's menuList
     let menuContainer: MenuContainerProperty | undefined;
+    console.log('[PageManager] menu generation START');
     if (renderResult.menuObject?.menuList?.length) {
       this.menuItemIdMap.clear();
       const menuItems = renderResult.menuObject.menuList.map((item, index) => {
@@ -219,36 +265,127 @@ export class PageManager {
         return new MenuItemProperty({ itemID: numericId, itemName: item.title });
       });
       menuContainer = new MenuContainerProperty({ menuItems });
+      console.log(`[PageManager] menu generation END: ${menuItems.length} items`);
     } else {
       this.menuItemIdMap.clear();
+      console.log('[PageManager] menu generation END: no menu');
     }
 
     try {
-      if (!this.isStartupCreated) {
+      const currentPageType = this.currentPage.pageType;
+
+      // ── PageContainer structure summary ──
+      const containerTotalNum = renderResult.containerTotalNum || 1;
+      const textCount = textContainers.length;
+      const listCount = (renderResult.listObject as any[])?.length ?? 0;
+      const imageCount = (renderResult.imageObject as any[])?.length ?? 0;
+      const menuCount = menuContainer ? 1 : 0;
+      console.log(`[PageManager] PageContainer detail currentPage=${currentPageType}`);
+      console.log(`[PageManager]   containerTotalNum=${containerTotalNum} textObject=${textCount} listObject=${listCount} imageObject=${imageCount} menuObject=${menuCount}`);
+
+      // ── TextObject detailed properties ──
+      for (let i = 0; i < textContainers.length; i++) {
+        const t = textContainers[i] as any;
+        const id = t?.containerID ?? 'undef';
+        const name = t?.containerName ?? 'undef';
+        const x = t?.xPosition ?? 'undef';
+        const y = t?.yPosition ?? 'undef';
+        const w = t?.width ?? 'undef';
+        const h = t?.height ?? 'undef';
+        const bw = t?.borderWidth ?? 'undef';
+        const bc = t?.borderColor ?? 'undef';
+        const br = t?.borderRadius ?? 'undef';
+        const pl = t?.paddingLength ?? 'undef';
+        const ec = t?.isEventCapture ?? 'undef';
+        const z = t?.zOrderIndex ?? 'undef';
+        const content = t?.content ?? 'undef';
+        const contentLen = typeof content === 'string' ? content.length : 'N/A';
+        const contentPreview = typeof content === 'string' ? JSON.stringify(content.substring(0, 40)) : 'N/A';
+        // Flag suspicious values
+        const flags: string[] = [];
+        if (typeof x === 'number' && (isNaN(x) || x < 0)) flags.push(`x=${x}`);
+        if (typeof y === 'number' && (isNaN(y) || y < 0)) flags.push(`y=${y}`);
+        if (typeof w === 'number' && (isNaN(w) || w <= 0)) flags.push(`w=${w}`);
+        if (typeof h === 'number' && (isNaN(h) || h <= 0)) flags.push(`h=${h}`);
+        if (typeof bw === 'number' && (isNaN(bw) || bw < 0)) flags.push(`bw=${bw}`);
+        if (typeof ec === 'number' && ec !== 0 && ec !== 1) flags.push(`ec=${ec}`);
+        if (typeof pl === 'number' && (isNaN(pl) || pl < 0)) flags.push(`pl=${pl}`);
+        if (content === '' || content === null || content === undefined) flags.push('content=empty');
+        const flagStr = flags.length > 0 ? ` FLAGS=[${flags.join(',')}]` : '';
+        console.log(`[PageManager]   text[${i}] id=${id} name=${name} pos=(${x},${y}) size=(${w}x${h}) borderWidth=${bw} borderColor=${bc} borderRadius=${br} padding=${pl} isEventCapture=${ec} zOrder=${z}${flagStr}`);
+        console.log(`[PageManager]     content len=${contentLen} preview=${contentPreview}`);
+      }
+
+      // ── MenuObject detailed properties ──
+      if (menuContainer) {
+        const menuItems = (menuContainer as any).menuItems ?? (menuContainer as any).items ?? [];
+        console.log(`[PageManager]   menu: itemCount=${menuItems.length}`);
+        for (let i = 0; i < menuItems.length; i++) {
+          const item = menuItems[i] as any;
+          const itemId = item?.itemID ?? 'undef';
+          const itemName = item?.itemName ?? item?.title ?? 'undef';
+          const flags: string[] = [];
+          if (typeof itemId === 'number' && (isNaN(itemId) || itemId <= 0)) flags.push(`itemID=${itemId}`);
+          if (!itemName || itemName === '') flags.push('itemName=empty');
+          const flagStr = flags.length > 0 ? ` FLAGS=[${flags.join(',')}]` : '';
+          console.log(`[PageManager]     menu[${i}] itemID=${itemId} itemName=${itemName}${flagStr}`);
+        }
+        // Log any other properties on the menu container itself
+        const menuKeys = Object.keys(menuContainer as any);
+        const extraMenuProps = menuKeys.filter(k => k !== 'menuItems' && k !== 'items');
+        if (extraMenuProps.length > 0) {
+          console.log(`[PageManager]   menu extra props: [${extraMenuProps.join(', ')}]`);
+        }
+      } else {
+        console.log('[PageManager]   menu: none');
+      }
+
+      // Diagnostic: use createStartUpPageContainer if flagged (for Loading→real page test)
+      const useCreate = !this.isStartupCreated || this.diagForceCreateStartUp;
+      if (this.diagForceCreateStartUp) {
+        this.diagForceCreateStartUp = false;
+        console.log('[PageManager] diagForceCreateStartUp: using createStartUpPageContainer (flag cleared)');
+      }
+
+      if (useCreate) {
+        console.log(`[PageManager] createStartUpPageContainer START currentPage=${currentPageType}`);
+        this.isRendering = true;
+        const t0 = performance.now();
         const startupConfig = new CreateStartUpPageContainer({
-          containerTotalNum: renderResult.containerTotalNum || 1,
+          containerTotalNum,
           textObject: textContainers as any,
           listObject: renderResult.listObject as any,
           imageObject: renderResult.imageObject as any,
           menuObject: menuContainer,
         });
         const result: StartUpPageCreateResult = await this.bridge.createStartUpPageContainer(startupConfig);
+        const elapsed = Math.round(performance.now() - t0);
+        this.isRendering = false;
         if (result === StartUpPageCreateResult.success) {
           this.isStartupCreated = true;
         }
+        console.log(`[PageManager] createStartUpPageContainer END currentPage=${currentPageType} result=${result} elapsed=${elapsed}ms`);
       } else {
+        console.log(`[PageManager] rebuildPageContainer START currentPage=${currentPageType}`);
+        this.isRendering = true;
+        const t0 = performance.now();
         const rebuildConfig = new RebuildPageContainer({
-          containerTotalNum: renderResult.containerTotalNum || 1,
+          containerTotalNum,
           textObject: textContainers as any,
           listObject: renderResult.listObject as any,
           imageObject: renderResult.imageObject as any,
           menuObject: menuContainer,
         });
-        await this.bridge.rebuildPageContainer(rebuildConfig);
+        const rebuildResult = await this.bridge.rebuildPageContainer(rebuildConfig);
+        const elapsed = Math.round(performance.now() - t0);
+        this.isRendering = false;
+        console.log(`[PageManager] rebuildPageContainer END currentPage=${currentPageType} result=${rebuildResult} elapsed=${elapsed}ms`);
       }
     } catch (err) {
+      this.isRendering = false;
       console.error("[PageManager] Failed to render on G2 glasses:", err);
     }
+    console.log('[PageManager] renderCurrentPage END');
   }
 
   public getLastRenderedText(): string {
@@ -265,17 +402,49 @@ export class PageManager {
     if (!this.bridge) return;
 
     this.bridge.onEvenHubEvent((event) => {
-      if (!this.currentPage || !this.currentPage.isActive) return;
+      const currentPageType = this.currentPage?.pageType ?? 'none';
+      const currentPageActive = this.currentPage?.isActive ?? false;
+      console.log(`[PageManager] onEvenHubEvent START currentPage=${currentPageType} active=${currentPageActive} rendering=${this.isRendering}`);
 
-      console.log("[PageManager] onEvenHubEvent:", event);
+      // Safely extract event type from the event object
+      try {
+        const keys = Object.keys(event);
+        console.log(`[PageManager] event keys: [${keys.join(', ')}]`);
+        if (event.menuItemClickEvent) {
+          console.log(`[PageManager] menuItemClickEvent itemID=${event.menuItemClickEvent.itemID}`);
+        }
+        if (event.listEvent) {
+          console.log(`[PageManager] listEvent: eventType=${event.listEvent.eventType}`);
+        }
+        if (event.textEvent) {
+          console.log(`[PageManager] textEvent: eventType=${event.textEvent.eventType}`);
+        }
+        if (event.sysEvent) {
+          console.log(`[PageManager] sysEvent: eventType=${event.sysEvent.eventType}`);
+        }
+      } catch {
+        console.log('[PageManager] (event inspection failed)');
+      }
+
+      if (!currentPageActive) {
+        console.log('[PageManager] onEvenHubEvent SKIP: currentPage not active');
+        return;
+      }
+
+      if (!this.currentPage) {
+        console.log('[PageManager] onEvenHubEvent SKIP: no currentPage');
+        return;
+      }
 
       // Menu item click (context menu on G2)
       if (event.menuItemClickEvent) {
         const numericId = event.menuItemClickEvent.itemID;
         const stringId = numericId != null ? this.menuItemIdMap.get(numericId) ?? String(numericId) : undefined;
+        console.log(`[PageManager] dispatch → onMenuItemClick(menuId=${stringId})`);
         if (stringId) {
           this.currentPage.onMenuItemClick(stringId, event);
         }
+        console.log(`[PageManager] onEvenHubEvent END currentPage=${currentPageType} rendering=${this.isRendering}`);
         return;
       }
 
@@ -284,22 +453,31 @@ export class PageManager {
 
       switch (eventType) {
         case OsEventTypeList.SCROLL_TOP_EVENT:
+          console.log(`[PageManager] dispatch → onScrollUp (eventType=${eventType})`);
           this.currentPage.onScrollUp(event);
           break;
         case OsEventTypeList.SCROLL_BOTTOM_EVENT:
+          console.log(`[PageManager] dispatch → onScrollDown (eventType=${eventType})`);
           this.currentPage.onScrollDown(event);
           break;
         case OsEventTypeList.CLICK_EVENT:
         case undefined:
+          console.log(`[PageManager] dispatch → onClick (eventType=${eventType})`);
           this.currentPage.onClick(event);
           break;
         case OsEventTypeList.DOUBLE_CLICK_EVENT:
+          console.log(`[PageManager] dispatch → onDoubleClick (eventType=${eventType})`);
           this.currentPage.onDoubleClick(event);
           break;
         case OsEventTypeList.LONG_PRESS_EVENT:
+          console.log(`[PageManager] dispatch → onLongPress (eventType=${eventType})`);
           this.currentPage.onLongPress(event);
           break;
+        default:
+          console.log(`[PageManager] dispatch → UNKNOWN eventType=${eventType}`);
+          break;
       }
+      console.log(`[PageManager] onEvenHubEvent END currentPage=${currentPageType} rendering=${this.isRendering}`);
     });
   }
 

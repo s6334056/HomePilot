@@ -361,10 +361,21 @@ export class G2RuntimeManager {
    * Saves the current page as agentReturnPage (the page to return to).
    */
   async navigateToSessionList(): Promise<void> {
-    if (!this.pageManager || !this.g2AgentController) return;
+    console.log('[G2RuntimeManager] navigateToSessionList START');
+    if (!this.pageManager || !this.g2AgentController) {
+      console.log('[G2RuntimeManager] navigateToSessionList ABORT: pageManager or g2AgentController is null');
+      return;
+    }
+
+    // Diagnostic: reset render counter so Loading page shows again on re-entry
+    this.sessionListPage = null;
+
+    const currentPage = this.pageManager.getCurrentPage();
+    console.log(`[G2RuntimeManager] currentPage=${currentPage?.pageType ?? 'none'}`);
 
     // Save the current page as the return point for Agent → Explorer/FileViewer
-    this.agentReturnPage = this.pageManager.getCurrentPage() || null;
+    this.agentReturnPage = currentPage || null;
+    console.log(`[G2RuntimeManager] agentReturnPage saved: ${this.agentReturnPage?.pageType ?? 'null'}`);
 
     // Create or reuse session list page
     if (!this.sessionListPage) {
@@ -373,9 +384,20 @@ export class G2RuntimeManager {
         (sessionID) => this.navigateToAgentChat(sessionID),
         () => this.returnToExplorer(),
       );
+      console.log('[G2RuntimeManager] sessionListPage CREATE');
+    } else {
+      console.log('[G2RuntimeManager] sessionListPage REUSE');
     }
 
-    await this.pageManager.navigateTo(this.sessionListPage);
+    console.log('[G2RuntimeManager] pageManager.navigateTo START');
+    try {
+      await this.pageManager.navigateTo(this.sessionListPage);
+      console.log('[G2RuntimeManager] pageManager.navigateTo END');
+    } catch (e) {
+      console.error('[G2RuntimeManager] pageManager.navigateTo ERROR:', e);
+      throw e;
+    }
+    console.log('[G2RuntimeManager] navigateToSessionList END');
   }
 
   /**
