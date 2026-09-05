@@ -397,6 +397,7 @@ export class G2RuntimeManager {
       () => this.returnToSessionList(),
       () => this.returnToExplorer(),
       this.agentCurrentPath,
+      this.agentReturnPage,
     );
 
     await this.pageManager.navigateTo(chatPage);

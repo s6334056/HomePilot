@@ -40,6 +40,12 @@ export class ExplorerPage extends BasePage {
     return this.currentPath;
   }
 
+  public getSelectedItem(): FileSystemItem | null {
+    if (this.items.length === 0) return null;
+    const idx = Math.max(0, Math.min(this.selectedIndex, this.items.length - 1));
+    return this.items[idx];
+  }
+
   public async afterRender(): Promise<void> {
     if (this.items.length === 0) {
       await this.loadDirectory(this.currentPath, this.initialRestoreIndex);

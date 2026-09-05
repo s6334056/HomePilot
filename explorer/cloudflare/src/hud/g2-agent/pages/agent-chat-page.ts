@@ -2,6 +2,9 @@ import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../../page-manager";
 import { G2AgentController } from "../g2-agent-controller";
 import { OpenCodeMessageWithParts } from "../message-mapper";
+import { AgentContext } from "../../../domain/types";
+import { ExplorerPage } from "../../pages/explorer-page";
+import { FileViewerPage } from "../../pages/file-viewer-page";
 
 const CHAT_MAX_LINES = 9;
 const CHAT_MAX_WIDTH = 56;
@@ -33,6 +36,7 @@ export class AgentChatPage extends BasePage {
   private onReturnToList: () => Promise<void>;
   private onReturnToExplorer: () => Promise<void>;
   private currentPath: string;
+  private returnPage: BasePage | null;
   private messages: OpenCodeMessageWithParts[] = [];
   private chatText: string = "";
   private wrappedLines: string[] = [];
@@ -45,6 +49,7 @@ export class AgentChatPage extends BasePage {
     onReturnToList: () => Promise<void>,
     onReturnToExplorer: () => Promise<void>,
     currentPath: string = "",
+    returnPage: BasePage | null = null,
   ) {
     super();
     this.pageType = "AgentChatPage";
@@ -52,6 +57,7 @@ export class AgentChatPage extends BasePage {
     this.onReturnToList = onReturnToList;
     this.onReturnToExplorer = onReturnToExplorer;
     this.currentPath = currentPath;
+    this.returnPage = returnPage;
   }
 
   public async afterRender(): Promise<void> {
@@ -324,13 +330,58 @@ export class AgentChatPage extends BasePage {
     }
   }
 
+  private buildLiveContext(): AgentContext {
+    const returnPage = this.returnPage;
+    if (!returnPage) {
+      return {
+        currentPath: this.currentPath,
+        selectedItem: null,
+        selectedFile: null,
+        sourceScreen: 'agent',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    if (returnPage.pageType === 'ExplorerPage') {
+      const explorer = returnPage as ExplorerPage;
+      return {
+        currentPath: explorer.getCurrentPath(),
+        selectedItem: explorer.getSelectedItem(),
+        selectedFile: null,
+        sourceScreen: 'explorer',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    if (returnPage.pageType === 'FileViewerPage') {
+      const viewer = returnPage as FileViewerPage;
+      return {
+        currentPath: viewer.getCurrentPath(),
+        selectedItem: viewer.getFile(),
+        selectedFile: viewer.getFile(),
+        content: viewer.getContent(),
+        sourceScreen: 'file_viewer',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    return {
+      currentPath: this.currentPath,
+      selectedItem: null,
+      selectedFile: null,
+      sourceScreen: 'agent',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   public async onClick() {
     const voiceState = this.controller.getState().voiceState;
     if (voiceState === 'confirmation') {
       const transcript = this.controller.getState().transcript;
       if (transcript) {
+        const context = this.buildLiveContext();
         this.controller.setVoiceState('idle');
-        await this.controller.sendMessage(transcript);
+        await this.controller.sendMessage(transcript, context);
       }
     }
   }

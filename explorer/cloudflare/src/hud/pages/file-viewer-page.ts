@@ -44,6 +44,14 @@ export class FileViewerPage extends BasePage {
     return this.file.path;
   }
 
+  public getFile(): FileSystemItem {
+    return this.file;
+  }
+
+  public getContent(): string {
+    return this.content;
+  }
+
   public async afterRender(): Promise<void> {
     if (this.lines.length === 0) {
       await this.loadFileContent();
