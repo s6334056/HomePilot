@@ -36,6 +36,10 @@ export class ExplorerPage extends BasePage {
     this.onAgentSessionList = onAgentSessionList;
   }
 
+  public getCurrentPath(): string {
+    return this.currentPath;
+  }
+
   public async afterRender(): Promise<void> {
     if (this.items.length === 0) {
       await this.loadDirectory(this.currentPath, this.initialRestoreIndex);

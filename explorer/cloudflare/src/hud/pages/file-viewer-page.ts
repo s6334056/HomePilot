@@ -39,6 +39,10 @@ export class FileViewerPage extends BasePage {
     this.onAgentSessionList = onAgentSessionList;
   }
 
+  public getCurrentPath(): string {
+    return this.file.path;
+  }
+
   public async afterRender(): Promise<void> {
     if (this.lines.length === 0) {
       await this.loadFileContent();

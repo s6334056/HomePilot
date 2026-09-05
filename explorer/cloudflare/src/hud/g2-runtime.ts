@@ -49,6 +49,7 @@ export class G2RuntimeManager {
   // Agent Navigation state
   private agentReturnPage: BasePage | null = null;
   private sessionListPage: AgentSessionListPage | null = null;
+  private agentCurrentPath: string = '';
 
   // Callback to notify App.tsx of state changes (for UI updates)
   private onStatusUpdate?: (status: string) => void;
@@ -294,9 +295,10 @@ export class G2RuntimeManager {
       // 5. Clear gateway reference
       this.gatewayService = null;
 
-      // 6. Clear agent navigation state
-      this.agentReturnPage = null;
-      this.sessionListPage = null;
+    // 6. Clear agent navigation state
+    this.agentReturnPage = null;
+    this.sessionListPage = null;
+    this.agentCurrentPath = '';
 
       this.setState('inactive');
       this.updateStatus('G2 Runtime stopped');
@@ -324,6 +326,7 @@ export class G2RuntimeManager {
     this.gatewayService = null;
     this.agentReturnPage = null;
     this.sessionListPage = null;
+    this.agentCurrentPath = '';
   }
 
   // ── Accessors for G2 Pages ────────────────────────────────
@@ -354,6 +357,13 @@ export class G2RuntimeManager {
     // Save the current page as the return point for Agent → Explorer/FileViewer
     this.agentReturnPage = currentPage || null;
 
+    // Capture current path for Agent Chat header
+    if (currentPage && typeof (currentPage as any).getCurrentPath === 'function') {
+      this.agentCurrentPath = (currentPage as any).getCurrentPath();
+    } else {
+      this.agentCurrentPath = '';
+    }
+
     // Create or reuse session list page
     if (!this.sessionListPage) {
       this.sessionListPage = new AgentSessionListPage(
@@ -376,10 +386,10 @@ export class G2RuntimeManager {
     await this.g2AgentController.selectSession(sessionID);
 
     const chatPage = new AgentChatPage(
-      sessionID,
       this.g2AgentController,
       () => this.returnToSessionList(),
       () => this.returnToExplorer(),
+      this.agentCurrentPath,
     );
 
     await this.pageManager.navigateTo(chatPage);
