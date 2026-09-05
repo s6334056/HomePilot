@@ -227,6 +227,7 @@ export class G2RuntimeManager {
         this.agentStateStore = new AgentStateStore();
         this.g2AgentController = new G2AgentController(this.agentStateStore);
         this.g2AgentController.initialize(this.openCodeClient);
+        this.g2AgentController.setBridge(this.bridge);
       }
 
       // 6. Create ExplorerPage and navigate to it on G2

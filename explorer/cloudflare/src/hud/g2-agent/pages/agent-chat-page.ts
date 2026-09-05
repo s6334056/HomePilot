@@ -38,7 +38,7 @@ export class AgentChatPage extends BasePage {
   private wrappedLines: string[] = [];
   private scrollLine: number = 0;
   private modelName: string = "Agent";
-  private voiceTestMode: "none" | "long_press" | "released" = "none";
+  private stateUnsubscribe: (() => void) | null = null;
 
   constructor(
     controller: G2AgentController,
@@ -61,7 +61,25 @@ export class AgentChatPage extends BasePage {
     this.buildChatText();
     this.buildWrappedLines();
     this.scrollLine = Math.max(0, this.wrappedLines.length - CHAT_MAX_LINES);
+
+    this.stateUnsubscribe = this.controller.subscribe((state) => {
+      if (this.isActive) {
+        this.messages = state.messages;
+        this.buildChatText();
+        this.buildWrappedLines();
+        this.renderPage();
+      }
+    });
+
     await this.renderPage();
+  }
+
+  public onDeactivate() {
+    super.onDeactivate();
+    if (this.stateUnsubscribe) {
+      this.stateUnsubscribe();
+      this.stateUnsubscribe = null;
+    }
   }
 
   private async resolveModelName(): Promise<string> {
@@ -215,15 +233,19 @@ export class AgentChatPage extends BasePage {
   }
 
   public render(): PageRenderResult {
+    const voiceState = this.controller.getState().voiceState;
+
     const headerProp = new TextContainerProperty({
       containerID: 1,
       containerName: "chat_header",
-      content: this.buildHeaderLine(
-        this.currentPath || "Chat",
-        "",
-        CHAT_MAX_WIDTH,
-        `[${this.modelName}]`,
-      ),
+      content: voiceState !== 'idle'
+        ? "Voice Input"
+        : this.buildHeaderLine(
+            this.currentPath || "Chat",
+            "",
+            CHAT_MAX_WIDTH,
+            `[${this.modelName}]`,
+          ),
       xPosition: 4,
       yPosition: 2,
       width: 572,
@@ -233,10 +255,15 @@ export class AgentChatPage extends BasePage {
     });
 
     let bodyContent: string;
-    if (this.voiceTestMode === "long_press") {
-      bodyContent = "VOICE TEST\n\n>>> LONG PRESS <<<\n\nHold...";
-    } else if (this.voiceTestMode === "released") {
-      bodyContent = "VOICE TEST\n\n>>> RELEASE <<<\n\nReleased!";
+
+    if (voiceState === 'ready') {
+      bodyContent = "VOICE INPUT\n\nListening...";
+    } else if (voiceState === 'transcribing') {
+      bodyContent = "VOICE INPUT\n\nTranscribing...";
+    } else if (voiceState === 'confirmation') {
+      const transcript = this.controller.getState().transcript;
+      const wrappedTranscript = this.wrapLine(transcript, CHAT_MAX_WIDTH).join("\n");
+      bodyContent = `VOICE INPUT\n\n${wrappedTranscript}\n\nTap: Send\nDouble: Cancel`;
     } else {
       const totalLines = this.wrappedLines.length;
       const viewStart = totalLines > 0 ? this.scrollLine + 1 : 0;
@@ -298,21 +325,33 @@ export class AgentChatPage extends BasePage {
   }
 
   public async onClick() {
-    // Future: message selection
+    const voiceState = this.controller.getState().voiceState;
+    if (voiceState === 'confirmation') {
+      const transcript = this.controller.getState().transcript;
+      if (transcript) {
+        this.controller.setVoiceState('idle');
+        await this.controller.sendMessage(transcript);
+      }
+    }
   }
 
   public async onDoubleClick() {
-    await this.onReturnToList();
+    const voiceState = this.controller.getState().voiceState;
+    if (voiceState === 'transcribing' || voiceState === 'confirmation') {
+      this.controller.cancelVoiceInput();
+      return;
+    }
+    if (voiceState === 'idle') {
+      await this.onReturnToList();
+    }
   }
 
   public async onLongPress() {
-    this.voiceTestMode = "long_press";
-    await this.renderPage();
+    await this.controller.startVoiceInput();
   }
 
   public async onLongPressRelease() {
-    this.voiceTestMode = "released";
-    await this.renderPage();
+    await this.controller.stopVoiceInput();
   }
 
   public async onMenuItemClick(menuId: string) {
