@@ -427,10 +427,8 @@ export class G2RuntimeManager {
 
     this.modelSelectPage = null;
 
-    // Refresh sessions when returning to list (session status may have changed)
-    if (this.g2AgentController) {
-      await this.g2AgentController.refreshSessions();
-    }
+    const currentSessionID = this.g2AgentController?.getState().selectedSessionID || null;
+    this.sessionListPage.setReturnSessionID(currentSessionID);
 
     await this.pageManager.navigateTo(this.sessionListPage);
   }

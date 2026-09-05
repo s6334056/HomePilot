@@ -31,6 +31,7 @@ export class AgentSessionListPage extends BasePage {
   private currentPath: string;
   private sessions: OpenCodeSessionInfo[] = [];
   private selectedIndex: number = 0;
+  private returnSessionID: string | null = null;
 
   constructor(
     controller: G2AgentController,
@@ -48,11 +49,23 @@ export class AgentSessionListPage extends BasePage {
     this.currentPath = currentPath;
   }
 
+  public setReturnSessionID(id: string | null): void {
+    this.returnSessionID = id;
+  }
+
   public async afterRender(): Promise<void> {
     try {
       await this.controller.refreshSessions();
       this.sessions = this.controller.getState().sessions;
-      this.selectedIndex = 0;
+
+      if (this.returnSessionID) {
+        const foundIdx = this.sessions.findIndex((s) => s.id === this.returnSessionID);
+        this.selectedIndex = foundIdx >= 0 ? foundIdx + 1 : 0;
+        this.returnSessionID = null;
+      } else {
+        this.selectedIndex = 0;
+      }
+
       await this.renderPage();
     } catch (e) {
       console.error('[AgentSessionListPage] afterRender error:', e);

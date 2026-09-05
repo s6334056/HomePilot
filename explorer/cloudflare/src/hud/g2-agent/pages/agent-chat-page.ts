@@ -58,7 +58,12 @@ export class AgentChatPage extends BasePage {
 
   private getModelName(): string {
     const state = this.controller.getState();
-    const session = state.sessions.find((s) => s.id === this.messages[0]?.sessionID);
+    const sessionID = this.messages[0]?.sessionID || state.selectedSessionID;
+    if (sessionID) {
+      const mapped = this.controller.getModelForSession(sessionID);
+      if (mapped) return mapped.name;
+    }
+    const session = state.sessions.find((s) => s.id === sessionID);
     if (session?.model?.id) return session.model.id;
     const assistantMsg = this.messages.find((m) => m.role === "assistant");
     if (assistantMsg?.model?.modelID) return assistantMsg.model.modelID;

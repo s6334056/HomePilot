@@ -56,6 +56,7 @@ export class G2AgentController {
   private listeners: Set<G2AgentStateListener> = new Set();
   private client: OpenCodeClient | null = null;
   private store: AgentStateStore;
+  private sessionModelMap: Map<string, OpenCodeProviderModel> = new Map();
 
   constructor(store?: AgentStateStore) {
     this.store = store || new AgentStateStore();
@@ -78,6 +79,7 @@ export class G2AgentController {
   dispose(): void {
     this.client = null;
     this.listeners.clear();
+    this.sessionModelMap.clear();
   }
 
   // ── State Access ─────────────────────────────────────────────
@@ -168,6 +170,7 @@ export class G2AgentController {
         projectID: settings.selectedProjectID,
         model: { id: model.modelID, providerID: model.providerID },
       });
+      this.sessionModelMap.set(session.id, model);
       this.updateState({
         sessions: insertSessionSorted(this.state.sessions, session),
       });
@@ -261,13 +264,26 @@ export class G2AgentController {
   async loadModels(): Promise<OpenCodeProviderModel[]> {
     if (!this.client) return [];
     try {
-      const providers = await this.client.getProviders();
-      const config = await this.client.getConfig();
-      const configObj = config as Record<string, unknown>;
-      const allowedLmStudio = new Set<string>(
-        (configObj?.allowedLmStudioModelIds as string[]) || []
-      );
-      const models = this.client.extractFreeModels(providers, allowedLmStudio);
+      const [providers, config] = await Promise.all([
+        this.client.getProviders(),
+        this.client.getConfig(),
+      ]);
+
+      const allowedLmStudioModelIds = new Set<string>();
+      const configProviders = (config?.provider ?? {}) as Record<string, { models?: Record<string, unknown> }>;
+      const lmstudioConfig = configProviders?.lmstudio;
+      if (lmstudioConfig?.models) {
+        for (const modelId of Object.keys(lmstudioConfig.models)) {
+          allowedLmStudioModelIds.add(modelId);
+        }
+      }
+
+      const models = this.client.extractFreeModels(providers, allowedLmStudioModelIds);
+      models.sort((a, b) => {
+        const aLocal = a.providerID === 'lmstudio' ? 0 : 1;
+        const bLocal = b.providerID === 'lmstudio' ? 0 : 1;
+        return aLocal - bLocal;
+      });
       this.updateState({ models });
       return models;
     } catch (e: unknown) {
@@ -279,6 +295,10 @@ export class G2AgentController {
 
   selectModel(model: OpenCodeProviderModel): void {
     this.updateState({ selectedModel: model });
+  }
+
+  getModelForSession(sessionID: string): OpenCodeProviderModel | undefined {
+    return this.sessionModelMap.get(sessionID);
   }
 
   // ── Unread / Checked ─────────────────────────────────────────
