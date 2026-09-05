@@ -5,6 +5,7 @@ import { OpenCodeMessageWithParts } from "../message-mapper";
 
 const CHAT_MAX_LINES = 9;
 const CHAT_MAX_WIDTH = 56;
+const SCROLL_STEP = 8;
 
 function formatTime(ts?: number): string {
   if (!ts) return "??:??";
@@ -23,6 +24,10 @@ function formatDuration(ms: number): string {
   return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
 }
 
+function stripHomePilotContext(text: string): string {
+  return text.replace(/\[HomePilot Context\][\s\S]*?\[\/HomePilot Context\]\n\n?/g, "").trimEnd();
+}
+
 export class AgentChatPage extends BasePage {
   private controller: G2AgentController;
   private onReturnToList: () => Promise<void>;
@@ -32,6 +37,7 @@ export class AgentChatPage extends BasePage {
   private chatText: string = "";
   private wrappedLines: string[] = [];
   private scrollLine: number = 0;
+  private modelName: string = "Agent";
 
   constructor(
     controller: G2AgentController,
@@ -50,24 +56,19 @@ export class AgentChatPage extends BasePage {
   public async afterRender(): Promise<void> {
     const state = this.controller.getState();
     this.messages = state.messages;
+    this.modelName = await this.resolveModelName();
     this.buildChatText();
     this.buildWrappedLines();
     this.scrollLine = Math.max(0, this.wrappedLines.length - CHAT_MAX_LINES);
     await this.renderPage();
   }
 
-  private getModelName(): string {
+  private async resolveModelName(): Promise<string> {
     const state = this.controller.getState();
     const sessionID = this.messages[0]?.sessionID || state.selectedSessionID;
     if (sessionID) {
-      const mapped = this.controller.getModelForSession(sessionID);
-      if (mapped) return mapped.name;
+      return this.controller.getModelDisplayName(sessionID);
     }
-    const session = state.sessions.find((s) => s.id === sessionID);
-    if (session?.model?.id) return session.model.id;
-    const assistantMsg = this.messages.find((m) => m.role === "assistant");
-    if (assistantMsg?.model?.modelID) return assistantMsg.model.modelID;
-    if (assistantMsg?.modelID) return assistantMsg.modelID;
     return "Agent";
   }
 
@@ -97,7 +98,8 @@ export class AgentChatPage extends BasePage {
       const created = formatTime(msg.time?.created);
 
       if (msg.role === "user") {
-        blocks.push(`[U] ${created}\n${msg.contentText || "(empty)"}`);
+        const displayText = stripHomePilotContext(msg.contentText || "(empty)");
+        blocks.push(`[U] ${created}\n${displayText}`);
       } else {
         let startTime: number | undefined;
         if (i > 0) {
@@ -221,7 +223,7 @@ export class AgentChatPage extends BasePage {
       this.currentPath || "Chat",
       pageIndicator,
       CHAT_MAX_WIDTH,
-      `[${this.getModelName()}]`,
+      `[${this.modelName}]`,
     );
 
     const end = Math.min(this.scrollLine + CHAT_MAX_LINES, this.wrappedLines.length);
@@ -271,14 +273,14 @@ export class AgentChatPage extends BasePage {
 
   public async onScrollUp() {
     if (this.scrollLine < this.wrappedLines.length - CHAT_MAX_LINES) {
-      this.scrollLine++;
+      this.scrollLine = Math.min(this.scrollLine + SCROLL_STEP, this.wrappedLines.length - CHAT_MAX_LINES);
       await this.renderPage();
     }
   }
 
   public async onScrollDown() {
     if (this.scrollLine > 0) {
-      this.scrollLine--;
+      this.scrollLine = Math.max(this.scrollLine - SCROLL_STEP, 0);
       await this.renderPage();
     }
   }

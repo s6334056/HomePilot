@@ -301,6 +301,28 @@ export class G2AgentController {
     return this.sessionModelMap.get(sessionID);
   }
 
+  async getModelDisplayName(sessionID: string): Promise<string> {
+    const mapped = this.sessionModelMap.get(sessionID);
+    if (mapped) return mapped.name;
+
+    const session = this.state.sessions.find((s) => s.id === sessionID);
+    const providerID = session?.model?.providerID;
+    const modelID = session?.model?.id;
+    if (providerID && modelID) {
+      let models = this.state.models;
+      if (models.length === 0) {
+        models = await this.loadModels();
+      }
+      const found = models.find(
+        (m) => m.providerID === providerID && m.modelID === modelID,
+      );
+      if (found) return found.name;
+      return `${providerID}/${modelID}`;
+    }
+
+    return "Agent";
+  }
+
   // ── Unread / Checked ─────────────────────────────────────────
 
   markSessionChecked(sessionID: string): void {

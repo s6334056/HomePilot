@@ -5,6 +5,7 @@ import { FileSystemService } from "../../services/FileSystemService";
 
 export const G2_VIEWER_LINES = 9;
 export const G2_VIEWER_MAX_WIDTH = 56;
+const VIEWER_SCROLL_STEP = 8;
 
 interface WrappedLine {
   text: string;
@@ -184,7 +185,7 @@ export class FileViewerPage extends BasePage {
 
   public render(): PageRenderResult {
     const range = this.getVisibleLogicalRange();
-    const pageIndicator = `[L${range.min}-${range.max}/${range.total}]`;
+    const pageIndicator = `[${range.min}-${range.max}/${range.total}]`;
     const headerContent = this.buildHeaderLine(this.file.path, pageIndicator, G2_VIEWER_MAX_WIDTH, "[Viewer]");
 
     const end = Math.min(this.scrollPosition + G2_VIEWER_LINES, this.wrappedLines.length);
@@ -233,21 +234,24 @@ export class FileViewerPage extends BasePage {
   }
 
   /**
-   * Scroll up by one visual line.
+   * Scroll up by visual lines.
    */
   public async onScrollUp() {
     if (this.scrollPosition > 0) {
-      this.scrollPosition--;
+      this.scrollPosition = Math.max(this.scrollPosition - VIEWER_SCROLL_STEP, 0);
       if (this.renderPage) await this.renderPage();
     }
   }
 
   /**
-   * Scroll down by one visual line.
+   * Scroll down by visual lines.
    */
   public async onScrollDown() {
     if (this.scrollPosition < this.wrappedLines.length - G2_VIEWER_LINES) {
-      this.scrollPosition++;
+      this.scrollPosition = Math.min(
+        this.scrollPosition + VIEWER_SCROLL_STEP,
+        Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES),
+      );
       if (this.renderPage) await this.renderPage();
     }
   }
