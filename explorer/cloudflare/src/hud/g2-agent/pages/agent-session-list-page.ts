@@ -26,6 +26,7 @@ export class AgentSessionListPage extends BasePage {
   private controller: G2AgentController;
   private onSelect: (sessionID: string) => Promise<void>;
   private onReturnToExplorer: () => Promise<void>;
+  private currentPath: string;
   private sessions: OpenCodeSessionInfo[] = [];
   private selectedIndex: number = 0;
 
@@ -33,12 +34,14 @@ export class AgentSessionListPage extends BasePage {
     controller: G2AgentController,
     onSelect: (sessionID: string) => Promise<void>,
     onReturnToExplorer: () => Promise<void>,
+    currentPath: string = "",
   ) {
     super();
     this.pageType = "AgentSessionListPage";
     this.controller = controller;
     this.onSelect = onSelect;
     this.onReturnToExplorer = onReturnToExplorer;
+    this.currentPath = currentPath;
   }
 
   public async afterRender(): Promise<void> {
@@ -54,7 +57,7 @@ export class AgentSessionListPage extends BasePage {
   public render(): PageRenderResult {
     const total = this.sessions.length;
     const pageIndicator = total > 0 ? `[${this.selectedIndex + 1}/${total}]` : "[0/0]";
-    const headerContent = this.buildHeaderLine("Sessions", pageIndicator, LIST_MAX_WIDTH);
+    const headerContent = this.buildHeaderLine(this.currentPath || "Sessions", pageIndicator, LIST_MAX_WIDTH, "[Sessions]");
 
     let bodyText = "";
 

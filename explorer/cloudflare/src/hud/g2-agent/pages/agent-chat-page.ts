@@ -56,6 +56,16 @@ export class AgentChatPage extends BasePage {
     await this.renderPage();
   }
 
+  private getModelName(): string {
+    const state = this.controller.getState();
+    const session = state.sessions.find((s) => s.id === this.messages[0]?.sessionID);
+    if (session?.model?.id) return session.model.id;
+    const assistantMsg = this.messages.find((m) => m.role === "assistant");
+    if (assistantMsg?.model?.modelID) return assistantMsg.model.modelID;
+    if (assistantMsg?.modelID) return assistantMsg.modelID;
+    return "Agent";
+  }
+
   private buildChatText(): void {
     const allMessages = this.messages;
     if (allMessages.length === 0) {
@@ -206,6 +216,7 @@ export class AgentChatPage extends BasePage {
       this.currentPath || "Chat",
       pageIndicator,
       CHAT_MAX_WIDTH,
+      `[${this.getModelName()}]`,
     );
 
     const end = Math.min(this.scrollLine + CHAT_MAX_LINES, this.wrappedLines.length);

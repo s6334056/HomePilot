@@ -77,7 +77,7 @@ export class ExplorerPage extends BasePage {
   public render(): PageRenderResult {
     const total = this.items.length;
     const pageIndicator = total > 0 ? `[${this.selectedIndex + 1}/${total}]` : "[0/0]";
-    const headerContent = this.buildHeaderLine(this.currentPath, pageIndicator, G2_MAX_LINE_WIDTH);
+    const headerContent = this.buildHeaderLine(this.currentPath, pageIndicator, G2_MAX_LINE_WIDTH, "[Explorer]");
 
     let bodyText = "";
 

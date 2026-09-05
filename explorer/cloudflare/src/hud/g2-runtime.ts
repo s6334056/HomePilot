@@ -370,6 +370,7 @@ export class G2RuntimeManager {
         this.g2AgentController,
         (sessionID) => this.navigateToAgentChat(sessionID),
         () => this.returnToExplorer(),
+        this.agentCurrentPath,
       );
     }
 

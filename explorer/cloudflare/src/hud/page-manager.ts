@@ -97,17 +97,19 @@ export abstract class BasePage {
   }
 
   /**
-   * Build a header line by combining a prefix (path/filename) and a suffix
-   * (page indicator). The suffix width is measured first, and the remaining
-   * width is used for the prefix (with truncation if needed).
+   * Build a header line by combining an optional tag, a prefix (path/filename),
+   * and a suffix (page indicator). The suffix width is measured first, and the
+   * remaining width is used for tag + prefix (with truncation of the prefix if needed).
    */
-  protected buildHeaderLine(prefix: string, suffix: string, maxWidth: number): string {
-    if (!suffix) return this.truncateName(prefix, maxWidth);
+  protected buildHeaderLine(prefix: string, suffix: string, maxWidth: number, tag?: string): string {
+    const tagStr = tag ? `${tag} ` : "";
+    const tagWidth = this.getStringWidth(tagStr);
+    if (!suffix) return this.truncateName(`${tagStr}${prefix}`, maxWidth);
     const suffixWidth = this.getStringWidth(suffix);
     const spaceWidth = this.getCharWidth(" ");
-    const availableWidth = maxWidth - suffixWidth - spaceWidth;
+    const availableWidth = maxWidth - suffixWidth - spaceWidth - tagWidth;
     const truncatedPrefix = this.truncateName(prefix, availableWidth);
-    return `${truncatedPrefix} ${suffix}`;
+    return `${tagStr}${truncatedPrefix} ${suffix}`;
   }
 
   public truncateName(name: string, maxWidth: number): string {

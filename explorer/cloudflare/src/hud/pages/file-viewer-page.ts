@@ -185,7 +185,7 @@ export class FileViewerPage extends BasePage {
   public render(): PageRenderResult {
     const range = this.getVisibleLogicalRange();
     const pageIndicator = `[L${range.min}-${range.max}/${range.total}]`;
-    const headerContent = this.buildHeaderLine(this.file.name, pageIndicator, G2_VIEWER_MAX_WIDTH);
+    const headerContent = this.buildHeaderLine(this.file.path, pageIndicator, G2_VIEWER_MAX_WIDTH, "[Viewer]");
 
     const end = Math.min(this.scrollPosition + G2_VIEWER_LINES, this.wrappedLines.length);
     const visibleLines = this.wrappedLines.slice(this.scrollPosition, end);
