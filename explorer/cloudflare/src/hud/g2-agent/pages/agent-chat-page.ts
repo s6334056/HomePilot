@@ -38,6 +38,7 @@ export class AgentChatPage extends BasePage {
   private wrappedLines: string[] = [];
   private scrollLine: number = 0;
   private modelName: string = "Agent";
+  private voiceTestMode: "none" | "long_press" | "released" = "none";
 
   constructor(
     controller: G2AgentController,
@@ -214,27 +215,15 @@ export class AgentChatPage extends BasePage {
   }
 
   public render(): PageRenderResult {
-    const totalLines = this.wrappedLines.length;
-    const viewStart = totalLines > 0 ? this.scrollLine + 1 : 0;
-    const viewEnd = Math.min(this.scrollLine + CHAT_MAX_LINES, totalLines);
-    const pageIndicator =
-      totalLines > 0 ? `[${viewStart}-${viewEnd}/${totalLines}]` : "[0/0]";
-    const headerContent = this.buildHeaderLine(
-      this.currentPath || "Chat",
-      pageIndicator,
-      CHAT_MAX_WIDTH,
-      `[${this.modelName}]`,
-    );
-
-    const end = Math.min(this.scrollLine + CHAT_MAX_LINES, this.wrappedLines.length);
-    const visibleLines = this.wrappedLines.slice(this.scrollLine, end);
-    const bodyText =
-      visibleLines.length > 0 ? visibleLines.join("\n") : "  (No messages yet)";
-
     const headerProp = new TextContainerProperty({
       containerID: 1,
       containerName: "chat_header",
-      content: headerContent,
+      content: this.buildHeaderLine(
+        this.currentPath || "Chat",
+        "",
+        CHAT_MAX_WIDTH,
+        `[${this.modelName}]`,
+      ),
       xPosition: 4,
       yPosition: 2,
       width: 572,
@@ -243,10 +232,33 @@ export class AgentChatPage extends BasePage {
       isEventCapture: 0,
     });
 
+    let bodyContent: string;
+    if (this.voiceTestMode === "long_press") {
+      bodyContent = "VOICE TEST\n\n>>> LONG PRESS <<<\n\nHold...";
+    } else if (this.voiceTestMode === "released") {
+      bodyContent = "VOICE TEST\n\n>>> RELEASE <<<\n\nReleased!";
+    } else {
+      const totalLines = this.wrappedLines.length;
+      const viewStart = totalLines > 0 ? this.scrollLine + 1 : 0;
+      const viewEnd = Math.min(this.scrollLine + CHAT_MAX_LINES, totalLines);
+      const pageIndicator =
+        totalLines > 0 ? `[${viewStart}-${viewEnd}/${totalLines}]` : "[0/0]";
+      headerProp.content = this.buildHeaderLine(
+        this.currentPath || "Chat",
+        pageIndicator,
+        CHAT_MAX_WIDTH,
+        `[${this.modelName}]`,
+      );
+
+      const end = Math.min(this.scrollLine + CHAT_MAX_LINES, this.wrappedLines.length);
+      const visibleLines = this.wrappedLines.slice(this.scrollLine, end);
+      bodyContent = visibleLines.length > 0 ? visibleLines.join("\n") : "  (No messages yet)";
+    }
+
     const bodyProp = new TextContainerProperty({
       containerID: 2,
       containerName: "chat_body",
-      content: bodyText,
+      content: bodyContent,
       xPosition: 4,
       yPosition: 30,
       width: 572,
@@ -294,7 +306,13 @@ export class AgentChatPage extends BasePage {
   }
 
   public async onLongPress() {
-    // Future: Voice Input
+    this.voiceTestMode = "long_press";
+    await this.renderPage();
+  }
+
+  public async onLongPressRelease() {
+    this.voiceTestMode = "released";
+    await this.renderPage();
   }
 
   public async onMenuItemClick(menuId: string) {

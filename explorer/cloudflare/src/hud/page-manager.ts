@@ -54,6 +54,7 @@ export abstract class BasePage {
   public onClick(_event?: unknown) {}
   public onDoubleClick(_event?: unknown) {}
   public onLongPress(_event?: unknown) {}
+  public onLongPressRelease(_event?: unknown) {}
   public onMenuItemClick(_menuId: string, _event?: unknown) {}
 
   /**
@@ -306,6 +307,9 @@ export class PageManager {
           break;
         case OsEventTypeList.LONG_PRESS_EVENT:
           this.currentPage.onLongPress(event);
+          break;
+        case OsEventTypeList.LONG_PRESS_RELEASE_EVENT:
+          this.currentPage.onLongPressRelease(event);
           break;
       }
     });
