@@ -472,7 +472,7 @@ export class AgentChatPage extends BasePage {
         break;
       case "scrollInvert":
         this.scrollInverted = !this.scrollInverted;
-        this.notifyStatus(this.scrollInverted ? "スクロール操作反転: ON" : "スクロール操作反転: OFF");
+        await this.renderPage();
         break;
     }
   }

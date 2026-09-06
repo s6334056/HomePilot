@@ -386,17 +386,9 @@ export class G2RuntimeManager {
     this.lastAgentSessionID = null;
 
     // Create or reuse session list page
-    if (!this.sessionListPage) {
-      this.sessionListPage = new AgentSessionListPage(
-        this.g2AgentController,
-        (sessionID) => this.navigateToAgentChat(sessionID),
-        () => this.navigateToModelSelect(),
-        () => this.navigateFromAgentToExplorer(),
-        this.agentCurrentPath,
-      );
-    }
+    this.ensureSessionListPage();
 
-    await this.pageManager.navigateTo(this.sessionListPage);
+    await this.pageManager.navigateTo(this.sessionListPage!);
   }
 
   /**
@@ -440,12 +432,32 @@ export class G2RuntimeManager {
   }
 
   /**
+   * Ensure sessionListPage exists. Creates it lazily if it was cleared
+   * by navigateFromAgentToExplorer(). This allows Chat's Double Tap
+   * → returnToSessionList() to work even after navigating back to
+   * Explorer and then returning to Agent Chat.
+   */
+  private ensureSessionListPage(): void {
+    if (this.sessionListPage || !this.g2AgentController) return;
+    this.sessionListPage = new AgentSessionListPage(
+      this.g2AgentController,
+      (sessionID) => this.navigateToAgentChat(sessionID),
+      () => this.navigateToModelSelect(),
+      () => this.navigateFromAgentToExplorer(),
+      this.agentCurrentPath,
+    );
+  }
+
+  /**
    * Navigate from Chat back to Session List.
    * Reuses the same sessionListPage instance.
    * Does NOT change agentReturnPage.
    */
   async returnToSessionList(): Promise<void> {
-    if (!this.pageManager || !this.sessionListPage) return;
+    if (!this.pageManager) return;
+
+    this.ensureSessionListPage();
+    if (!this.sessionListPage) return;
 
     this.modelSelectPage = null;
 
