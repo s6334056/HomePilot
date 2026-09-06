@@ -53,6 +53,10 @@ export class G2RuntimeManager {
   private modelSelectPage: AgentModelSelectPage | null = null;
   private agentCurrentPath: string = '';
 
+  // Last Agent page state (for Explorer → Agent return)
+  private lastAgentPage: 'sessionList' | 'chat' = 'sessionList';
+  private lastAgentSessionID: string | null = null;
+
   // Callback to notify App.tsx of state changes (for UI updates)
   private onStatusUpdate?: (status: string) => void;
   private onRuntimeStateChange?: (state: G2RuntimeState) => void;
@@ -242,7 +246,7 @@ export class G2RuntimeManager {
         undefined,
         undefined,
         undefined,
-        () => this.navigateToSessionList(),
+        () => this.navigateToAgentFromExplorer(),
       );
       await this.pageManager.navigateTo(explorerPage);
 
@@ -303,6 +307,8 @@ export class G2RuntimeManager {
     this.sessionListPage = null;
     this.modelSelectPage = null;
     this.agentCurrentPath = '';
+    this.lastAgentPage = 'sessionList';
+    this.lastAgentSessionID = null;
 
       this.setState('inactive');
       this.updateStatus('G2 Runtime stopped');
@@ -332,6 +338,8 @@ export class G2RuntimeManager {
     this.sessionListPage = null;
     this.modelSelectPage = null;
     this.agentCurrentPath = '';
+    this.lastAgentPage = 'sessionList';
+    this.lastAgentSessionID = null;
   }
 
   // ── Accessors for G2 Pages ────────────────────────────────
@@ -352,15 +360,19 @@ export class G2RuntimeManager {
 
   /**
    * Navigate from Explorer/FileViewer to Agent Session List.
-   * Saves the current page as agentReturnPage (the page to return to).
+   * Saves the current page as agentReturnPage only when entering from
+   * Explorer/FileViewer (not from Agent sub-pages).
    */
   async navigateToSessionList(): Promise<void> {
     if (!this.pageManager || !this.g2AgentController) return;
 
     const currentPage = this.pageManager.getCurrentPage();
+    const isFromExplorer = currentPage?.pageType === 'ExplorerPage' || currentPage?.pageType === 'FileViewerPage';
 
-    // Save the current page as the return point for Agent → Explorer/FileViewer
-    this.agentReturnPage = currentPage || null;
+    // Save the return page only when entering from Explorer/FileViewer
+    if (isFromExplorer) {
+      this.agentReturnPage = currentPage || null;
+    }
 
     // Capture current path for Agent Chat header
     if (currentPage && typeof (currentPage as any).getCurrentPath === 'function') {
@@ -369,13 +381,17 @@ export class G2RuntimeManager {
       this.agentCurrentPath = '';
     }
 
+    // Remember last agent page
+    this.lastAgentPage = 'sessionList';
+    this.lastAgentSessionID = null;
+
     // Create or reuse session list page
     if (!this.sessionListPage) {
       this.sessionListPage = new AgentSessionListPage(
         this.g2AgentController,
         (sessionID) => this.navigateToAgentChat(sessionID),
         () => this.navigateToModelSelect(),
-        () => this.returnToExplorer(),
+        () => this.navigateFromAgentToExplorer(),
         this.agentCurrentPath,
       );
     }
@@ -392,10 +408,14 @@ export class G2RuntimeManager {
 
     await this.g2AgentController.selectSession(sessionID);
 
+    // Remember last agent page
+    this.lastAgentPage = 'chat';
+    this.lastAgentSessionID = sessionID;
+
     const chatPage = new AgentChatPage(
       this.g2AgentController,
       () => this.returnToSessionList(),
-      () => this.returnToExplorer(),
+      () => this.navigateFromAgentToExplorer(),
       this.agentCurrentPath,
       this.agentReturnPage,
     );
@@ -439,7 +459,7 @@ export class G2RuntimeManager {
    * Navigate from Agent (Session List or Chat) back to the original
    * Explorer/FileViewer page. Clears agentReturnPage and sessionListPage.
    */
-  async returnToExplorer(): Promise<void> {
+  async navigateFromAgentToExplorer(): Promise<void> {
     if (!this.pageManager || !this.agentReturnPage) return;
 
     const returnPage = this.agentReturnPage;
@@ -448,6 +468,30 @@ export class G2RuntimeManager {
     this.modelSelectPage = null;
 
     await this.pageManager.navigateTo(returnPage);
+  }
+
+  /**
+   * Navigate from any Explorer/FileViewer page to Agent, restoring the
+   * last viewed Agent page (Session List or Chat).
+   */
+  async navigateToAgentFromExplorer(): Promise<void> {
+    if (!this.pageManager || !this.g2AgentController) return;
+
+    // Save current Explorer/FileViewer page as return point
+    const currentPage = this.pageManager.getCurrentPage();
+    if (currentPage) {
+      this.agentReturnPage = currentPage;
+      if (typeof (currentPage as any).getCurrentPath === 'function') {
+        this.agentCurrentPath = (currentPage as any).getCurrentPath();
+      }
+    }
+
+    // Restore last Agent page
+    if (this.lastAgentPage === 'chat' && this.lastAgentSessionID) {
+      await this.navigateToAgentChat(this.lastAgentSessionID);
+    } else {
+      await this.navigateToSessionList();
+    }
   }
 
   // ── Cleanup ───────────────────────────────────────────────

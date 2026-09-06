@@ -23,6 +23,7 @@ export class FileViewerPage extends BasePage {
   private lines: string[] = [];
   private wrappedLines: WrappedLine[] = [];
   private scrollPosition: number = 0;
+  private scrollInverted: boolean = false;
 
   constructor(
     file: FileSystemItem,
@@ -193,7 +194,8 @@ export class FileViewerPage extends BasePage {
 
   public render(): PageRenderResult {
     const range = this.getVisibleLogicalRange();
-    const pageIndicator = `[${range.min}-${range.max}/${range.total}]`;
+    const scrollMode = this.scrollInverted ? 's' : 'k';
+    const pageIndicator = `[${range.min}-${range.max}/${range.total}]${scrollMode}`;
     const headerContent = this.buildHeaderLine(this.file.path, pageIndicator, G2_VIEWER_MAX_WIDTH, "[Viewer]");
 
     const end = Math.min(this.scrollPosition + G2_VIEWER_LINES, this.wrappedLines.length);
@@ -232,10 +234,11 @@ export class FileViewerPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
-          { id: "back", title: "戻る" },
           { id: "agent", title: "エージェント画面へ" },
+          { id: "refresh", title: "更新" },
           { id: "top", title: "先頭へ" },
           { id: "bottom", title: "末尾へ" },
+          { id: "scrollInvert", title: "スクロール操作反転" },
         ],
       },
     };
@@ -245,9 +248,19 @@ export class FileViewerPage extends BasePage {
    * Scroll up by visual lines.
    */
   public async onScrollUp() {
-    if (this.scrollPosition > 0) {
-      this.scrollPosition = Math.max(this.scrollPosition - VIEWER_SCROLL_STEP, 0);
-      if (this.renderPage) await this.renderPage();
+    if (this.scrollInverted) {
+      if (this.scrollPosition < this.wrappedLines.length - G2_VIEWER_LINES) {
+        this.scrollPosition = Math.min(
+          this.scrollPosition + VIEWER_SCROLL_STEP,
+          Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES),
+        );
+        if (this.renderPage) await this.renderPage();
+      }
+    } else {
+      if (this.scrollPosition > 0) {
+        this.scrollPosition = Math.max(this.scrollPosition - VIEWER_SCROLL_STEP, 0);
+        if (this.renderPage) await this.renderPage();
+      }
     }
   }
 
@@ -255,12 +268,19 @@ export class FileViewerPage extends BasePage {
    * Scroll down by visual lines.
    */
   public async onScrollDown() {
-    if (this.scrollPosition < this.wrappedLines.length - G2_VIEWER_LINES) {
-      this.scrollPosition = Math.min(
-        this.scrollPosition + VIEWER_SCROLL_STEP,
-        Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES),
-      );
-      if (this.renderPage) await this.renderPage();
+    if (this.scrollInverted) {
+      if (this.scrollPosition > 0) {
+        this.scrollPosition = Math.max(this.scrollPosition - VIEWER_SCROLL_STEP, 0);
+        if (this.renderPage) await this.renderPage();
+      }
+    } else {
+      if (this.scrollPosition < this.wrappedLines.length - G2_VIEWER_LINES) {
+        this.scrollPosition = Math.min(
+          this.scrollPosition + VIEWER_SCROLL_STEP,
+          Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES),
+        );
+        if (this.renderPage) await this.renderPage();
+      }
     }
   }
 
@@ -274,13 +294,13 @@ export class FileViewerPage extends BasePage {
 
   public async onMenuItemClick(menuId: string) {
     switch (menuId) {
-      case "back":
-        await this.onDoubleClick();
-        break;
       case "agent":
         if (this.onAgentSessionList) {
           await this.onAgentSessionList();
         }
+        break;
+      case "refresh":
+        await this.loadFileContent();
         break;
       case "top":
         this.scrollPosition = 0;
@@ -289,6 +309,10 @@ export class FileViewerPage extends BasePage {
       case "bottom":
         this.scrollPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
         if (this.renderPage) await this.renderPage();
+        break;
+      case "scrollInvert":
+        this.scrollInverted = !this.scrollInverted;
+        this.notifyStatus(this.scrollInverted ? "スクロール操作反転: ON" : "スクロール操作反転: OFF");
         break;
     }
   }

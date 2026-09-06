@@ -210,6 +210,7 @@ export class G2AgentController {
       sessionID,
       parts: [],
       contentText: content,
+      time: { created: Date.now() },
     };
 
     const processingMessage: OpenCodeMessageWithParts = {

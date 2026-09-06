@@ -137,8 +137,8 @@ export class AgentSessionListPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
-          { id: "back", title: "Back" },
-          { id: "refresh", title: "Refresh" },
+          { id: "explorer", title: "エクスプローラ画面へ" },
+          { id: "refresh", title: "更新" },
         ],
       },
     };
@@ -186,7 +186,7 @@ export class AgentSessionListPage extends BasePage {
 
   public async onMenuItemClick(menuId: string) {
     switch (menuId) {
-      case "back":
+      case "explorer":
         await this.onReturnToExplorer();
         break;
       case "refresh":

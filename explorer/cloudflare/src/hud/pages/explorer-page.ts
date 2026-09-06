@@ -146,11 +146,8 @@ export class ExplorerPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
-          { id: "refresh", title: "更新" },
-          { id: "home", title: "ホーム" },
-          { id: "parent", title: "親フォルダ" },
-          { id: "info", title: "ファイル情報" },
           { id: "agent", title: "エージェント画面へ" },
+          { id: "refresh", title: "更新" },
         ],
       },
     };
@@ -223,21 +220,6 @@ export class ExplorerPage extends BasePage {
         await this.loadDirectory(this.currentPath);
         await this.navigate(this);
         break;
-      case "home":
-        await this.loadDirectory(this.fileService.getRootPath());
-        await this.navigate(this);
-        break;
-      case "parent":
-        await this.onDoubleClick();
-        break;
-      case "info": {
-        const item = this.items[this.selectedIndex];
-        const info = item
-          ? `${item.name} (${item.type === "directory" ? "Folder" : "File"})\nSize: ${item.size ?? "N/A"}`
-          : `Dir: ${this.currentPath}`;
-        this.notifyStatus(info);
-        break;
-      }
       case "agent":
         if (this.onAgentSessionList) {
           await this.onAgentSessionList();

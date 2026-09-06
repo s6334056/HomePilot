@@ -97,11 +97,6 @@ export class AgentModelSelectPage extends BasePage {
     return {
       containerTotalNum: 2,
       textObject: [headerProp, bodyProp],
-      menuObject: {
-        menuList: [
-          { id: "back", title: "Back" },
-        ],
-      },
     };
   }
 
@@ -142,13 +137,5 @@ export class AgentModelSelectPage extends BasePage {
 
   public async onLongPress() {
     // Future: Voice Input
-  }
-
-  public async onMenuItemClick(menuId: string) {
-    switch (menuId) {
-      case "back":
-        await this.onReturnToSessionList();
-        break;
-    }
   }
 }

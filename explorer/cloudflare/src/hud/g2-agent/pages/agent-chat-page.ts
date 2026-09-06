@@ -10,10 +10,23 @@ const CHAT_MAX_LINES = 9;
 const CHAT_MAX_WIDTH = 56;
 const SCROLL_STEP = 8;
 
-function formatTime(ts?: number): string {
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function formatDateTime(ts?: number): string {
   if (!ts) return "??:??";
   const d = new Date(ts);
-  const h = String(d.getHours()).padStart(2, "0");
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  const dayName = DAY_NAMES[d.getDay()];
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${month}/${day}(${dayName})${h}:${m}`;
+}
+
+function formatTimeOnly(ts?: number): string {
+  if (!ts) return "??:??";
+  const d = new Date(ts);
+  const h = d.getHours();
   const m = String(d.getMinutes()).padStart(2, "0");
   return `${h}:${m}`;
 }
@@ -24,7 +37,13 @@ function formatDuration(ms: number): string {
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
   const rem = s % 60;
-  return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
+  if (m < 60) return rem > 0 ? `${m}m${rem}s` : `${m}m`;
+  const h = Math.floor(m / 60);
+  const remM = m % 60;
+  if (remM > 0 && rem > 0) return `${h}h${remM}m${rem}s`;
+  if (remM > 0) return `${h}h${remM}m`;
+  if (rem > 0) return `${h}h${rem}s`;
+  return `${h}h`;
 }
 
 function stripHomePilotContext(text: string): string {
@@ -43,6 +62,8 @@ export class AgentChatPage extends BasePage {
   private scrollLine: number = 0;
   private modelName: string = "Agent";
   private stateUnsubscribe: (() => void) | null = null;
+  private scrollInverted: boolean = false;
+  private scrollToBottomAfterSend: boolean = false;
 
   constructor(
     controller: G2AgentController,
@@ -73,6 +94,10 @@ export class AgentChatPage extends BasePage {
         this.messages = state.messages;
         this.buildChatText();
         this.buildWrappedLines();
+        if (this.scrollToBottomAfterSend) {
+          this.scrollToBottomAfterSend = false;
+          this.scrollLine = Math.max(0, this.wrappedLines.length - CHAT_MAX_LINES);
+        }
         this.renderPage();
       }
     });
@@ -120,11 +145,11 @@ export class AgentChatPage extends BasePage {
 
     for (let i = 0; i < visible.length; i++) {
       const msg = visible[i];
-      const created = formatTime(msg.time?.created);
+      const created = formatDateTime(msg.time?.created);
 
       if (msg.role === "user") {
         const displayText = stripHomePilotContext(msg.contentText || "(empty)");
-        blocks.push(`[U] ${created}\n${displayText}`);
+        blocks.push(`[User] ${created}\n${displayText}`);
       } else {
         let startTime: number | undefined;
         if (i > 0) {
@@ -138,16 +163,16 @@ export class AgentChatPage extends BasePage {
         if (completed != null && startTime != null) {
           const duration = formatDuration(completed - startTime);
           blocks.push(
-            `[A] ${created} → ${formatTime(completed)} (${duration})\n${msg.contentText || "(empty)"}`,
+            `[Agent] ${created} → ${formatTimeOnly(completed)} (${duration})\n${msg.contentText || "(empty)"}`,
           );
         } else if (completed != null) {
           blocks.push(
-            `[A] ${created} → ${formatTime(completed)}\n${msg.contentText || "(empty)"}`,
+            `[Agent] ${created} → ${formatTimeOnly(completed)}\n${msg.contentText || "(empty)"}`,
           );
         } else if (msg.finish === "error") {
-          blocks.push(`[A] ${created} → 処理に失敗しました`);
+          blocks.push(`[Agent] ${created} → 処理に失敗しました`);
         } else {
-          blocks.push(`[A] ${created} → 処理中...`);
+          blocks.push(`[Agent] ${created} → 処理中...`);
         }
       }
     }
@@ -160,7 +185,7 @@ export class AgentChatPage extends BasePage {
       lastMsg.id !== lastVisible?.id
     ) {
       blocks.push(
-        `[A] ${formatTime(lastMsg.time?.created)} → 処理中...`,
+        `[Agent] ${formatDateTime(lastMsg.time?.created)} → 処理中...`,
       );
     }
 
@@ -274,8 +299,9 @@ export class AgentChatPage extends BasePage {
       const totalLines = this.wrappedLines.length;
       const viewStart = totalLines > 0 ? this.scrollLine + 1 : 0;
       const viewEnd = Math.min(this.scrollLine + CHAT_MAX_LINES, totalLines);
+      const scrollMode = this.scrollInverted ? 'k' : 's';
       const pageIndicator =
-        totalLines > 0 ? `[${viewStart}-${viewEnd}/${totalLines}]` : "[0/0]";
+        totalLines > 0 ? `[${viewStart}-${viewEnd}/${totalLines}]${scrollMode}` : `[0/0]${scrollMode}`;
       headerProp.content = this.buildHeaderLine(
         this.currentPath || "Chat",
         pageIndicator,
@@ -308,25 +334,41 @@ export class AgentChatPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
-          { id: "back_list", title: "Back to List" },
-          { id: "back_explorer", title: "Back to Explorer" },
-          { id: "refresh", title: "Refresh" },
+          { id: "explorer", title: "エクスプローラ画面へ" },
+          { id: "refresh", title: "更新" },
+          { id: "top", title: "先頭へ" },
+          { id: "bottom", title: "末尾へ" },
+          { id: "scrollInvert", title: "スクロール操作反転" },
         ],
       },
     };
   }
 
   public async onScrollUp() {
-    if (this.scrollLine < this.wrappedLines.length - CHAT_MAX_LINES) {
-      this.scrollLine = Math.min(this.scrollLine + SCROLL_STEP, this.wrappedLines.length - CHAT_MAX_LINES);
-      await this.renderPage();
+    if (this.scrollInverted) {
+      if (this.scrollLine > 0) {
+        this.scrollLine = Math.max(this.scrollLine - SCROLL_STEP, 0);
+        await this.renderPage();
+      }
+    } else {
+      if (this.scrollLine < this.wrappedLines.length - CHAT_MAX_LINES) {
+        this.scrollLine = Math.min(this.scrollLine + SCROLL_STEP, this.wrappedLines.length - CHAT_MAX_LINES);
+        await this.renderPage();
+      }
     }
   }
 
   public async onScrollDown() {
-    if (this.scrollLine > 0) {
-      this.scrollLine = Math.max(this.scrollLine - SCROLL_STEP, 0);
-      await this.renderPage();
+    if (this.scrollInverted) {
+      if (this.scrollLine < this.wrappedLines.length - CHAT_MAX_LINES) {
+        this.scrollLine = Math.min(this.scrollLine + SCROLL_STEP, this.wrappedLines.length - CHAT_MAX_LINES);
+        await this.renderPage();
+      }
+    } else {
+      if (this.scrollLine > 0) {
+        this.scrollLine = Math.max(this.scrollLine - SCROLL_STEP, 0);
+        await this.renderPage();
+      }
     }
   }
 
@@ -381,6 +423,7 @@ export class AgentChatPage extends BasePage {
       if (transcript) {
         const context = this.buildLiveContext();
         this.controller.setVoiceState('idle');
+        this.scrollToBottomAfterSend = true;
         await this.controller.sendMessage(transcript, context);
       }
     }
@@ -407,10 +450,7 @@ export class AgentChatPage extends BasePage {
 
   public async onMenuItemClick(menuId: string) {
     switch (menuId) {
-      case "back_list":
-        await this.onReturnToList();
-        break;
-      case "back_explorer":
+      case "explorer":
         await this.onReturnToExplorer();
         break;
       case "refresh":
@@ -419,11 +459,20 @@ export class AgentChatPage extends BasePage {
         this.messages = state.messages;
         this.buildChatText();
         this.buildWrappedLines();
-        this.scrollLine = Math.min(
-          this.scrollLine,
-          Math.max(0, this.wrappedLines.length - CHAT_MAX_LINES),
-        );
+        this.scrollLine = Math.max(0, this.wrappedLines.length - CHAT_MAX_LINES);
         await this.renderPage();
+        break;
+      case "top":
+        this.scrollLine = 0;
+        await this.renderPage();
+        break;
+      case "bottom":
+        this.scrollLine = Math.max(0, this.wrappedLines.length - CHAT_MAX_LINES);
+        await this.renderPage();
+        break;
+      case "scrollInvert":
+        this.scrollInverted = !this.scrollInverted;
+        this.notifyStatus(this.scrollInverted ? "スクロール操作反転: ON" : "スクロール操作反転: OFF");
         break;
     }
   }
