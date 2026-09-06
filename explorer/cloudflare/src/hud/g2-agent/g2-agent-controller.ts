@@ -706,6 +706,44 @@ export class G2AgentController {
       (id) => !completedSessionIDs.includes(id)
     );
 
+    // ── External unread sync (PWA parity) ───────────────────────
+    // Detect sessions updated externally (PC/PWA/other devices) that are
+    // NOT in processingSessionIDs. Uses time.updated > lastChecked as a
+    // lightweight candidate filter, then fetches messages for final
+    // determination using PWA-equivalent logic.
+    const processingSet = new Set(this.state.processingSessionIDs);
+    const candidates = activeSessions.filter((s) => {
+      if (processingSet.has(s.id)) return false;
+      return (s.time?.updated ?? 0) > (lastChecked[s.id] ?? 0);
+    });
+
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+      const batch = candidates.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((s) => this.client!.getMessages(s.id))
+      );
+
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j];
+        const s = batch[j];
+        if (result.status !== 'fulfilled') continue;
+
+        const messages = mapApiMessagesToWithParts(result.value, s.id);
+        if (messages.length === 0) continue;
+
+        // Determine state based on the LAST message (same logic as processing loop)
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg.role === 'assistant' && lastMsg.finish === 'stop') {
+          const completedTime =
+            lastMsg.time?.completed ?? lastMsg.time?.created ?? 0;
+          if (completedTime > (lastChecked[s.id] ?? 0)) {
+            unreadSet.add(s.id);
+          }
+        }
+      }
+    }
+
     this.updateState({
       unreadSessionIDs: [...unreadSet],
       processingSessionIDs: newProcessing,
