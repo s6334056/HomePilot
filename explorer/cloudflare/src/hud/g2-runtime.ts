@@ -461,6 +461,11 @@ export class G2RuntimeManager {
 
     this.modelSelectPage = null;
 
+    // Sync last agent page state so navigateToAgentFromExplorer()
+    // restores Session List (not Chat) when returning from Explorer.
+    this.lastAgentPage = 'sessionList';
+    this.lastAgentSessionID = null;
+
     const currentSessionID = this.g2AgentController?.getState().selectedSessionID || null;
     this.sessionListPage.setReturnSessionID(currentSessionID);
 
