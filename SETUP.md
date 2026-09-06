@@ -853,15 +853,22 @@ which runs:
 wrangler deploy
 ```
 
-After changing the Worker, verify the deployment if necessary:
+After changing the Worker, deploy it explicitly.
+
+```powershell
+npx wrangler deploy
+```
+
+If necessary, verify that the new deployment is actually active:
 
 ```powershell
 npx wrangler deployments list
 ```
 
-A source code change does not automatically mean that the deployed Cloudflare Worker has changed.
-
-Always deploy explicitly after modifying the Worker.
+The local source code and the deployed Worker are separate states.
+A source code change does not automatically update the deployed Worker.
+This distinction is important when debugging Cloudflare Worker behavior.
+If the source code looks correct but the deployed behavior has not changed, first confirm that the latest Worker version was deployed.
 
 ---
 

@@ -773,7 +773,6 @@ Do not expose the HomePilot Gateway directly to the public Internet without appr
 
 - `SETUP.md` — Environment setup, operation, testing and deployment
 - `DEVELOPMENT.md` — Development history, architecture decisions and AI-assisted development methodology
-- `explorer/readme_HomePilot-Explorer.md` — Historical Explorer development notes
 
 ---
 
@@ -1617,4 +1616,3 @@ HomePilotは個人利用を前提とした実験的なシステムであるた�
 
 - `SETUP.md` — 環境構築・起動・動作確認・デプロイ
 - `DEVELOPMENT.md` — 開発経緯・設計判断・AI支援開発の方法
-- `explorer/readme_HomePilot-Explorer.md` — Explorer開発時の詳細メモ

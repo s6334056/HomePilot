@@ -1664,7 +1664,42 @@ Do not automatically attribute a Local LLM failure to HomePilot.
 
 ---
 
-# 46. Documentation Philosophy
+# 46. Cloudflare Worker Deployment
+
+Cloudflare Worker development has an important distinction between local source code and deployed runtime code.
+
+A change in the local source code does not automatically mean that the deployed Worker has changed.
+
+Therefore, when debugging a Cloudflare Worker:
+
+    `Source code
+         ↓
+      Deploy
+         ↓
+    Deployed Worker
+         ↓
+      Verify
+    `
+
+After modifying the Worker, deploy it explicitly:
+
+    `npx wrangler deploy`
+
+If the behavior still appears inconsistent, verify the deployment history:
+
+    `npx wrangler deployments list`
+
+A source-level fix is not sufficient evidence that the running Worker contains that fix.
+
+This lesson was particularly important during HomePilot voice input development, where local code, Cloudflare deployment state, and actual runtime behavior had to be treated as separate layers.
+
+The general debugging principle is:
+
+> Do not debug the deployed system based only on the local source code. Verify the actual deployed state.
+
+---
+
+# 47. Documentation Philosophy
 
 Documentation should be separated by purpose.
 
@@ -1690,7 +1725,7 @@ This separation avoids turning README into an enormous operational manual.
 
 ---
 
-# 47. Future Documentation Maintenance
+# 48. Future Documentation Maintenance
 
 When changing the architecture, update the appropriate document.
 
@@ -1731,7 +1766,7 @@ Do not duplicate the same information unnecessarily across all three documents.
 
 ---
 
-# 48. Future Development Areas
+# 49. Future Development Areas
 
 The core HomePilot goals have been implemented.
 
@@ -1755,7 +1790,7 @@ These should be treated as future extensions rather than unfinished core require
 
 ---
 
-# 49. Current Completion Criteria
+# 50. Current Completion Criteria
 
 HomePilot's original major goals can be considered achieved when the following work:
 
@@ -1812,7 +1847,7 @@ The remaining work is primarily:
 
 ---
 
-# 50. Final Development Principle
+# 51. Final Development Principle
 
 The most important lesson from HomePilot is not a particular framework or API.
 
@@ -3565,7 +3600,57 @@ Speech Worker
 
 ---
 
-# 46. Local LLM Debugging
+# 46. Cloudflare Workerのデプロイ確認
+
+Cloudflare Workerでは、
+
+> ローカルのソースコードが正しい
+> ＝
+> 実際に動いているWorkerが最新
+
+とは限りません。
+
+ローカルのソースコードと、Cloudflare上にデプロイされているWorkerは、別の状態として扱う必要があります。
+
+    `ソースコード
+         ↓
+       Deploy
+         ↓
+    デプロイ済みWorker
+         ↓
+       Verify
+    `
+
+Workerを変更したら、明示的にDeployします。
+
+    `npx wrangler deploy
+    `
+
+必要に応じて、デプロイ履歴を確認します。
+
+    `npx wrangler deployments list
+    `
+
+ローカルのコードを修正しただけでは、実際に動作しているWorkerが修正済みだという証拠にはなりません。
+
+HomePilotのVoice Input開発では、
+
+* ローカルのソースコード
+* Cloudflareへのデプロイ状態
+* 実際に動作しているWorker
+* 実際のレスポンス
+
+を別々のLayerとして確認することが重要でした。
+
+今回の開発から得た一般的な教訓は、
+
+> **ローカルのソースコードだけを見て、デプロイ済みシステムを判断しない。実際に動いている環境を確認する。**
+
+ということです。
+
+---
+
+# 47. Local LLM Debugging
 
 Local LLMでは、
 
@@ -3590,7 +3675,7 @@ Context
 
 ---
 
-# 47. ドキュメント方針
+# 48. ドキュメント方針
 
 3つのドキュメントを役割分担します。
 
@@ -3610,7 +3695,7 @@ Context
 
 ---
 
-# 48. 今後のドキュメント更新
+# 49. 今後のドキュメント更新
 
 ### 新機能
 
@@ -3645,7 +3730,7 @@ README.md
 
 ---
 
-# 49. 今後の拡張
+# 50. 今後の拡張
 
 HomePilotの当初の主要ゴールはほぼ達成しています。
 
@@ -3677,7 +3762,7 @@ HomePilotの当初の主要ゴールはほぼ達成しています。
 
 ---
 
-# 50. 現在の完成基準
+# 51. 現在の完成基準
 
 HomePilotの主要ゴールは、以下が動作することをもって達成とします。
 
@@ -3736,7 +3821,7 @@ Local LLM Integration
 
 ---
 
-# 51. 最後に
+# 52. 最後に
 
 HomePilot開発で最も重要だったのは、特定のFrameworkやAPIではありません。
 
