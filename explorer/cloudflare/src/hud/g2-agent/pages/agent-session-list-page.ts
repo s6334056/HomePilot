@@ -88,6 +88,7 @@ export class AgentSessionListPage extends BasePage {
       start = Math.max(0, end - LIST_MAX_LINES);
     }
 
+    const state = this.controller.getState();
     const lines: string[] = [];
     for (let i = start; i < end; i++) {
       const isFocused = i === selected;
@@ -96,10 +97,15 @@ export class AgentSessionListPage extends BasePage {
         lines.push(`${pointer}${NEW_SESSION_LABEL}`);
       } else {
         const session = this.sessions[i - 1];
-        const title = this.truncateName(session.title || "Untitled", LIST_MAX_WIDTH - this.getStringWidth(pointer) - 8);
+        const status = state.processingSessionIDs.includes(session.id)
+          ? "○ "
+          : state.unreadSessionIDs.includes(session.id)
+            ? "● "
+            : "";
+        const title = this.truncateName(session.title || "Untitled", LIST_MAX_WIDTH - this.getStringWidth(pointer) - this.getStringWidth(status) - 8);
         const date = formatTimestamp(session.time?.updated);
         const datePart = this.truncateName(date, 8);
-        lines.push(`${pointer}${title} ${datePart}`);
+        lines.push(`${pointer}${status}${title} ${datePart}`);
       }
     }
 

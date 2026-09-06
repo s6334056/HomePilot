@@ -123,7 +123,7 @@ export class G2AgentController {
       const activeIDs = new Set(sorted.map((s) => s.id));
       this.store.pruneLastChecked(activeIDs);
 
-      this.rebuildUnread(sorted);
+      await this.rebuildUnread(sorted);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load sessions';
       this.updateState({ error: msg });
@@ -151,6 +151,13 @@ export class G2AgentController {
       const apiMessages = await this.client.getMessages(sessionID);
       const messages = mapApiMessagesToWithParts(apiMessages, sessionID);
       this.updateState({ messages, isLoadingMessages: false });
+
+      // Check if agent has completed. If so, clear persistent processing entry
+      // (the user is now viewing the session, so recovery entry is no longer needed).
+      // If still processing, keep the persistent entry for G2 restart recovery.
+      if (G2AgentController.hasCompleted(messages)) {
+        this.store.clearProcessing(sessionID);
+      }
 
       this.checkAndClearProcessing(sessionID, messages);
     } catch (e: unknown) {
@@ -321,6 +328,13 @@ export class G2AgentController {
   markSessionChecked(sessionID: string): void {
     this.store.setLastChecked(sessionID, Date.now());
     const newUnread = this.state.unreadSessionIDs.filter((id) => id !== sessionID);
+
+    // Clear persistent processing entry only if the session is not in processing.
+    // If still processing, keep the entry for G2 restart recovery.
+    if (!this.state.processingSessionIDs.includes(sessionID)) {
+      this.store.clearProcessing(sessionID);
+    }
+
     if (newUnread.length !== this.state.unreadSessionIDs.length) {
       this.updateState({ unreadSessionIDs: newUnread });
     }
@@ -541,46 +555,148 @@ export class G2AgentController {
 
   // ── Processing Management ────────────────────────────────────
 
-  private checkAndClearProcessing(sessionID: string, messages: OpenCodeMessageWithParts[]): void {
+  /**
+   * Check if a session's processing has completed (finish === 'stop'), and if so:
+   * 1. Remove from in-memory processingSessionIDs
+   * 2. Add to unreadSessionIDs if completed after lastChecked (PWA parity)
+   *
+   * Does NOT clear the persistent processing entry (homepilot-processing-sessions).
+   * The persistent entry is only cleared when the user actually views the session
+   * (selectSession / markSessionChecked) and the agent has completed.
+   * This ensures G2 restart can re-detect completion via rebuildUnread().
+   *
+   * Does NOT update lastChecked.
+   */
+  private checkCompletionAndUpdateState(sessionID: string, messages: OpenCodeMessageWithParts[]): void {
     if (!this.state.processingSessionIDs.includes(sessionID)) return;
 
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (msg.role === 'assistant') {
         if (msg.finish === 'stop') {
-          this.clearProcessingForSession(sessionID);
+          const completedTime = msg.time?.completed ?? msg.time?.created ?? 0;
+          const lastChecked = this.store.loadLastChecked();
+          const isUnread = completedTime > (lastChecked[sessionID] ?? 0);
+
+          const newProcessing = this.state.processingSessionIDs.filter(
+            (id) => id !== sessionID
+          );
+          const newUnread =
+            isUnread && !this.state.unreadSessionIDs.includes(sessionID)
+              ? [...this.state.unreadSessionIDs, sessionID]
+              : this.state.unreadSessionIDs;
+
+          this.updateState({
+            processingSessionIDs: newProcessing,
+            unreadSessionIDs: newUnread,
+          });
         }
         break;
       }
     }
   }
 
-  private clearProcessingForSession(sessionID: string): void {
-    this.store.clearProcessing(sessionID);
-    if (this.state.processingSessionIDs.includes(sessionID)) {
-      this.updateState({
-        processingSessionIDs: this.state.processingSessionIDs.filter(
-          (id) => id !== sessionID
-        ),
-      });
+  /**
+   * Helper: check if the latest assistant message indicates completion (finish === 'stop').
+   */
+  private static hasCompleted(messages: OpenCodeMessageWithParts[]): boolean {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role === 'assistant') {
+        return msg.finish === 'stop';
+      }
     }
+    return false;
+  }
+
+  private checkAndClearProcessing(sessionID: string, messages: OpenCodeMessageWithParts[]): void {
+    this.checkCompletionAndUpdateState(sessionID, messages);
   }
 
   // ── Unread Rebuild ───────────────────────────────────────────
 
-  private rebuildUnread(sessions: OpenCodeSessionInfo[]): void {
-    const lastChecked = this.store.loadLastChecked();
-    const unreadIDs: string[] = [];
+  /**
+   * Rebuild unread state for processing sessions only.
+   *
+   * - Preserves existing unread sessions (does not rebuild from scratch)
+   * - Fetches messages only for sessions in processingSessionIDs
+   * - Uses PWA-equivalent unread logic: completedTime > lastChecked && finish === 'stop'
+   * - Initializes lastChecked for new sessions to prevent false unread on first load
+   * - Does NOT clear persistent processing entries (for G2 restart recovery)
+   *
+   * Note: processingSessionIDs is NOT filtered against activeIDs (API response)
+   * because newly created sessions may not yet be in the API response. Instead,
+   * we use all processingSessionIDs for message fetching. Sessions that no longer
+   * exist on the server will fail getMessages() (caught below) and remain in
+   * processing until the 24h TTL expires.
+   */
+  private async rebuildUnread(sessions: OpenCodeSessionInfo[]): Promise<void> {
+    if (!this.client) return;
 
-    for (const session of sessions) {
-      if (OpenCodeClient.isSessionArchived(session)) continue;
-      const latestTime = session.time?.updated ?? 0;
-      if (latestTime > (lastChecked[session.id] ?? 0)) {
-        unreadIDs.push(session.id);
+    const activeSessions = sessions.filter(
+      (s) => !OpenCodeClient.isSessionArchived(s)
+    );
+    const activeIDs = new Set(activeSessions.map((s) => s.id));
+
+    // Initialize lastChecked for new sessions (prevents false unread on first load)
+    const lastChecked = this.store.loadLastChecked();
+    const now = Date.now();
+    let lastCheckedChanged = false;
+    for (const s of activeSessions) {
+      if (!(s.id in lastChecked)) {
+        lastChecked[s.id] = now;
+        lastCheckedChanged = true;
+      }
+    }
+    if (lastCheckedChanged) {
+      this.store.saveLastChecked(lastChecked);
+    }
+
+    // Preserve existing unread sessions that are still active
+    const unreadSet = new Set(
+      this.state.unreadSessionIDs.filter((id) => activeIDs.has(id))
+    );
+
+    // Check processing sessions for completion.
+    // Use all processingSessionIDs (not filtered by activeIDs) to ensure
+    // newly created sessions that aren't in the API response yet are still tracked.
+    const completedSessionIDs: string[] = [];
+    const processingIDs = [...this.state.processingSessionIDs];
+
+    for (const sessionID of processingIDs) {
+      try {
+        const apiMessages = await this.client.getMessages(sessionID);
+        const messages = mapApiMessagesToWithParts(apiMessages, sessionID);
+
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const msg = messages[i];
+          if (msg.role === 'assistant') {
+            if (msg.finish === 'stop') {
+              const completedTime =
+                msg.time?.completed ?? msg.time?.created ?? 0;
+              if (completedTime > (lastChecked[sessionID] ?? 0)) {
+                unreadSet.add(sessionID);
+              }
+              completedSessionIDs.push(sessionID);
+            }
+            break;
+          }
+        }
+      } catch {
+        // If message fetch fails (e.g. session not yet in API), keep in processing
       }
     }
 
-    this.updateState({ unreadSessionIDs: unreadIDs });
+    // Remove completed sessions from in-memory processing list only.
+    // Persistent entries in localStorage are preserved for G2 restart recovery.
+    const newProcessing = this.state.processingSessionIDs.filter(
+      (id) => !completedSessionIDs.includes(id)
+    );
+
+    this.updateState({
+      unreadSessionIDs: [...unreadSet],
+      processingSessionIDs: newProcessing,
+    });
   }
 }
 
