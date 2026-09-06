@@ -64,6 +64,7 @@ export class AgentChatPage extends BasePage {
   private stateUnsubscribe: (() => void) | null = null;
   private scrollInverted: boolean = false;
   private scrollToBottomAfterSend: boolean = false;
+  private agentCreatedCache: Map<string, number> = new Map();
 
   constructor(
     controller: G2AgentController,
@@ -142,37 +143,50 @@ export class AgentChatPage extends BasePage {
     }
 
     const blocks: string[] = [];
+    let prevCompleted: number | undefined;
 
     for (let i = 0; i < visible.length; i++) {
       const msg = visible[i];
       const created = formatDateTime(msg.time?.created);
 
       if (msg.role === "user") {
-        const displayText = stripHomePilotContext(msg.contentText || "(empty)");
+        const displayText = stripHomePilotContext(msg.contentText || "").trim();
+        if (!displayText) continue;
         blocks.push(`[User] ${created}\n${displayText}`);
+        prevCompleted = undefined;
       } else {
-        let startTime: number | undefined;
-        if (i > 0) {
-          startTime = visible[i - 1].time?.created;
-        }
-        if (startTime == null && msg.time?.created != null) {
-          startTime = msg.time.created;
-        }
-
+        const displayText = (msg.contentText || "").trim();
         const completed = msg.time?.completed;
-        if (completed != null && startTime != null) {
-          const duration = formatDuration(completed - startTime);
-          blocks.push(
-            `[Agent] ${created} → ${formatTimeOnly(completed)} (${duration})\n${msg.contentText || "(empty)"}`,
-          );
-        } else if (completed != null) {
-          blocks.push(
-            `[Agent] ${created} → ${formatTimeOnly(completed)}\n${msg.contentText || "(empty)"}`,
-          );
+
+        // Cache the first created time so Thinking updates don't shift the start time
+        if (!this.agentCreatedCache.has(msg.id) && msg.time?.created != null) {
+          this.agentCreatedCache.set(msg.id, msg.time.created);
+        }
+        const fixedCreated = this.agentCreatedCache.get(msg.id) ?? msg.time?.created;
+        const fixedCreatedStr = formatDateTime(fixedCreated);
+
+        if (completed != null) {
+          this.agentCreatedCache.delete(msg.id);
+          if (!displayText) continue;
+          const startTime = prevCompleted ?? fixedCreated;
+          if (startTime != null) {
+            const duration = formatDuration(completed - startTime);
+            blocks.push(
+              `[Agent] ${fixedCreatedStr} → ${formatTimeOnly(completed)} (${duration})\n${displayText}`,
+            );
+          } else {
+            blocks.push(
+              `[Agent] ${fixedCreatedStr} → ${formatTimeOnly(completed)}\n${displayText}`,
+            );
+          }
+          prevCompleted = completed;
         } else if (msg.finish === "error") {
-          blocks.push(`[Agent] ${created} → 処理に失敗しました`);
+          this.agentCreatedCache.delete(msg.id);
+          blocks.push(`[Agent] ${fixedCreatedStr} → 処理に失敗しました`);
+          prevCompleted = undefined;
         } else {
-          blocks.push(`[Agent] ${created} → 処理中...`);
+          blocks.push(`[Agent] ${fixedCreatedStr} → 処理中...`);
+          prevCompleted = undefined;
         }
       }
     }
