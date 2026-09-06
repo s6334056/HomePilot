@@ -248,7 +248,10 @@ export class G2AgentController {
       this.checkAndClearProcessing(sessionID, messages);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to send message';
-      this.store.clearProcessing(sessionID);
+      // Do NOT clear persistent processing entry here.
+      // G2 may have been closed (dispose() → client=null) causing this catch,
+      // but the agent may still be processing on the server. The persistent
+      // entry is only cleared when the user views the session (selectSession).
       this.updateState({
         messages: this.state.messages.filter(
           (m) => m.id !== tempUserMsgId && m.id !== tempAssistantMsgId
@@ -668,19 +671,29 @@ export class G2AgentController {
         const apiMessages = await this.client.getMessages(sessionID);
         const messages = mapApiMessagesToWithParts(apiMessages, sessionID);
 
-        for (let i = messages.length - 1; i >= 0; i--) {
-          const msg = messages[i];
-          if (msg.role === 'assistant') {
-            if (msg.finish === 'stop') {
-              const completedTime =
-                msg.time?.completed ?? msg.time?.created ?? 0;
-              if (completedTime > (lastChecked[sessionID] ?? 0)) {
-                unreadSet.add(sessionID);
-              }
-              completedSessionIDs.push(sessionID);
+        if (messages.length === 0) continue;
+
+        // Determine session state based on the LAST message.
+        // This avoids false completion detection when a previous assistant
+        // has finish='stop' but a newer user message is awaiting response.
+        const lastMsg = messages[messages.length - 1];
+
+        if (lastMsg.role === 'user') {
+          // Last message is user → unresponded → still processing
+          continue;
+        }
+
+        if (lastMsg.role === 'assistant') {
+          if (lastMsg.finish === 'stop') {
+            // Agent completed
+            const completedTime =
+              lastMsg.time?.completed ?? lastMsg.time?.created ?? 0;
+            if (completedTime > (lastChecked[sessionID] ?? 0)) {
+              unreadSet.add(sessionID);
             }
-            break;
+            completedSessionIDs.push(sessionID);
           }
+          // finish !== 'stop' → still processing → do nothing
         }
       } catch {
         // If message fetch fails (e.g. session not yet in API), keep in processing
