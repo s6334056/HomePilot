@@ -245,7 +245,7 @@ export class AgentChatPage extends BasePage {
       containerID: 1,
       containerName: "chat_header",
       content: voiceState !== 'idle'
-        ? "Voice Input"
+        ? "[Voice Input]"
         : this.buildHeaderLine(
             this.currentPath || "Chat",
             "",

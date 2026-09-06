@@ -156,9 +156,72 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <div className="settings-body">
+
+          {/* G2 Connection */}
+          <section className="settings-section">
+            <h3>接続情報</h3>
+
+            <div className="paste-section">
+              <p className="settings-description">
+                接続情報を貼り付け
+              </p>
+              <textarea
+                ref={pasteInputRef}
+                className="paste-input"
+                placeholder='{"type":"homepilot-connection",...}'
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                rows={3}
+              />
+              <div className="settings-actions">
+                <button
+                  className="btn btn-primary"
+                  onClick={handlePaste}
+                  disabled={!pasteText.trim()}
+                >
+                  <Clipboard size={14} />
+                  適用
+                </button>
+              </div>
+            </div>
+
+            <p className="settings-description">
+              PWAで使用している接続情報
+            </p>
+            {config ? (
+              <div className="g2-connection-box">
+                <pre className="g2-connection-data">
+                  {JSON.stringify(config)}
+                </pre>
+                <button
+                  className="btn btn-copy"
+                  onClick={handleCopyConnectionInfo}
+                >
+                  {copied ? (
+                    <>
+                      <Check size={14} />
+                      コピー済み
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={14} />
+                      コピー
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <span className="status-disconnected">
+                <WifiOff size={14} />
+                接続情報なし
+              </span>
+            )}
+
+          </section>
+
           {/* Connection Status */}
           <section className="settings-section">
-            <h3>Connection</h3>
+            <h3>接続状況</h3>
             <div className="connection-status">
               {connected ? (
                 <span className="status-connected">
@@ -222,9 +285,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* G2 Glass Control */}
           {isBridgeAvailable && (
             <section className="settings-section">
-              <h3>G2 グラス</h3>
+              <h3>グラス起動・停止</h3>
               <p className="settings-description">
-                Even G2 グラス上で HomePilot を起動・停止します
+                EvenHub内PWAからグラス上で HomePilot を起動・停止します
               </p>
 
               <div className="settings-actions">
@@ -263,59 +326,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </section>
           )}
 
-          {/* G2 Connection */}
-          <section className="settings-section">
-            <h3>G2接続</h3>
-            <p className="settings-description">
-              EvenHub内PWAで使用する接続情報
-            </p>
-
-            {config && (
-              <div className="g2-connection-box">
-                <pre className="g2-connection-data">
-                  {JSON.stringify(config)}
-                </pre>
-                <button
-                  className="btn btn-copy"
-                  onClick={handleCopyConnectionInfo}
-                >
-                  {copied ? (
-                    <>
-                      <Check size={14} />
-                      コピー済み
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={14} />
-                      コピー
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-
-            <div className="paste-section">
-              <p className="settings-description">
-                接続情報を貼り付け
-              </p>
-              <textarea
-                ref={pasteInputRef}
-                className="paste-input"
-                placeholder='{"type":"homepilot-connection",...}'
-                value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
-                rows={3}
-              />
-              <button
-                className="btn btn-primary"
-                onClick={handlePaste}
-                disabled={!pasteText.trim()}
-              >
-                <Clipboard size={14} />
-                適用
-              </button>
-            </div>
-          </section>
         </div>
       </div>
     </div>

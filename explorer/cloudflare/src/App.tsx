@@ -450,6 +450,7 @@ export function App() {
               グラス側でアプリが表示されています。
             </p>
             <button
+              style={{display: 'flex',justifyContent: 'center'}}
               className="btn btn-danger g2-close-btn"
               onClick={handleStopG2Runtime}
             >
