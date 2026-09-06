@@ -70,27 +70,27 @@ One of the most important outcomes of the project was the development workflow i
 HomePilot was developed using three major roles.
 
 ```text
-┌───────────────────────┐
-│                  Human                       │
-│                                              │
-│  Goals / Decisions / Testing / Validation    │
-└───────────┬───────────┘
-                        │
-                        ▼
-┌───────────────────────┐
-│                 ChatGPT                      │
-│                                              │
-│  Consultation / Investigation / Design       │
-│  Architecture / Debugging / Review           │
-└───────────┬───────────┘
-                        │
-                        ▼
-┌───────────────────────┐
-│              OpenCode / MiMo                 │
-│                                              │
-│  Implementation / Code Modification          │
-│  Build Fixes / Refactoring                   │
-└───────────────────────┘
+┌─────────────────────────────────────────────┐
+│                  Human                      │
+│                                             │
+│  Goals / Decisions / Testing / Validation  │
+└──────────────────────┬──────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────┐
+│                 ChatGPT                     │
+│                                             │
+│  Consultation / Investigation / Design     │
+│  Architecture / Debugging / Review         │
+└──────────────────────┬──────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────┐
+│              OpenCode / MiMo                │
+│                                             │
+│  Implementation / Code Modification         │
+│  Build Fixes / Refactoring                 │
+└─────────────────────────────────────────────┘
 ```
 
 The important point is that these roles were intentionally separated.
@@ -280,41 +280,41 @@ Low-cost personal AI system
 The HomePilot architecture is divided into several layers.
 
 ```text
-                     ┌──────────┐
-                     │   PC Browser       │
-                     └────┬─────┘
+                     ┌───────────────────┐
+                     │   PC Browser      │
+                     └─────────┬─────────┘
                                │
-                     ┌────▼─────┐
-                     │ Smartphone Browser │
-                     └────┬─────┘
+                     ┌─────────▼─────────┐
+                     │ Smartphone Browser│
+                     └─────────┬─────────┘
                                │
-                     ┌────▼─────┐
-                     │   Even Realities   │
-                     │        G2          │
-                     └────┬─────┘
-                               │
-                               ▼
-                     ┌──────────┐
-                     │ HomePilot Client   │
-                     │ PWA / EvenHub      │
-                     └────┬─────┘
+                     ┌─────────▼─────────┐
+                     │   Even Realities  │
+                     │        G2         │
+                     └─────────┬─────────┘
                                │
                                ▼
-                     ┌──────────┐
-                     │ HomePilot Gateway  │
-                     └───┬──┬───┘
-                             │    │
-                 ┌─────┘    └──────┐
+                     ┌───────────────────┐
+                     │ HomePilot Client  │
+                     │ PWA / EvenHub     │
+                     └─────────┬─────────┘
+                               │
+                               ▼
+                     ┌───────────────────┐
+                     │ HomePilot Gateway │
+                     └───────┬─────┬─────┘
+                             │     │
+                 ┌───────────┘     └────────────┐
                  ▼                              ▼
-        ┌─────────┐            ┌─────────┐
-        │ Home PC Files    │            │ OpenCode Server  │
-        └─────────┘            └──┬──────┘
+        ┌─────────────────┐            ┌─────────────────┐
+        │ Home PC Files   │            │ OpenCode Server │
+        └─────────────────┘            └────────┬────────┘
                                                 │
                                                 ▼
-                                          ┌─────────┐
-                                          │ Cloud / Local    │
-                                          │      LLM         │
-                                          └─────────┘
+                                        ┌─────────────────┐
+                                        │ Cloud / Local   │
+                                        │      LLM        │
+                                        └─────────────────┘
 ```
 
 Voice input adds:
@@ -394,12 +394,12 @@ The PWA is responsible for:
 The desktop layout evolved into:
 
 ```text
-┌───────────┬───────────┐
-│                      │                      │
-│      Explorer        │        Agent         │
-│                      │                      │
-│                      │                      │
-└───────────┴───────────┘
+┌──────────────────────┬─────────────────────┐
+│                      │                     │
+│      Explorer        │        Agent        │
+│                      │                     │
+│                      │                     │
+└──────────────────────┴─────────────────────┘
 ```
 
 On smaller screens, the UI becomes a single-pane experience.
@@ -1932,25 +1932,25 @@ HomePilotでは、
 HomePilot開発で非常に大きな意味を持ったのが、AIの役割分担です。
 
 ```text
-┌───────────────────────┐
+┌─────────────────────────────────────────────┐
 │                  人間                        │
-│                                              │
-│  目的 / 判断 / テスト / 実機検証             │
-└───────────┬───────────┘
-                        │
-                        ▼
-┌───────────────────────┐
-│                 ChatGPT                      │
-│                                              │
-│  相談 / 調査 / 設計 / 仕様化 / デバッグ      │
-└───────────┬───────────┘
-                        │
-                        ▼
-┌───────────────────────┐
-│              OpenCode / MiMo                 │
-│                                              │
-│  実装 / コード変更 / Build修正 / Refactor    │
-└───────────────────────┘
+│                                             │
+│  目的 / 判断 / テスト / 実機検証            │
+└──────────────────────┬──────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────┐
+│                 ChatGPT                     │
+│                                             │
+│  相談 / 調査 / 設計 / 仕様化 / デバッグ     │
+└──────────────────────┬──────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────┐
+│              OpenCode / MiMo                │
+│                                             │
+│  実装 / コード変更 / Build修正 / Refactor   │
+└─────────────────────────────────────────────┘
 ```
 
 この役割分担は意図的なものです。
@@ -2157,41 +2157,42 @@ AI支援
 HomePilotは大きく以下の構成です。
 
 ```text
-                     ┌──────────┐
-                     │   PC Browser       │
-                     └────┬─────┘
-                               │
-                     ┌────▼─────┐
-                     │ Smartphone Browser │
-                     └────┬─────┘
-                               │
-                     ┌────▼─────┐
-                     │   Even Realities   │
-                     │        G2          │
-                     └────┬─────┘
-                               │
-                               ▼
-                     ┌──────────┐
-                     │ HomePilot Client   │
-                     │ PWA / EvenHub      │
-                     └────┬─────┘
-                               │
-                               ▼
-                     ┌──────────┐
-                     │ HomePilot Gateway  │
-                     └───┬──┬───┘
-                             │    │
-                 ┌─────┘    └──────┐
-                 ▼                              ▼
-        ┌─────────┐            ┌─────────┐
-        │ Home PC Files    │            │ OpenCode Server  │
-        └─────────┘            └──┬──────┘
-                                                │
-                                                ▼
-                                          ┌─────────┐
-                                          │ Cloud / Local    │
-                                          │      LLM         │
-                                          └─────────┘
+                    ┌─────────────────┐
+                    │   PC Browser    │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ Smartphone      │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ Even Realities  │
+                    │       G2        │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ HomePilot Client │
+                    │ PWA / EvenHub   │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ HomePilot       │
+                    │ Gateway         │
+                    └──────┬─────┬────┘
+                           │     │
+                 ┌─────────┘     └──────────┐
+                 ▼                          ▼
+        ┌─────────────────┐        ┌─────────────────┐
+        │ Home PC Files   │        │ OpenCode Server │
+        └─────────────────┘        └────────┬────────┘
+                                            │
+                                            ▼
+                                    ┌─────────────────┐
+                                    │ Cloud / Local   │
+                                    │      LLM        │
+                                    └─────────────────┘
 ```
 
 音声入力：
@@ -3790,5 +3791,3 @@ AIによる実装
 まで含むシステムを、非常に低コストで構築できました。
 
 HomePilotは、この開発方式そのものを実証するプロジェクトでもあります。
-
-

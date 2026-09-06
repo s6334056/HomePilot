@@ -1,4 +1,3 @@
-
 # HomePilot
 
 HomePilot is a personal AI assistant platform that connects a home PC, smartphone, and Even Realities G2 smart glasses.
@@ -200,32 +199,32 @@ Local LLM support is therefore treated as an execution environment rather than a
 The overall architecture is roughly:
 
 ```text
-                            HomePilot
-                               │
-             ┌────────┼────────┐
+                           HomePilot
+                              │
+             ┌────────────────┼────────────────┐
              │                │                │
              ▼                ▼                ▼
-        PC Browser        Smartphone         Even G2
+        PC Browser       Smartphone         Even G2
              │                │                │
-             └────────┼────────┘
-                               │
-                               ▼
-                     HomePilot PWA / EvenHub
-                               │
-                               ▼
-                      Cloudflare / Tunnel
-                               │
-                               ▼
-                      HomePilot Gateway
-                               │
-             ┌────────┼────────┐
+             └────────────────┼────────────────┘
+                              │
+                              ▼
+                    HomePilot PWA / EvenHub
+                              │
+                              ▼
+                     Cloudflare / Tunnel
+                              │
+                              ▼
+                     HomePilot Gateway
+                              │
+             ┌────────────────┼────────────────┐
              │                │                │
              ▼                ▼                ▼
-        Home PC FS         OpenCode        Speech Worker
-                               │                │
-                               ▼                ▼
-                          Cloud LLM /        Whisper
-                          Local LLM
+        Home PC FS        OpenCode        Speech Worker
+                              │                │
+                              ▼                ▼
+                         Cloud LLM /        Whisper
+                         Local LLM
 ```
 
 The HomePilot Gateway runs on the home PC and provides controlled access to:
@@ -827,7 +826,7 @@ HomePilotは、一般向けSaaSではなく、主に個人利用を目的とし�
 
 ---
 
-### 2.2 AIエージェント
+### 2.2 AI Agent
 
 OpenCodeと連携してAI Agentを利用できます。
 
@@ -991,32 +990,32 @@ Local LLMについては、HomePilot側で別のAgent機能を実装するので
 全体構成は概ね以下のようになっています。
 
 ```text
-                            HomePilot
-                               │
-             ┌────────┼────────┐
+                           HomePilot
+                              │
+             ┌────────────────┼────────────────┐
              │                │                │
              ▼                ▼                ▼
-        PC Browser        Smartphone         Even G2
+           PC             Smartphone        Even G2
              │                │                │
-             └────────┼────────┘
-                               │
-                               ▼
-                     HomePilot PWA / EvenHub
-                               │
-                               ▼
-                      Cloudflare / Tunnel
-                               │
-                               ▼
-                      HomePilot Gateway
-                               │
-             ┌────────┼────────┐
+             └────────────────┼────────────────┘
+                              │
+                              ▼
+                    HomePilot PWA / EvenHub
+                              │
+                              ▼
+                     Cloudflare / Tunnel
+                              │
+                              ▼
+                     HomePilot Gateway
+                              │
+             ┌────────────────┼────────────────┐
              │                │                │
              ▼                ▼                ▼
-        自宅 PC FS         OpenCode        Speech Worker
-                               │                │
-                               ▼                ▼
-                          Cloud LLM /        Whisper
-                          Local LLM
+        自宅PC FS          OpenCode        Speech Worker
+                              │                │
+                              ▼                ▼
+                         Cloud LLM /        Whisper
+                         Local LLM
 ```
 
 HomePilot Gatewayは自宅PC上で動作し、
@@ -1619,6 +1618,3 @@ HomePilotは個人利用を前提とした実験的なシステムであるた�
 - `SETUP.md` — 環境構築・起動・動作確認・デプロイ
 - `DEVELOPMENT.md` — 開発経緯・設計判断・AI支援開発の方法
 - `explorer/readme_HomePilot-Explorer.md` — Explorer開発時の詳細メモ
-
-
-

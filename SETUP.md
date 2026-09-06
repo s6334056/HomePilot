@@ -23,7 +23,7 @@ PC / Smartphone / Even Realities G2
                 ▼
          HomePilot Gateway
                 │
-        ┌───┴────┐
+        ┌───────┴────────┐
         ▼                ▼
    Home PC Files      OpenCode
                           │
@@ -1339,7 +1339,7 @@ PC / Smartphone / Even Realities G2
                 ▼
          HomePilot Gateway
                 │
-        ┌───┴────┐
+        ┌───────┴────────┐
         ▼                ▼
    自宅PCファイル       OpenCode
                           │
@@ -2666,5 +2666,3 @@ npm run pack
 cd tools
 cloudflared.exe tunnel --url http://192.168.0.2:5174/
 ```
-
-
