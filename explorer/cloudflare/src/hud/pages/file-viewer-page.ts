@@ -2,6 +2,7 @@ import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../page-manager";
 import { FileSystemItem } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
+import { getReadingPosition, saveReadingPosition } from "../../services/FileViewerPositionStore";
 
 export const G2_VIEWER_LINES = 9;
 export const G2_VIEWER_MAX_WIDTH = 56;
@@ -66,8 +67,17 @@ export class FileViewerPage extends BasePage {
       this.notifyStatus(`Reading ${this.file.name}...`);
       this.content = await this.fileService.readFile(this.file.path);
       this.lines = this.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-      this.scrollPosition = 0;
       this.buildWrappedLines();
+      const savedLine = getReadingPosition('g2', this.file.path);
+      if (savedLine !== null && savedLine >= 1 && savedLine <= this.lines.length) {
+        const targetLogical = savedLine - 1;
+        const firstVisual = this.wrappedLines.findIndex(
+          (wl) => wl.logicalLineIndex === targetLogical,
+        );
+        this.scrollPosition = firstVisual >= 0 ? firstVisual : 0;
+      } else {
+        this.scrollPosition = 0;
+      }
       this.notifyStatus(`Loaded ${this.lines.length} lines`);
       if (this.renderPage) {
         await this.renderPage();
@@ -89,6 +99,13 @@ export class FileViewerPage extends BasePage {
     if (this.onStateChange) {
       this.onStateChange(this.file, this.content);
     }
+  }
+
+  private saveCurrentPosition(): void {
+    if (this.wrappedLines.length === 0) return;
+    const idx = Math.min(this.scrollPosition, this.wrappedLines.length - 1);
+    const physicalLine = this.wrappedLines[idx].logicalLineIndex + 1;
+    saveReadingPosition('g2', this.file.path, physicalLine);
   }
 
   /**
@@ -254,11 +271,13 @@ export class FileViewerPage extends BasePage {
           this.scrollPosition + VIEWER_SCROLL_STEP,
           Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES),
         );
+        this.saveCurrentPosition();
         if (this.renderPage) await this.renderPage();
       }
     } else {
       if (this.scrollPosition > 0) {
         this.scrollPosition = Math.max(this.scrollPosition - VIEWER_SCROLL_STEP, 0);
+        this.saveCurrentPosition();
         if (this.renderPage) await this.renderPage();
       }
     }
@@ -271,6 +290,7 @@ export class FileViewerPage extends BasePage {
     if (this.scrollInverted) {
       if (this.scrollPosition > 0) {
         this.scrollPosition = Math.max(this.scrollPosition - VIEWER_SCROLL_STEP, 0);
+        this.saveCurrentPosition();
         if (this.renderPage) await this.renderPage();
       }
     } else {
@@ -279,6 +299,7 @@ export class FileViewerPage extends BasePage {
           this.scrollPosition + VIEWER_SCROLL_STEP,
           Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES),
         );
+        this.saveCurrentPosition();
         if (this.renderPage) await this.renderPage();
       }
     }
@@ -304,10 +325,12 @@ export class FileViewerPage extends BasePage {
         break;
       case "top":
         this.scrollPosition = 0;
+        this.saveCurrentPosition();
         if (this.renderPage) await this.renderPage();
         break;
       case "bottom":
         this.scrollPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
+        this.saveCurrentPosition();
         if (this.renderPage) await this.renderPage();
         break;
       case "scrollInvert":

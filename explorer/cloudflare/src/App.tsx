@@ -377,6 +377,7 @@ export function App() {
           {currentScreen === 'file_viewer' && selectedFile && (
             <FileViewer
               content={fileContent}
+              filePath={selectedFile.path}
             />
           )}
         </main>
