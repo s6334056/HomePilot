@@ -799,10 +799,10 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         showSwapButton={showSwapButton}
         onSwapPanes={onSwapPanes}
       />
-      <div className="oc-session-header">
+      {/* <div className="oc-session-header">
         <div className="oc-session-header-right">
         </div>
-      </div>
+      </div> */}
       {error && (
         <div className="oc-error-banner">
           <AlertCircle size={14} />
