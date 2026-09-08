@@ -9,16 +9,6 @@ export const G2_VIEWER_LINES = 9;
 export const G2_VIEWER_MAX_WIDTH = 56;
 const VIEWER_SCROLL_STEP = 8;
 
-// ── Diagnostic ID counters (diagnostic only, no logic change) ──
-let _nextPageId = 1;
-let _nextTimerId = 1;
-let _nextCallbackId = 1;
-let _nextAutoScrollLogSeq = 1;
-
-function nextSeq(): number {
-  return _nextAutoScrollLogSeq++;
-}
-
 interface WrappedLine {
   text: string;
   logicalLineIndex: number;
@@ -37,14 +27,10 @@ export class FileViewerPage extends BasePage {
   private scrollPosition: number = 0;
   private scrollInverted: boolean = false;
 
-  // ── Diagnostic IDs (diagnostic only, no logic change) ──
-  private readonly pageId: number = _nextPageId++;
-  private activeTimerId: number | null = null;
-  private activeCallbackId: number | null = null;
-
-  // Auto Scroll state
+  // Auto Scroll state (elapsed-time based, DocsReader4EH pattern)
   private autoScrollEnabled: boolean = false;
-  private autoScrollTimer: ReturnType<typeof setTimeout> | null = null;
+  private autoScrollRemainingMs: number = 0;
+  private autoScrollLastTickTime: number = 0;
   private autoScrollIndicator: string | null = null;
   private autoScrollIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -62,7 +48,6 @@ export class FileViewerPage extends BasePage {
     this.onBackToExplorer = onBackToExplorer;
     this.onStateChange = onStateChange;
     this.onAgentSessionList = onAgentSessionList;
-    console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} CREATED file=${file.path}`);
   }
 
   public getCurrentPath(): string {
@@ -287,23 +272,7 @@ export class FileViewerPage extends BasePage {
     };
   }
 
-  /**
-   * Scroll up by visual lines.
-   */
-  // ── Auto Scroll ──────────────────────────────────────────────
-
-  private clearAutoScrollTimer(): void {
-    if (this.autoScrollTimer !== null) {
-      const clearedTimerId = this.activeTimerId;
-      const clearedCallbackId = this.activeCallbackId;
-      console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} CLEAR BEFORE timerId=${clearedTimerId} callbackId=${clearedCallbackId} activeTimerId=${this.activeTimerId}`);
-      clearTimeout(this.autoScrollTimer);
-      this.autoScrollTimer = null;
-      this.activeTimerId = null;
-      this.activeCallbackId = null;
-      console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} CLEAR AFTER activeTimerId=${this.activeTimerId}`);
-    }
-  }
+  // ── Auto Scroll (elapsed-time based, DocsReader4EH pattern) ──
 
   private clearAutoScrollIndicatorTimer(): void {
     if (this.autoScrollIndicatorTimer !== null) {
@@ -327,79 +296,65 @@ export class FileViewerPage extends BasePage {
     return this.scrollPosition >= Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
   }
 
-  private performAutoScroll(): void {
-    const callId = _nextCallbackId++;
-    console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} performAutoScroll ENTRY callId=${callId} enabled=${this.autoScrollEnabled} timerId=${this.activeTimerId} timerPresent=${this.autoScrollTimer !== null} position=${this.scrollPosition}`);
+  /**
+   * Called by PageManager's shared ~400ms interval tick.
+   * Uses Date.now() elapsed time to determine when to scroll —
+   * no setTimeout chain, reliable on G2 Runtime.
+   */
+  public onAutoTick(): void {
+    if (!this.autoScrollEnabled || !this.isActive) return;
 
-    if (!this.autoScrollEnabled) {
-      console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} performAutoScroll EXIT (disabled) callId=${callId}`);
-      return;
+    const now = Date.now();
+    const elapsed = now - this.autoScrollLastTickTime;
+    this.autoScrollLastTickTime = now;
+
+    this.autoScrollRemainingMs -= elapsed;
+
+    if (this.autoScrollRemainingMs <= 0) {
+      // Time to scroll
+      if (this.isAtEnd()) {
+        this.stopAutoScroll();
+        return;
+      }
+
+      const maxPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
+      this.scrollPosition = Math.min(this.scrollPosition + VIEWER_SCROLL_STEP, maxPosition);
+      this.saveCurrentPosition();
+      if (this.renderPage) this.renderPage();
+
+      // Reset countdown for next scroll
+      const settings = loadAutoScrollSettings();
+      this.autoScrollRemainingMs = settings.interval * 1000;
+      this.autoScrollLastTickTime = Date.now();
     }
-
-    const startPos = this.scrollPosition;
-
-    if (this.isAtEnd()) {
-      console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} performAutoScroll EXIT (at end) callId=${callId} time=${Date.now()}`);
-      this.stopAutoScroll();
-      return;
-    }
-
-    const maxPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
-    this.scrollPosition = Math.min(
-      this.scrollPosition + VIEWER_SCROLL_STEP,
-      maxPosition,
-    );
-    this.saveCurrentPosition();
-    if (this.renderPage) this.renderPage();
-
-    console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} performAutoScroll DONE callId=${callId} time=${Date.now()} position=${startPos} -> ${this.scrollPosition}`);
-    this.scheduleNextAutoScroll('perform');
-  }
-
-  private scheduleNextAutoScroll(caller: string): void {
-    this.clearAutoScrollTimer();
-    if (!this.autoScrollEnabled) return;
-
-    const settings = loadAutoScrollSettings();
-    const timerId = _nextTimerId++;
-    const callbackId = _nextCallbackId++;
-    const scheduledAt = Date.now();
-    console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} CREATE caller=${caller} timerId=${timerId} callbackId=${callbackId} interval=${settings.interval}s at=${scheduledAt}`);
-    this.activeTimerId = timerId;
-    this.activeCallbackId = callbackId;
-    this.autoScrollTimer = setTimeout(() => {
-      this.autoScrollTimer = null;
-      this.activeTimerId = null;
-      this.activeCallbackId = null;
-      console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} CALLBACK ENTER timerId=${timerId} callbackId=${callbackId} at=${Date.now()} (scheduled at=${scheduledAt})`);
-      this.performAutoScroll();
-      console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} CALLBACK EXIT timerId=${timerId} callbackId=${callbackId} at=${Date.now()}`);
-    }, settings.interval * 1000);
   }
 
   private stopAutoScroll(): void {
-    console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} stopAutoScroll time=${Date.now()}`);
     this.autoScrollEnabled = false;
-    this.clearAutoScrollTimer();
+    this.autoScrollRemainingMs = 0;
+    this.autoScrollLastTickTime = 0;
+    console.log(`[G2 AutoScroll] STOPPED`);
   }
 
   private toggleAutoScroll(): void {
     if (this.autoScrollEnabled) {
-      console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} toggle OFF time=${Date.now()}`);
       this.stopAutoScroll();
       this.showAutoScrollIndicator('\u25CF');
     } else {
-      console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} toggle ON time=${Date.now()}`);
       this.autoScrollEnabled = true;
+      const settings = loadAutoScrollSettings();
+      this.autoScrollRemainingMs = settings.interval * 1000;
+      this.autoScrollLastTickTime = Date.now();
       this.showAutoScrollIndicator('\u25B6');
-      this.scheduleNextAutoScroll('toggle');
+      console.log(`[G2 AutoScroll] STARTED interval=${settings.interval}s`);
     }
   }
 
   private resetAutoScrollTimer(): void {
     if (this.autoScrollEnabled) {
-      this.clearAutoScrollTimer();
-      this.scheduleNextAutoScroll('reset');
+      const settings = loadAutoScrollSettings();
+      this.autoScrollRemainingMs = settings.interval * 1000;
+      this.autoScrollLastTickTime = Date.now();
     }
   }
 
@@ -460,7 +415,6 @@ export class FileViewerPage extends BasePage {
 
   public onDeactivate() {
     super.onDeactivate();
-    console.log(`[G2 AutoScroll] seq=${nextSeq()} pageId=${this.pageId} onDeactivate time=${Date.now()} activeTimerId=${this.activeTimerId} enabled=${this.autoScrollEnabled}`);
     this.stopAutoScroll();
     this.clearAutoScrollIndicatorTimer();
     this.autoScrollIndicator = null;

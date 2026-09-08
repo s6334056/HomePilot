@@ -58,6 +58,14 @@ export abstract class BasePage {
   public onMenuItemClick(_menuId: string, _event?: unknown) {}
 
   /**
+   * Called by PageManager's shared ~400ms interval tick.
+   * Override in pages that need periodic updates (e.g. auto-scroll).
+   * Default implementation is empty — pages that don't need ticks can
+   * safely ignore this.
+   */
+  public onAutoTick(): void {}
+
+  /**
    * Character width calculation table based on G2 hardware font measurement.
    */
   public getCharWidth(char: string): number {
@@ -149,6 +157,9 @@ export class PageManager {
   private lastRenderedText: string = '';
   private menuItemIdMap: Map<number, string> = new Map();
 
+  // Shared auto-scroll tick (~400ms interval, DocsReader4EH pattern)
+  private autoScrollTickTimer: ReturnType<typeof setInterval> | null = null;
+
   constructor(onStatusUpdate?: (status: string) => void) {
     this.onStatusUpdate = onStatusUpdate;
   }
@@ -202,6 +213,9 @@ export class PageManager {
 
     // Re-render after data is loaded
     await this.renderCurrentPage();
+
+    // Start shared auto-scroll tick (safe — double-start prevented internally)
+    this.startAutoScrollTick();
 
     return true;
   }
@@ -340,11 +354,46 @@ export class PageManager {
     }
   }
 
+  // ── Auto-Scroll Shared Tick ────────────────────────────────
+
+  /**
+   * Start the shared ~400ms interval tick (DocsReader4EH pattern).
+   * Called after navigateTo() completes. The interval calls
+   * currentPage.onAutoTick() on each tick — pages that don't
+   * override onAutoTick() simply no-op.
+   *
+   * Double-start is prevented by checking autoScrollTickTimer.
+   */
+  private startAutoScrollTick(): void {
+    if (this.autoScrollTickTimer) return; // prevent double-start
+
+    console.log("[PageManager] Starting shared auto-scroll tick");
+    this.autoScrollTickTimer = setInterval(() => {
+      if (!this.currentPage?.isActive) return;
+      // Delegate to the page's onAutoTick() — each page manages its own logic
+      this.currentPage.onAutoTick();
+    }, 400);
+  }
+
+  /**
+   * Stop the shared auto-scroll tick. Safe to call multiple times.
+   */
+  private stopAutoScrollTick(): void {
+    if (this.autoScrollTickTimer) {
+      clearInterval(this.autoScrollTickTimer);
+      this.autoScrollTickTimer = null;
+      console.log("[PageManager] Stopped shared auto-scroll tick");
+    }
+  }
+
   /**
    * Destroy the PageManager and release all resources.
    * Safe to call multiple times (idempotent).
    */
   public destroy(): void {
+    // Stop shared auto-scroll tick
+    this.stopAutoScrollTick();
+
     // Deactivate current page
     if (this.currentPage) {
       this.currentPage.onDeactivate();
