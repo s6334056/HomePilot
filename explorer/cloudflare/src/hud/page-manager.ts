@@ -28,16 +28,33 @@ export abstract class BasePage {
   protected renderPage!: () => Promise<void>;
   protected notifyStatus!: (status: string) => void;
 
+  /**
+   * Optional callback set by PageManager during init().
+   * Pages call this when their auto-tick requirement changes
+   * (e.g. auto-scroll ON/OFF) so PageManager can start/stop
+   * the shared ~400ms interval accordingly.
+   */
+  protected onAutoTickChanged?: () => void;
+
+  /**
+   * Whether this page currently requires the shared ~400ms interval tick.
+   * Override in pages that need periodic updates (e.g. auto-scroll).
+   * Default is false — pages that don't need ticks can safely ignore this.
+   */
+  public get isAutoTickNeeded(): boolean { return false; }
+
   public init(
     navigate: (page: BasePage) => Promise<boolean>,
     renderPage: () => Promise<void>,
     bridge: EvenAppBridge,
-    notifyStatus: (status: string) => void
+    notifyStatus: (status: string) => void,
+    onAutoTickChanged?: () => void
   ) {
     this.navigate = navigate;
     this.renderPage = renderPage;
     this.bridge = bridge;
     this.notifyStatus = notifyStatus;
+    this.onAutoTickChanged = onAutoTickChanged;
     this.isActive = true;
   }
 
@@ -196,7 +213,8 @@ export class PageManager {
       (nextPage) => this.navigateTo(nextPage),
       () => this.renderCurrentPage(),
       this.bridge!,
-      (status) => this.updateStatus(status)
+      (status) => this.updateStatus(status),
+      () => this.refreshAutoTick()
     );
 
     // First render (may be empty if data not loaded yet)
@@ -214,8 +232,8 @@ export class PageManager {
     // Re-render after data is loaded
     await this.renderCurrentPage();
 
-    // Start shared auto-scroll tick (safe — double-start prevented internally)
-    this.startAutoScrollTick();
+    // Start or stop shared tick based on current page's needs
+    this.refreshAutoTick();
 
     return true;
   }
@@ -357,20 +375,32 @@ export class PageManager {
   // ── Auto-Scroll Shared Tick ────────────────────────────────
 
   /**
-   * Start the shared ~400ms interval tick (DocsReader4EH pattern).
-   * Called after navigateTo() completes. The interval calls
-   * currentPage.onAutoTick() on each tick — pages that don't
-   * override onAutoTick() simply no-op.
+   * Start or stop the shared ~400ms interval tick based on current page's
+   * isAutoTickNeeded. Safe to call on every navigateTo() and on every
+   * onAutoTickChanged callback — internal guard prevents double-start,
+   * and stop is idempotent.
    *
+   * DocsReader4EH pattern: refreshAutoUpdate() checks a condition and
+   * delegates to startAutoUpdate()/stopAutoUpdate().
+   */
+  private refreshAutoTick(): void {
+    if (this.currentPage?.isAutoTickNeeded && this.currentPage.isActive) {
+      this.startAutoScrollTick();
+    } else {
+      this.stopAutoScrollTick();
+    }
+  }
+
+  /**
+   * Start the shared ~400ms interval tick.
    * Double-start is prevented by checking autoScrollTickTimer.
    */
   private startAutoScrollTick(): void {
-    if (this.autoScrollTickTimer) return; // prevent double-start
+    if (this.autoScrollTickTimer) return;
 
     console.log("[PageManager] Starting shared auto-scroll tick");
     this.autoScrollTickTimer = setInterval(() => {
       if (!this.currentPage?.isActive) return;
-      // Delegate to the page's onAutoTick() — each page manages its own logic
       this.currentPage.onAutoTick();
     }, 400);
   }

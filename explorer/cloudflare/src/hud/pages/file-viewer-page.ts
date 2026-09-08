@@ -34,6 +34,12 @@ export class FileViewerPage extends BasePage {
   private autoScrollIndicator: string | null = null;
   private autoScrollIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /**
+   * PageManager checks this on navigateTo() and on each onAutoTickChanged
+   * callback to decide whether to start/stop the shared ~400ms interval.
+   */
+  public get isAutoTickNeeded(): boolean { return this.autoScrollEnabled; }
+
   constructor(
     file: FileSystemItem,
     fileService: FileSystemService,
@@ -333,6 +339,7 @@ export class FileViewerPage extends BasePage {
     this.autoScrollEnabled = false;
     this.autoScrollRemainingMs = 0;
     this.autoScrollLastTickTime = 0;
+    this.onAutoTickChanged?.();
     console.log(`[G2 AutoScroll] STOPPED`);
   }
 
@@ -345,6 +352,7 @@ export class FileViewerPage extends BasePage {
       const settings = loadAutoScrollSettings();
       this.autoScrollRemainingMs = settings.interval * 1000;
       this.autoScrollLastTickTime = Date.now();
+      this.onAutoTickChanged?.();
       this.showAutoScrollIndicator('\u25B6');
       console.log(`[G2 AutoScroll] STARTED interval=${settings.interval}s`);
     }
