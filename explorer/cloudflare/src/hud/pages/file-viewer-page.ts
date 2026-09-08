@@ -3,6 +3,7 @@ import { BasePage, PageRenderResult } from "../page-manager";
 import { FileSystemItem } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
 import { getReadingPosition, saveReadingPosition } from "../../services/FileViewerPositionStore";
+import { loadAutoScrollSettings } from "../../services/AutoScrollSettings";
 
 export const G2_VIEWER_LINES = 9;
 export const G2_VIEWER_MAX_WIDTH = 56;
@@ -25,6 +26,12 @@ export class FileViewerPage extends BasePage {
   private wrappedLines: WrappedLine[] = [];
   private scrollPosition: number = 0;
   private scrollInverted: boolean = false;
+
+  // Auto Scroll state
+  private autoScrollEnabled: boolean = false;
+  private autoScrollTimer: ReturnType<typeof setTimeout> | null = null;
+  private autoScrollIndicator: string | null = null;
+  private autoScrollIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     file: FileSystemItem,
@@ -212,7 +219,10 @@ export class FileViewerPage extends BasePage {
   public render(): PageRenderResult {
     const range = this.getVisibleLogicalRange();
     const scrollMode = this.scrollInverted ? 's' : 'k';
-    const pageIndicator = `[${range.min}-${range.max}/${range.total}]${scrollMode}`;
+    let pageIndicator = `[${range.min}-${range.max}/${range.total}]${scrollMode}`;
+    if (this.autoScrollIndicator) {
+      pageIndicator += ` ${this.autoScrollIndicator}`;
+    }
     const headerContent = this.buildHeaderLine(this.file.path, pageIndicator, G2_VIEWER_MAX_WIDTH, "[Viewer]");
 
     const end = Math.min(this.scrollPosition + G2_VIEWER_LINES, this.wrappedLines.length);
@@ -264,6 +274,92 @@ export class FileViewerPage extends BasePage {
   /**
    * Scroll up by visual lines.
    */
+  // ── Auto Scroll ──────────────────────────────────────────────
+
+  private clearAutoScrollTimer(): void {
+    if (this.autoScrollTimer !== null) {
+      clearTimeout(this.autoScrollTimer);
+      this.autoScrollTimer = null;
+    }
+  }
+
+  private clearAutoScrollIndicatorTimer(): void {
+    if (this.autoScrollIndicatorTimer !== null) {
+      clearTimeout(this.autoScrollIndicatorTimer);
+      this.autoScrollIndicatorTimer = null;
+    }
+  }
+
+  private showAutoScrollIndicator(text: string): void {
+    this.autoScrollIndicator = text;
+    this.clearAutoScrollIndicatorTimer();
+    this.autoScrollIndicatorTimer = setTimeout(() => {
+      this.autoScrollIndicator = null;
+      this.autoScrollIndicatorTimer = null;
+      if (this.renderPage) this.renderPage();
+    }, 1500);
+    if (this.renderPage) this.renderPage();
+  }
+
+  private isAtEnd(): boolean {
+    return this.scrollPosition >= Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
+  }
+
+  private performAutoScroll(): void {
+    if (!this.autoScrollEnabled) return;
+
+    if (this.isAtEnd()) {
+      this.stopAutoScroll();
+      return;
+    }
+
+    const maxPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
+    this.scrollPosition = Math.min(
+      this.scrollPosition + VIEWER_SCROLL_STEP,
+      maxPosition,
+    );
+    this.saveCurrentPosition();
+    if (this.renderPage) this.renderPage();
+
+    this.scheduleNextAutoScroll();
+  }
+
+  private scheduleNextAutoScroll(): void {
+    this.clearAutoScrollTimer();
+    if (!this.autoScrollEnabled) return;
+
+    const settings = loadAutoScrollSettings();
+    this.autoScrollTimer = setTimeout(() => {
+      this.autoScrollTimer = null;
+      this.performAutoScroll();
+    }, settings.interval * 1000);
+  }
+
+  private stopAutoScroll(): void {
+    this.autoScrollEnabled = false;
+    this.clearAutoScrollTimer();
+  }
+
+  private toggleAutoScroll(): void {
+    if (this.autoScrollEnabled) {
+      this.stopAutoScroll();
+      this.showAutoScrollIndicator('\u25CF');
+    } else {
+      this.autoScrollEnabled = true;
+      this.showAutoScrollIndicator('\u25B6');
+      this.scheduleNextAutoScroll();
+    }
+  }
+
+  private resetAutoScrollTimer(): void {
+    if (this.autoScrollEnabled) {
+      this.clearAutoScrollTimer();
+      this.scheduleNextAutoScroll();
+    }
+  }
+
+  // ── Scroll Handlers ────────────────────────────────────────
+
   public async onScrollUp() {
     if (this.scrollInverted) {
       if (this.scrollPosition < this.wrappedLines.length - G2_VIEWER_LINES) {
@@ -272,12 +368,14 @@ export class FileViewerPage extends BasePage {
           Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES),
         );
         this.saveCurrentPosition();
+        this.resetAutoScrollTimer();
         if (this.renderPage) await this.renderPage();
       }
     } else {
       if (this.scrollPosition > 0) {
         this.scrollPosition = Math.max(this.scrollPosition - VIEWER_SCROLL_STEP, 0);
         this.saveCurrentPosition();
+        this.resetAutoScrollTimer();
         if (this.renderPage) await this.renderPage();
       }
     }
@@ -291,6 +389,7 @@ export class FileViewerPage extends BasePage {
       if (this.scrollPosition > 0) {
         this.scrollPosition = Math.max(this.scrollPosition - VIEWER_SCROLL_STEP, 0);
         this.saveCurrentPosition();
+        this.resetAutoScrollTimer();
         if (this.renderPage) await this.renderPage();
       }
     } else {
@@ -300,6 +399,7 @@ export class FileViewerPage extends BasePage {
           Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES),
         );
         this.saveCurrentPosition();
+        this.resetAutoScrollTimer();
         if (this.renderPage) await this.renderPage();
       }
     }
@@ -307,6 +407,17 @@ export class FileViewerPage extends BasePage {
 
   public async onDoubleClick() {
     await this.onBackToExplorer();
+  }
+
+  public async onClick() {
+    this.toggleAutoScroll();
+  }
+
+  public onDeactivate() {
+    super.onDeactivate();
+    this.stopAutoScroll();
+    this.clearAutoScrollIndicatorTimer();
+    this.autoScrollIndicator = null;
   }
 
   public async onLongPress() {

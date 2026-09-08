@@ -376,6 +376,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  position: relative;
 }
 
 .file-viewer-content {
@@ -395,6 +396,26 @@
   padding: 12px 16px;
   margin: 0;
   font-family: var(--font-mono);
+}
+
+.auto-scroll-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 10;
+  animation: auto-scroll-fade 1.5s ease-in-out forwards;
+}
+
+@keyframes auto-scroll-fade {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 /* Agent Panel */
@@ -569,6 +590,36 @@
 .settings-description {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.settings-radio-group {
+  display: flex;
+  gap: 16px;
+}
+
+.settings-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.settings-radio input[type="radio"] {
+  margin: 0;
+  cursor: pointer;
 }
 
 /* Connection Status */

@@ -19,6 +19,13 @@ import {
 } from '../services/ConnectionConfig';
 import { QRScanner } from './QRScanner';
 import { G2RuntimeState } from '../hud/g2-runtime';
+import {
+  loadAutoScrollSettings,
+  saveAutoScrollSettings,
+  AutoScrollSettings,
+  AutoScrollInterval,
+  AutoScrollAmount,
+} from '../services/AutoScrollSettings';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -45,6 +52,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
   const [connected, setConnected] = useState<boolean>(false);
+  const [autoScrollSettings, setAutoScrollSettings] = useState<AutoScrollSettings>(() => loadAutoScrollSettings());
   const pasteInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -142,6 +150,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setConnected(false);
     onReconnect();
   }, [onReconnect]);
+
+  const handleAutoScrollIntervalChange = useCallback((interval: AutoScrollInterval) => {
+    const newSettings = { ...autoScrollSettings, interval };
+    setAutoScrollSettings(newSettings);
+    saveAutoScrollSettings(newSettings);
+  }, [autoScrollSettings]);
+
+  const handleAutoScrollAmountChange = useCallback((amount: AutoScrollAmount) => {
+    const newSettings = { ...autoScrollSettings, amount };
+    setAutoScrollSettings(newSettings);
+    saveAutoScrollSettings(newSettings);
+  }, [autoScrollSettings]);
 
   if (!isOpen) return null;
 
@@ -325,6 +345,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
             </section>
           )}
+
+          {/* Auto Scroll Settings */}
+          <section className="settings-section">
+            <h3>ファイルビューア</h3>
+
+            <div className="settings-field">
+              <label className="settings-label">自動スクロール間隔</label>
+              <div className="settings-radio-group">
+                {([20, 30, 40] as const).map((sec) => (
+                  <label key={sec} className="settings-radio">
+                    <input
+                      type="radio"
+                      name="autoScrollInterval"
+                      value={sec}
+                      checked={autoScrollSettings.interval === sec}
+                      onChange={() => handleAutoScrollIntervalChange(sec)}
+                    />
+                    <span>{sec}秒</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="settings-field">
+              <label className="settings-label">自動スクロール量</label>
+              <div className="settings-radio-group">
+                {([
+                  { value: 'small' as const, label: '少ない' },
+                  { value: 'normal' as const, label: '普通' },
+                  { value: 'large' as const, label: '多い' },
+                ]).map((opt) => (
+                  <label key={opt.value} className="settings-radio">
+                    <input
+                      type="radio"
+                      name="autoScrollAmount"
+                      value={opt.value}
+                      checked={autoScrollSettings.amount === opt.value}
+                      onChange={() => handleAutoScrollAmountChange(opt.value)}
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </section>
 
         </div>
       </div>
