@@ -11,6 +11,57 @@ export const G2_VIEWER_LINES = 9;
 export const G2_VIEWER_MAX_WIDTH = 56;
 const VIEWER_SCROLL_STEP = 8;
 
+/**
+ * Compute G2 scroll position from a shared progress value,
+ * correcting for the viewport size difference between PWA and G2.
+ *
+ * PWA saves progress relative to its own viewport (typically 30-60+ lines).
+ * G2 has only 9 visible lines. Without correction, the same progress
+ * places G2 significantly ahead of where PWA was viewing.
+ *
+ * Correction is bounded (not proportional to file length) to avoid
+ * over-correction on long files. Two components:
+ *
+ * 1. Viewport correction: G2 shows 9 lines, PWA shows ~30-60 lines.
+ *    We subtract 2×G2_VIEWER_LINES (18 lines) from the denominator,
+ *    which approximates the typical viewport difference.
+ *
+ * 2. Wrapping correction: G2 wraps at 56 chars, PWA at browser width.
+ *    If G2 wraps more, wrappedLines.length > lines.length.
+ *    We add a bounded correction based on the wrapping ratio,
+ *    capped to prevent runaway correction on very long files.
+ */
+function computeG2RestorePosition(
+  savedProgress: number,
+  wrappedLinesCount: number,
+  viewerLines: number,
+  logicalLineCount: number,
+): number {
+  const totalLines = wrappedLinesCount;
+
+  // Viewport correction: 2 screens worth of G2 lines.
+  // This accounts for PWA's larger viewport without scaling with file length.
+  const viewportCorrection = viewerLines * 2;
+
+  // Wrapping correction: bounded, based on how much G2 wraps beyond 1.2×.
+  // wrappedLinesCount / logicalLineCount = wrapping ratio.
+  // If G2 wraps 50% more (ratio=1.5), correction = (1.5-1.2) × 30 = 9 lines.
+  // Capped at viewerLines × 3 = 27 lines max.
+  const wrappingRatio = logicalLineCount > 0
+    ? wrappedLinesCount / logicalLineCount
+    : 1;
+  const wrappingCorrection = Math.min(
+    viewerLines * 3,
+    Math.max(0, Math.round((wrappingRatio - 1.2) * 30)),
+  );
+
+  const maxPosition = Math.max(
+    0,
+    totalLines - viewerLines - viewportCorrection - wrappingCorrection,
+  );
+  return Math.round(savedProgress * maxPosition);
+}
+
 interface WrappedLine {
   text: string;
   logicalLineIndex: number;
@@ -109,8 +160,12 @@ export class FileViewerPage extends BasePage {
       }
 
       if (savedProgress !== null && savedProgress >= 0 && savedProgress <= 1) {
-        const maxPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
-        this.scrollPosition = Math.round(savedProgress * maxPosition);
+        this.scrollPosition = computeG2RestorePosition(
+          savedProgress,
+          this.wrappedLines.length,
+          G2_VIEWER_LINES,
+          this.lines.length,
+        );
       } else {
         this.scrollPosition = 0;
       }
