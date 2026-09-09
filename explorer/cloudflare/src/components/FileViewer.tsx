@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { getReadingPosition, saveReadingPosition } from '../services/FileViewerPositionStore';
 import { loadAutoScrollSettings } from '../services/AutoScrollSettings';
 import { getSharedPosition, saveSharedPosition } from '../services/SharedPositionStore';
 import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
@@ -41,8 +40,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
   const savePosition = useCallback(() => {
     if (!filePath || !viewerRef.current) return;
     const scrollTop = viewerRef.current.scrollTop;
-    saveReadingPosition('pwa', filePath, scrollTop);
-    // Also save to shared position (logicalLine)
+    // Save to shared position (Gateway)
     if (gatewayService) {
       const logicalLine = scrollTopToLogicalLine(scrollTop);
       saveSharedPosition(gatewayService, filePath, logicalLine);
@@ -166,7 +164,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
     };
   }, [debouncedSave, clearAutoScrollTimer, scheduleNextAutoScroll]);
 
-  // Restore reading position (shared position first, then localStorage fallback)
+  // Restore reading position from shared position (Gateway only — no localStorage fallback)
   useEffect(() => {
     if (!filePath || positionRestoredRef.current) return;
 
@@ -174,7 +172,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
     if (!el) return;
 
     const restore = async () => {
-      // Try shared position first (Gateway)
+      // Try shared position (Gateway)
       if (gatewayService) {
         try {
           const sharedLogicalLine = await getSharedPosition(gatewayService, filePath);
@@ -187,20 +185,12 @@ export const FileViewer: React.FC<FileViewerProps> = ({
             return;
           }
         } catch {
-          // Fall through to localStorage
+          // Gateway unavailable — start from top
         }
       }
 
-      // Fallback: localStorage
-      const saved = getReadingPosition('pwa', filePath);
-      if (saved !== null && saved > 0) {
-        requestAnimationFrame(() => {
-          el.scrollTop = saved;
-          positionRestoredRef.current = true;
-        });
-      } else {
-        positionRestoredRef.current = true;
-      }
+      // No saved position — start from top
+      positionRestoredRef.current = true;
     };
 
     restore();

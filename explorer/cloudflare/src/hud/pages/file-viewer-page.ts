@@ -3,9 +3,9 @@ import { BasePage, PageRenderResult } from "../page-manager";
 import { FileSystemItem } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
 import { GatewayFileSystemService } from "../../services/GatewayFileSystemService";
-import { getReadingPosition, saveReadingPosition } from "../../services/FileViewerPositionStore";
 import { loadAutoScrollSettings } from "../../services/AutoScrollSettings";
 import { getG2SharedPosition, saveG2SharedPosition } from "../services/g2-shared-position-store";
+import { addG2ToHistory } from "../services/g2-viewer-history-store";
 
 export const G2_VIEWER_LINES = 9;
 export const G2_VIEWER_MAX_WIDTH = 56;
@@ -30,6 +30,11 @@ export class FileViewerPage extends BasePage {
   private wrappedLines: WrappedLine[] = [];
   private scrollPosition: number = 0;
   private scrollInverted: boolean = false;
+
+  // Debounced shared position save (prevents excessive Gateway PATCH on every scroll)
+  private positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingPositionSave: { logicalLine: number } | null = null;
+  private static readonly POSITION_SAVE_DEBOUNCE_MS = 2000;
 
   // Auto Scroll state (elapsed-time based, DocsReader4EH pattern)
   private autoScrollEnabled: boolean = false;
@@ -91,19 +96,16 @@ export class FileViewerPage extends BasePage {
       this.lines = this.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
       this.buildWrappedLines();
 
-      // Try shared position first (Gateway)
+      // Try shared position (Gateway) — no localStorage fallback
       let savedLine: number | null = null;
       if (this.gatewayService) {
         try {
           savedLine = await getG2SharedPosition(this.gatewayService, this.file.path);
         } catch {
-          // Fall through to localStorage
+          // Gateway unavailable — start from top
         }
-      }
-
-      // Fallback: localStorage
-      if (savedLine === null) {
-        savedLine = getReadingPosition('g2', this.file.path);
+        // Add to viewing history (fire-and-forget, non-blocking)
+        addG2ToHistory(this.gatewayService, this.file.path).catch(() => {});
       }
 
       if (savedLine !== null && savedLine >= 1 && savedLine <= this.lines.length) {
@@ -138,13 +140,44 @@ export class FileViewerPage extends BasePage {
     }
   }
 
+  /**
+   * Save reading position locally (instant) and to Gateway (debounced).
+   * Gateway PATCH is coalesced: rapid scrolls only trigger one HTTP call
+   * after 2s of inactivity. Immediate save on deactivate/top/bottom.
+   */
   private saveCurrentPosition(): void {
     if (this.wrappedLines.length === 0) return;
     const idx = Math.min(this.scrollPosition, this.wrappedLines.length - 1);
     const logicalLine = this.wrappedLines[idx].logicalLineIndex + 1;
-    saveReadingPosition('g2', this.file.path, logicalLine);
-    // Also save to shared position (Gateway)
+
+    // Gateway shared position — debounced
     if (this.gatewayService) {
+      this.pendingPositionSave = { logicalLine };
+      if (this.positionSaveTimer === null) {
+        this.positionSaveTimer = setTimeout(() => {
+          this.positionSaveTimer = null;
+          if (this.pendingPositionSave && this.gatewayService) {
+            const { logicalLine: line } = this.pendingPositionSave;
+            this.pendingPositionSave = null;
+            saveG2SharedPosition(this.gatewayService, this.file.path, line);
+          }
+        }, FileViewerPage.POSITION_SAVE_DEBOUNCE_MS);
+      }
+    }
+  }
+
+  /**
+   * Flush any pending debounced position save immediately.
+   * Called from onDeactivate and explicit save points (top/bottom/refresh).
+   */
+  private flushPositionSave(): void {
+    if (this.positionSaveTimer !== null) {
+      clearTimeout(this.positionSaveTimer);
+      this.positionSaveTimer = null;
+    }
+    if (this.pendingPositionSave && this.gatewayService) {
+      const { logicalLine } = this.pendingPositionSave;
+      this.pendingPositionSave = null;
       saveG2SharedPosition(this.gatewayService, this.file.path, logicalLine);
     }
   }
@@ -454,6 +487,8 @@ export class FileViewerPage extends BasePage {
     this.stopAutoScroll();
     this.clearAutoScrollIndicatorTimer();
     this.autoScrollIndicator = null;
+    // Flush any pending debounced position save before leaving
+    this.flushPositionSave();
   }
 
   public async onLongPress() {
@@ -473,16 +508,17 @@ export class FileViewerPage extends BasePage {
         }
         break;
       case "refresh":
+        this.flushPositionSave();
         await this.loadFileContent();
         break;
       case "top":
         this.scrollPosition = 0;
-        this.saveCurrentPosition();
+        this.flushPositionSave();
         if (this.renderPage) await this.renderPage();
         break;
       case "bottom":
         this.scrollPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
-        this.saveCurrentPosition();
+        this.flushPositionSave();
         if (this.renderPage) await this.renderPage();
         break;
       case "scrollInvert":
