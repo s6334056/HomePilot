@@ -1,5 +1,5 @@
-import { readdir, stat, readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { readdir, stat, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { resolve, dirname } from 'node:path';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { CONFIG } from './config.js';
@@ -143,6 +143,133 @@ export async function handleFile(request, response, url) {
   }
 
   json(response, 200, { path: filePath, content });
+}
+
+// --- Viewer State ---
+
+const DEFAULT_VIEWER_STATE = { version: 1, positions: {}, history: [] };
+const MAX_HISTORY_ENTRIES = 10;
+
+async function ensureViewerStateDir() {
+  const dir = dirname(CONFIG.VIEWER_STATE_FILE);
+  try {
+    await mkdir(dir, { recursive: true });
+  } catch {
+    // directory may already exist
+  }
+}
+
+async function readViewerState() {
+  try {
+    const raw = await readFile(CONFIG.VIEWER_STATE_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && parsed.version === 1) {
+      return parsed;
+    }
+    return { ...DEFAULT_VIEWER_STATE };
+  } catch {
+    return { ...DEFAULT_VIEWER_STATE };
+  }
+}
+
+async function writeViewerState(state) {
+  await ensureViewerStateDir();
+  const data = JSON.stringify(state, null, 2);
+  await writeFile(CONFIG.VIEWER_STATE_FILE, data, 'utf-8');
+}
+
+export async function handleViewerStateGet(_request, response) {
+  const state = await readViewerState();
+  json(response, 200, state);
+}
+
+export async function handleViewerStatePatchPosition(request, response) {
+  const body = await readBody(request);
+  if (!body) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Request body is required.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid JSON.');
+  }
+
+  const { filePath, logicalLine, updatedAt } = parsed;
+  if (!filePath || typeof filePath !== 'string') {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'filePath is required.');
+  }
+  if (typeof logicalLine !== 'number' || logicalLine < 1) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'logicalLine must be a positive number.');
+  }
+  if (typeof updatedAt !== 'number') {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'updatedAt is required.');
+  }
+
+  const state = await readViewerState();
+  const existing = state.positions[filePath];
+  if (!existing || existing.updatedAt < updatedAt) {
+    state.positions[filePath] = { logicalLine, updatedAt };
+    await writeViewerState(state);
+  }
+
+  json(response, 200, { ok: true });
+}
+
+export async function handleViewerStatePatchHistory(request, response) {
+  const body = await readBody(request);
+  if (!body) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Request body is required.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid JSON.');
+  }
+
+  const { path: filePath, lastViewedAt } = parsed;
+  if (!filePath || typeof filePath !== 'string') {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'path is required.');
+  }
+  if (typeof lastViewedAt !== 'number') {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'lastViewedAt is required.');
+  }
+
+  const state = await readViewerState();
+
+  // Remove existing entry for this path (if any)
+  state.history = state.history.filter((e) => e.path !== filePath);
+
+  // Add to front
+  state.history.unshift({ path: filePath, lastViewedAt });
+
+  // Enforce max entries
+  if (state.history.length > MAX_HISTORY_ENTRIES) {
+    state.history = state.history.slice(0, MAX_HISTORY_ENTRIES);
+  }
+
+  await writeViewerState(state);
+  json(response, 200, { ok: true });
+}
+
+export async function handleViewerStateDeleteHistory(request, response, url) {
+  const filePath = url.searchParams.get('path');
+  if (!filePath) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', "The 'path' query parameter is required.");
+  }
+
+  const state = await readViewerState();
+  const before = state.history.length;
+  state.history = state.history.filter((e) => e.path !== filePath);
+
+  if (state.history.length !== before) {
+    await writeViewerState(state);
+  }
+
+  json(response, 200, { ok: true });
 }
 
 // --- OpenCode Proxy ---

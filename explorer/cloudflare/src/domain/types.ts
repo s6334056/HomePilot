@@ -12,7 +12,7 @@ export interface FileSystemItem {
   childrenCount?: number;
 }
 
-export type ScreenType = 'explorer' | 'file_viewer' | 'agent';
+export type ScreenType = 'explorer' | 'file_viewer' | 'agent' | 'history';
 
 export interface AgentContext {
   currentPath: string;
@@ -218,4 +218,24 @@ export interface OpenCodeProvider {
   id: string;
   name: string;
   models?: Record<string, { name?: string; cost?: OpenCodeModelCost }>;
+}
+
+// ============================================================
+// Shared Viewer State (Gateway-synced)
+// ============================================================
+
+export interface SharedReadingPosition {
+  logicalLine: number;
+  updatedAt: number;
+}
+
+export interface FileViewHistoryEntry {
+  path: string;
+  lastViewedAt: number;
+}
+
+export interface SharedViewerState {
+  version: number;
+  positions: Record<string, SharedReadingPosition>;
+  history: FileViewHistoryEntry[];
 }

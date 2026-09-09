@@ -2,6 +2,7 @@ import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../page-manager";
 import { FileSystemItem } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
+import { GatewayFileSystemService } from "../../services/GatewayFileSystemService";
 import { FileViewerPage } from "./file-viewer-page";
 
 export const G2_MAX_LIST_LINES = 9;
@@ -13,9 +14,11 @@ export class ExplorerPage extends BasePage {
   private selectedIndex: number = 0;
   private parentSelectedIndex?: number;
   private fileService: FileSystemService;
+  private gatewayService: GatewayFileSystemService | null;
   private onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void;
   private onFileViewerStateChange?: (file: FileSystemItem, content: string) => void;
   private onAgentSessionList?: () => Promise<void>;
+  private onNavigateToHistory?: () => Promise<void>;
   private initialRestoreIndex?: number;
 
   constructor(
@@ -25,15 +28,19 @@ export class ExplorerPage extends BasePage {
     onFileViewerStateChange?: (file: FileSystemItem, content: string) => void,
     initialRestoreIndex?: number,
     onAgentSessionList?: () => Promise<void>,
+    gatewayService?: GatewayFileSystemService | null,
+    onNavigateToHistory?: () => Promise<void>,
   ) {
     super();
     this.pageType = "ExplorerPage";
     this.currentPath = currentPath;
     this.fileService = fileService;
+    this.gatewayService = gatewayService ?? null;
     this.onStateChange = onStateChange;
     this.onFileViewerStateChange = onFileViewerStateChange;
     this.initialRestoreIndex = initialRestoreIndex;
     this.onAgentSessionList = onAgentSessionList;
+    this.onNavigateToHistory = onNavigateToHistory;
   }
 
   public getCurrentPath(): string {
@@ -146,6 +153,7 @@ export class ExplorerPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
+          { id: "history", title: "閲覧履歴画面へ" },
           { id: "agent", title: "エージェント画面へ" },
           { id: "refresh", title: "更新" },
         ],
@@ -191,6 +199,7 @@ export class ExplorerPage extends BasePage {
         () => this.navigate(this),
         this.onFileViewerStateChange,
         this.onAgentSessionList,
+        this.gatewayService,
       );
       await this.navigate(viewerPage);
     }
@@ -223,6 +232,11 @@ export class ExplorerPage extends BasePage {
       case "agent":
         if (this.onAgentSessionList) {
           await this.onAgentSessionList();
+        }
+        break;
+      case "history":
+        if (this.onNavigateToHistory) {
+          await this.onNavigateToHistory();
         }
         break;
     }

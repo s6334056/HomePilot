@@ -5,6 +5,8 @@ import {
   json, noContent, errorResponse,
   handleHealth, handleRoot, handleDirectory, handleFile,
   handleOpenCodeProxy, handleOpenCodeProxyBody,
+  handleViewerStateGet, handleViewerStatePatchPosition,
+  handleViewerStatePatchHistory, handleViewerStateDeleteHistory,
 } from './handlers.js';
 import { handleSpeechTranscribe } from './speech.js';
 
@@ -93,6 +95,40 @@ const server = createServer(async (request, response) => {
       return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed.');
     }
     return handleSpeechTranscribe(request, response);
+  }
+
+  // --- Viewer State ---
+  if (path === '/api/viewer-state') {
+    if (!verifyToken(requestToken, token)) {
+      return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+    if (request.method === 'GET') {
+      return handleViewerStateGet(request, response);
+    }
+    return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only GET is allowed on /api/viewer-state.');
+  }
+
+  if (path === '/api/viewer-state/position') {
+    if (!verifyToken(requestToken, token)) {
+      return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+    if (request.method === 'PATCH') {
+      return handleViewerStatePatchPosition(request, response);
+    }
+    return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only PATCH is allowed on /api/viewer-state/position.');
+  }
+
+  if (path === '/api/viewer-state/history') {
+    if (!verifyToken(requestToken, token)) {
+      return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+    if (request.method === 'PATCH') {
+      return handleViewerStatePatchHistory(request, response);
+    }
+    if (request.method === 'DELETE') {
+      return handleViewerStateDeleteHistory(request, response, url);
+    }
+    return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only PATCH and DELETE are allowed on /api/viewer-state/history.');
   }
 
   // --- OpenCode Proxy ---

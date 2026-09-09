@@ -7,9 +7,11 @@ import { FileSystemItem, ScreenType, AgentContext } from './domain/types';
 import { Navbar } from './components/Navbar';
 import { FileTable } from './components/FileTable';
 import { FileViewer } from './components/FileViewer';
+import { HistoryPage } from './components/HistoryPage';
 import { AgentScreen } from './components/AgentScreen';
 import { SettingsModal } from './components/SettingsModal';
 import { G2RuntimeManager, G2RuntimeState } from './hud/g2-runtime';
+import { addToHistory } from './services/ViewerHistoryStore';
 import './App.css';
 
 type PaneType = 'explorer' | 'agent';
@@ -83,6 +85,7 @@ export function App() {
   const explorerHistoryRef = useRef<ExplorerHistoryEntry[]>([]);
   const previousScreenRef = useRef<ScreenType>('explorer');
   const prevIsDesktopRef = useRef<boolean>(window.innerWidth >= 1100);
+  const [returnPage, setReturnPage] = useState<ScreenType>('explorer');
 
   const getRootPath = () => {
     if (isGatewayService(fileService)) {
@@ -183,23 +186,36 @@ export function App() {
     }
   };
 
-  const handleOpenFile = async (file: FileSystemItem, index: number) => {
+  const handleOpenFile = async (file: FileSystemItem, index: number, source?: ScreenType) => {
     try {
       const content = await fileService.readFile(file.path);
-      explorerHistoryRef.current.push({ path: explorerPath, selectedIndex: index });
+      if (source !== 'history') {
+        explorerHistoryRef.current.push({ path: explorerPath, selectedIndex: index });
+      }
       setSelectedFile(file);
       setFileContent(content);
+      setReturnPage(source || 'explorer');
       setCurrentScreen('file_viewer');
+      // Add to history
+      if (isGatewayService(fileService)) {
+        addToHistory(fileService as GatewayFileSystemService, file.path);
+      }
     } catch (e: any) {
       alert(`Failed to open file: ${e.message}`);
     }
   };
 
-  // Explorer back button = pop from history
+  // Back button: return to previous screen based on returnPage
   const handleExplorerBack = async () => {
-    const prev = explorerHistoryRef.current.pop();
-    if (prev !== undefined) {
-      await navigateToPath(prev.path, prev.selectedIndex);
+    if (currentScreen === 'file_viewer') {
+      setCurrentScreen(returnPage);
+    } else if (currentScreen === 'history') {
+      setCurrentScreen(previousScreenRef.current);
+    } else {
+      const prev = explorerHistoryRef.current.pop();
+      if (prev !== undefined) {
+        await navigateToPath(prev.path, prev.selectedIndex);
+      }
     }
   };
 
@@ -336,6 +352,9 @@ export function App() {
     if (currentScreen === 'file_viewer' && selectedFile) {
       return selectedFile.path;
     }
+    if (currentScreen === 'history') {
+      return '履歴';
+    }
     return explorerPath;
   };
 
@@ -344,7 +363,7 @@ export function App() {
 
   // Build Explorer pane content
   const explorerPane = (
-    <div className={`explorer-pane ${isDesktop || currentScreen === 'explorer' || currentScreen === 'file_viewer' ? '' : 'pane-hidden'}`} key="explorer-pane">
+    <div className={`explorer-pane ${isDesktop || currentScreen === 'explorer' || currentScreen === 'file_viewer' || currentScreen === 'history' ? '' : 'pane-hidden'}`} key="explorer-pane">
       <Navbar
         currentPath={getNavbarPath()}
         mode="explorer"
@@ -358,6 +377,10 @@ export function App() {
         showSettingsButton={isDesktop && !isFirstExplorer}
         showSwapButton={isDesktop && !isFirstExplorer}
         onSwapPanes={handleSwapPanes}
+        onPathBarClick={() => {
+          previousScreenRef.current = currentScreen;
+          setCurrentScreen('history');
+        }}
       />
 
       <div className="main-content-container">
@@ -378,6 +401,24 @@ export function App() {
             <FileViewer
               content={fileContent}
               filePath={selectedFile.path}
+              gatewayService={isGatewayService(fileService) ? fileService as GatewayFileSystemService : null}
+            />
+          )}
+
+          {currentScreen === 'history' && isGatewayService(fileService) && (
+            <HistoryPage
+              gatewayService={fileService as GatewayFileSystemService}
+              onSelectFile={(path) => {
+                // Open file from history with source='history'
+                const fileName = path.split(/[\/\\]/).pop() || path;
+                const fileItem: FileSystemItem = {
+                  id: path,
+                  name: fileName,
+                  type: 'file',
+                  path,
+                };
+                handleOpenFile(fileItem, 0, 'history');
+              }}
             />
           )}
         </main>

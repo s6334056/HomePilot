@@ -22,6 +22,7 @@ interface ExplorerNavbarProps extends NavbarBaseProps {
   onReload: () => void;
   onOpenSettings: () => void;
   onOpenAgent: () => void;
+  onPathBarClick?: () => void;
 }
 
 interface AgentNavbarProps extends NavbarBaseProps {
@@ -126,7 +127,12 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
               Root: {truncatePath(props.rootPath)}
             </span>
           )}
-          <span className="path-bar-text" title={props.currentPath}>
+          <span
+            className="path-bar-text"
+            title={props.mode === 'explorer' ? 'Click to view history' : props.currentPath}
+            onClick={props.mode === 'explorer' ? props.onPathBarClick : undefined}
+            style={props.mode === 'explorer' ? { cursor: 'pointer' } : undefined}
+          >
             {displayPath}
           </span>
         </nav>

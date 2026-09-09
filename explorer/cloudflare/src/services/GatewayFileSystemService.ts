@@ -1,4 +1,4 @@
-import { FileSystemItem } from '../domain/types';
+import { FileSystemItem, SharedViewerState } from '../domain/types';
 import { FileSystemService } from './FileSystemService';
 
 export class GatewayFileSystemService implements FileSystemService {
@@ -121,12 +121,62 @@ export class GatewayFileSystemService implements FileSystemService {
     }
   }
 
-  private async request(endpoint: string): Promise<Response> {
+  // ── Viewer State API ──────────────────────────────────────
+
+  async getViewerState(): Promise<SharedViewerState> {
+    const res = await this.request('/api/viewer-state');
+    if (!res.ok) throw new Error(`Failed to get viewer state: ${res.status}`);
+    return res.json();
+  }
+
+  async patchPosition(filePath: string, logicalLine: number, updatedAt: number): Promise<void> {
+    const res = await this.requestWithBody('PATCH', '/api/viewer-state/position', {
+      filePath, logicalLine, updatedAt,
+    });
+    if (!res.ok) throw new Error(`Failed to patch position: ${res.status}`);
+  }
+
+  async patchHistory(path: string, lastViewedAt: number): Promise<void> {
+    const res = await this.requestWithBody('PATCH', '/api/viewer-state/history', {
+      path, lastViewedAt,
+    });
+    if (!res.ok) throw new Error(`Failed to patch history: ${res.status}`);
+  }
+
+  async deleteHistory(path: string): Promise<void> {
+    const encoded = encodeURIComponent(path);
+    const res = await this.request(`/api/viewer-state/history?path=${encoded}`, 'DELETE');
+    if (!res.ok) throw new Error(`Failed to delete history: ${res.status}`);
+  }
+
+  async fileExists(path: string): Promise<boolean> {
+    try {
+      const encoded = encodeURIComponent(path);
+      const res = await this.request(`/api/fs/file?path=${encoded}`);
+      // 200, 413, 415 = file exists (just can't read it fully)
+      return res.ok || res.status === 413 || res.status === 415;
+    } catch {
+      return false;
+    }
+  }
+
+  private async request(endpoint: string, method: string = 'GET'): Promise<Response> {
     return fetch(`${this.baseUrl}${endpoint}`, {
-      method: 'GET',
+      method,
       headers: {
         'Authorization': `Bearer ${this.token}`,
       },
+    });
+  }
+
+  private async requestWithBody(method: string, endpoint: string, body: unknown): Promise<Response> {
+    return fetch(`${this.baseUrl}${endpoint}`, {
+      method,
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
     });
   }
 }

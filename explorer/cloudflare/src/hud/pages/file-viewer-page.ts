@@ -2,8 +2,10 @@ import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../page-manager";
 import { FileSystemItem } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
+import { GatewayFileSystemService } from "../../services/GatewayFileSystemService";
 import { getReadingPosition, saveReadingPosition } from "../../services/FileViewerPositionStore";
 import { loadAutoScrollSettings } from "../../services/AutoScrollSettings";
+import { getG2SharedPosition, saveG2SharedPosition } from "../services/g2-shared-position-store";
 
 export const G2_VIEWER_LINES = 9;
 export const G2_VIEWER_MAX_WIDTH = 56;
@@ -18,7 +20,9 @@ interface WrappedLine {
 export class FileViewerPage extends BasePage {
   private file: FileSystemItem;
   private fileService: FileSystemService;
+  private gatewayService: GatewayFileSystemService | null;
   private onBackToExplorer: () => Promise<boolean>;
+  private onBackToHistory?: () => Promise<boolean>;
   private onStateChange?: (file: FileSystemItem, content: string) => void;
   private onAgentSessionList?: () => Promise<void>;
   private content: string = "";
@@ -46,14 +50,18 @@ export class FileViewerPage extends BasePage {
     onBackToExplorer: () => Promise<boolean>,
     onStateChange?: (file: FileSystemItem, content: string) => void,
     onAgentSessionList?: () => Promise<void>,
+    gatewayService?: GatewayFileSystemService | null,
+    onBackToHistory?: () => Promise<boolean>,
   ) {
     super();
     this.pageType = "FileViewerPage";
     this.file = file;
     this.fileService = fileService;
+    this.gatewayService = gatewayService ?? null;
     this.onBackToExplorer = onBackToExplorer;
     this.onStateChange = onStateChange;
     this.onAgentSessionList = onAgentSessionList;
+    this.onBackToHistory = onBackToHistory;
   }
 
   public getCurrentPath(): string {
@@ -82,7 +90,22 @@ export class FileViewerPage extends BasePage {
       this.content = await this.fileService.readFile(this.file.path);
       this.lines = this.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
       this.buildWrappedLines();
-      const savedLine = getReadingPosition('g2', this.file.path);
+
+      // Try shared position first (Gateway)
+      let savedLine: number | null = null;
+      if (this.gatewayService) {
+        try {
+          savedLine = await getG2SharedPosition(this.gatewayService, this.file.path);
+        } catch {
+          // Fall through to localStorage
+        }
+      }
+
+      // Fallback: localStorage
+      if (savedLine === null) {
+        savedLine = getReadingPosition('g2', this.file.path);
+      }
+
       if (savedLine !== null && savedLine >= 1 && savedLine <= this.lines.length) {
         const targetLogical = savedLine - 1;
         const firstVisual = this.wrappedLines.findIndex(
@@ -118,8 +141,12 @@ export class FileViewerPage extends BasePage {
   private saveCurrentPosition(): void {
     if (this.wrappedLines.length === 0) return;
     const idx = Math.min(this.scrollPosition, this.wrappedLines.length - 1);
-    const physicalLine = this.wrappedLines[idx].logicalLineIndex + 1;
-    saveReadingPosition('g2', this.file.path, physicalLine);
+    const logicalLine = this.wrappedLines[idx].logicalLineIndex + 1;
+    saveReadingPosition('g2', this.file.path, logicalLine);
+    // Also save to shared position (Gateway)
+    if (this.gatewayService) {
+      saveG2SharedPosition(this.gatewayService, this.file.path, logicalLine);
+    }
   }
 
   /**
@@ -268,6 +295,7 @@ export class FileViewerPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
+          { id: "history", title: "閲覧履歴画面へ" },
           { id: "agent", title: "エージェント画面へ" },
           { id: "refresh", title: "更新" },
           { id: "top", title: "先頭へ" },
@@ -434,6 +462,11 @@ export class FileViewerPage extends BasePage {
 
   public async onMenuItemClick(menuId: string) {
     switch (menuId) {
+      case "history":
+        if (this.onBackToHistory) {
+          await this.onBackToHistory();
+        }
+        break;
       case "agent":
         if (this.onAgentSessionList) {
           await this.onAgentSessionList();

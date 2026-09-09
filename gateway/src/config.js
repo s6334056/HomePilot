@@ -1,7 +1,11 @@
+import { join } from 'node:path';
+
 export const CONFIG = {
   HOST: '127.0.0.1',
   PORT: 51887,
   ROOT_PATH: process.env.HOMEPILOT_ROOT || 'C:\\hp1',
+  VIEWER_STATE_DIR: process.env.HOMEPILOT_VIEWER_STATE_DIR || '',
+  VIEWER_STATE_FILE: '',  // initialized below
   MAX_FILE_SIZE: 10 * 1024 * 1024,
   OPENCODE_HOST: '127.0.0.1',
   OPENCODE_PORT: 4096,
@@ -28,3 +32,8 @@ export const CONFIG = {
     '.properties', '.gradle', '.MF', '.manifest', '.svg',
   ]),
 };
+
+// Initialize VIEWER_STATE_FILE path
+CONFIG.VIEWER_STATE_FILE = CONFIG.VIEWER_STATE_DIR
+  ? join(CONFIG.VIEWER_STATE_DIR, '.HomePilotViewerState.json')
+  : join(CONFIG.ROOT_PATH, '.HomePilotViewerState.json');

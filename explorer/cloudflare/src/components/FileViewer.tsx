@@ -1,15 +1,29 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { getReadingPosition, saveReadingPosition } from '../services/FileViewerPositionStore';
 import { loadAutoScrollSettings } from '../services/AutoScrollSettings';
+import { getSharedPosition, saveSharedPosition } from '../services/SharedPositionStore';
+import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
+
+const LINE_HEIGHT_PX = 22.4; // font-size: 14px * line-height: 1.6
+
+function logicalToScrollTop(logicalLine: number): number {
+  return Math.max(0, (logicalLine - 1)) * LINE_HEIGHT_PX;
+}
+
+function scrollTopToLogicalLine(scrollTop: number): number {
+  return Math.floor(scrollTop / LINE_HEIGHT_PX) + 1;
+}
 
 interface FileViewerProps {
   content: string;
   filePath?: string;
+  gatewayService?: GatewayFileSystemService | null;
 }
 
 export const FileViewer: React.FC<FileViewerProps> = ({
   content,
   filePath,
+  gatewayService,
 }) => {
   const viewerRef = useRef<HTMLDivElement>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -26,8 +40,14 @@ export const FileViewer: React.FC<FileViewerProps> = ({
 
   const savePosition = useCallback(() => {
     if (!filePath || !viewerRef.current) return;
-    saveReadingPosition('pwa', filePath, viewerRef.current.scrollTop);
-  }, [filePath]);
+    const scrollTop = viewerRef.current.scrollTop;
+    saveReadingPosition('pwa', filePath, scrollTop);
+    // Also save to shared position (logicalLine)
+    if (gatewayService) {
+      const logicalLine = scrollTopToLogicalLine(scrollTop);
+      saveSharedPosition(gatewayService, filePath, logicalLine);
+    }
+  }, [filePath, gatewayService]);
 
   const debouncedSave = useCallback(() => {
     if (saveTimerRef.current !== null) {
@@ -146,23 +166,45 @@ export const FileViewer: React.FC<FileViewerProps> = ({
     };
   }, [debouncedSave, clearAutoScrollTimer, scheduleNextAutoScroll]);
 
-  // Restore reading position
+  // Restore reading position (shared position first, then localStorage fallback)
   useEffect(() => {
     if (!filePath || positionRestoredRef.current) return;
 
     const el = viewerRef.current;
     if (!el) return;
 
-    const saved = getReadingPosition('pwa', filePath);
-    if (saved !== null && saved > 0) {
-      requestAnimationFrame(() => {
-        el.scrollTop = saved;
+    const restore = async () => {
+      // Try shared position first (Gateway)
+      if (gatewayService) {
+        try {
+          const sharedLogicalLine = await getSharedPosition(gatewayService, filePath);
+          if (sharedLogicalLine !== null && sharedLogicalLine >= 1) {
+            const scrollTop = logicalToScrollTop(sharedLogicalLine);
+            requestAnimationFrame(() => {
+              el.scrollTop = scrollTop;
+              positionRestoredRef.current = true;
+            });
+            return;
+          }
+        } catch {
+          // Fall through to localStorage
+        }
+      }
+
+      // Fallback: localStorage
+      const saved = getReadingPosition('pwa', filePath);
+      if (saved !== null && saved > 0) {
+        requestAnimationFrame(() => {
+          el.scrollTop = saved;
+          positionRestoredRef.current = true;
+        });
+      } else {
         positionRestoredRef.current = true;
-      });
-    } else {
-      positionRestoredRef.current = true;
-    }
-  }, [filePath, content]);
+      }
+    };
+
+    restore();
+  }, [filePath, content, gatewayService]);
 
   // Cleanup on unmount or file change
   useEffect(() => {
