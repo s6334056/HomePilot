@@ -200,6 +200,9 @@ export class ExplorerPage extends BasePage {
         this.onFileViewerStateChange,
         this.onAgentSessionList,
         this.gatewayService,
+        this.onNavigateToHistory
+          ? () => this.onNavigateToHistory!()
+          : undefined,
       );
       await this.navigate(viewerPage);
     }

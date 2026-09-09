@@ -1,10 +1,9 @@
 import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../page-manager";
-import { FileViewHistoryEntry } from "../../domain/types";
 import { GatewayFileSystemService } from "../../services/GatewayFileSystemService";
 import { FileSystemService } from "../../services/FileSystemService";
 import { FileViewerPage } from "./file-viewer-page";
-import { getG2History, removeG2FromHistory } from "../services/g2-viewer-history-store";
+import { getG2History } from "../services/g2-viewer-history-store";
 
 export const G2_HISTORY_MAX_LINES = 9;
 export const G2_HISTORY_MAX_WIDTH = 56;
@@ -23,7 +22,7 @@ export class HistoryPage extends BasePage {
   private onStateChange?: (items: HistoryItem[], selectedIndex: number) => void;
   private onFileViewerStateChange?: (file: any, content: string) => void;
   private onAgentSessionList?: () => Promise<void>;
-  private onBackToExplorer?: () => Promise<boolean>;
+  private onBackToExplorer?: () => Promise<void>;
 
   constructor(
     gatewayService: GatewayFileSystemService,
@@ -31,7 +30,7 @@ export class HistoryPage extends BasePage {
     onStateChange?: (items: HistoryItem[], selectedIndex: number) => void,
     onFileViewerStateChange?: (file: any, content: string) => void,
     onAgentSessionList?: () => Promise<void>,
-    onBackToExplorer?: () => Promise<boolean>,
+    onBackToExplorer?: () => Promise<void>,
   ) {
     super();
     this.pageType = "HistoryPage";
@@ -190,6 +189,7 @@ export class HistoryPage extends BasePage {
       this.onFileViewerStateChange,
       this.onAgentSessionList,
       this.gatewayService,
+      async () => { await this.navigate(this); },  // Context Menu "閲覧履歴画面へ" → back to history
     );
     await this.navigate(viewerPage);
   }

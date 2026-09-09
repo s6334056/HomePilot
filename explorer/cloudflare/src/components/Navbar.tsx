@@ -129,7 +129,7 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
           )}
           <span
             className="path-bar-text"
-            title={props.mode === 'explorer' ? 'Click to view history' : props.currentPath}
+            title="Click to view history"
             onClick={props.mode === 'explorer' ? props.onPathBarClick : undefined}
             style={props.mode === 'explorer' ? { cursor: 'pointer' } : undefined}
           >

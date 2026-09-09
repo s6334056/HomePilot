@@ -1,8 +1,6 @@
 import { FileViewHistoryEntry } from '../domain/types';
 import { GatewayFileSystemService } from './GatewayFileSystemService';
 
-const MAX_HISTORY_ENTRIES = 10;
-
 /**
  * ViewerHistoryStore manages file viewing history via Gateway API.
  * No localStorage fallback — Gateway is the Single Source of Truth.

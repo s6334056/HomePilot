@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Clock, FileText, Trash2, AlertCircle } from 'lucide-react';
+import { Clock, FileText, Trash2 } from 'lucide-react';
 import { FileViewHistoryEntry } from '../domain/types';
 import { getHistory, removeFromHistory, checkHistoryFilesExist } from '../services/ViewerHistoryStore';
 import { GatewayFileSystemService } from '../services/GatewayFileSystemService';

@@ -53,6 +53,7 @@ export class G2RuntimeManager {
   private sessionListPage: AgentSessionListPage | null = null;
   private modelSelectPage: AgentModelSelectPage | null = null;
   private historyPage: HistoryPage | null = null;
+  private historyReturnPage: BasePage | null = null;
   private agentCurrentPath: string = '';
 
   // Last Agent page state (for Explorer → Agent return)
@@ -311,6 +312,7 @@ export class G2RuntimeManager {
     this.sessionListPage = null;
     this.modelSelectPage = null;
     this.historyPage = null;
+    this.historyReturnPage = null;
     this.agentCurrentPath = '';
     this.lastAgentPage = 'sessionList';
     this.lastAgentSessionID = null;
@@ -343,6 +345,7 @@ export class G2RuntimeManager {
     this.sessionListPage = null;
     this.modelSelectPage = null;
     this.historyPage = null;
+    this.historyReturnPage = null;
     this.agentCurrentPath = '';
     this.lastAgentPage = 'sessionList';
     this.lastAgentSessionID = null;
@@ -521,11 +524,19 @@ export class G2RuntimeManager {
 
   /**
    * Navigate from Explorer/FileViewer to History page.
+   * Saves the current Explorer/FileViewer page for return navigation.
    */
   async navigateToHistory(): Promise<void> {
     if (!this.pageManager || !this.gatewayService) return;
 
     const currentPage = this.pageManager.getCurrentPage();
+    const isFromExplorer = currentPage?.pageType === 'ExplorerPage' || currentPage?.pageType === 'FileViewerPage';
+
+    // Save the return page only when entering from Explorer/FileViewer
+    if (isFromExplorer && !this.historyReturnPage) {
+      this.historyReturnPage = currentPage || null;
+    }
+
     const fileService = this.gatewayService;
 
     this.historyPage = new HistoryPage(
@@ -541,25 +552,34 @@ export class G2RuntimeManager {
   }
 
   /**
-   * Navigate from History back to Explorer.
+   * Navigate from History back to the original Explorer/FileViewer page.
+   * Restores the saved page instance (preserving path, selection, etc.).
    */
   async navigateFromHistoryToExplorer(): Promise<void> {
-    if (!this.pageManager || !this.gatewayService) return;
+    if (!this.pageManager) return;
 
-    const rootPath = this.gatewayService.getRootPath();
-    const explorerPage = new ExplorerPage(
-      rootPath,
-      this.gatewayService,
-      undefined,
-      undefined,
-      undefined,
-      () => this.navigateToAgentFromExplorer(),
-      this.gatewayService,
-      () => this.navigateToHistory(),
-    );
-
+    const returnPage = this.historyReturnPage;
+    this.historyReturnPage = null;
     this.historyPage = null;
-    await this.pageManager.navigateTo(explorerPage);
+
+    if (returnPage) {
+      await this.pageManager.navigateTo(returnPage);
+    } else {
+      // Fallback: create new Explorer at root (should not happen in normal flow)
+      if (!this.gatewayService) return;
+      const rootPath = this.gatewayService.getRootPath();
+      const explorerPage = new ExplorerPage(
+        rootPath,
+        this.gatewayService,
+        undefined,
+        undefined,
+        undefined,
+        () => this.navigateToAgentFromExplorer(),
+        this.gatewayService,
+        () => this.navigateToHistory(),
+      );
+      await this.pageManager.navigateTo(explorerPage);
+    }
   }
 
   // ── Cleanup ───────────────────────────────────────────────

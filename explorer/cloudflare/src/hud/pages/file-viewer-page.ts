@@ -22,7 +22,7 @@ export class FileViewerPage extends BasePage {
   private fileService: FileSystemService;
   private gatewayService: GatewayFileSystemService | null;
   private onBackToExplorer: () => Promise<boolean>;
-  private onBackToHistory?: () => Promise<boolean>;
+  private onNavigateToHistory?: () => Promise<void>;
   private onStateChange?: (file: FileSystemItem, content: string) => void;
   private onAgentSessionList?: () => Promise<void>;
   private content: string = "";
@@ -56,7 +56,7 @@ export class FileViewerPage extends BasePage {
     onStateChange?: (file: FileSystemItem, content: string) => void,
     onAgentSessionList?: () => Promise<void>,
     gatewayService?: GatewayFileSystemService | null,
-    onBackToHistory?: () => Promise<boolean>,
+    onNavigateToHistory?: () => Promise<void>,
   ) {
     super();
     this.pageType = "FileViewerPage";
@@ -66,7 +66,7 @@ export class FileViewerPage extends BasePage {
     this.onBackToExplorer = onBackToExplorer;
     this.onStateChange = onStateChange;
     this.onAgentSessionList = onAgentSessionList;
-    this.onBackToHistory = onBackToHistory;
+    this.onNavigateToHistory = onNavigateToHistory;
   }
 
   public getCurrentPath(): string {
@@ -498,8 +498,8 @@ export class FileViewerPage extends BasePage {
   public async onMenuItemClick(menuId: string) {
     switch (menuId) {
       case "history":
-        if (this.onBackToHistory) {
-          await this.onBackToHistory();
+        if (this.onNavigateToHistory) {
+          await this.onNavigateToHistory();
         }
         break;
       case "agent":

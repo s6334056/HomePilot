@@ -84,6 +84,7 @@ export function App() {
   const isInitializedRef = useRef(false);
   const explorerHistoryRef = useRef<ExplorerHistoryEntry[]>([]);
   const previousScreenRef = useRef<ScreenType>('explorer');
+  const historyReturnScreenRef = useRef<ScreenType>('explorer');
   const prevIsDesktopRef = useRef<boolean>(window.innerWidth >= 1100);
   const [returnPage, setReturnPage] = useState<ScreenType>('explorer');
 
@@ -115,6 +116,12 @@ export function App() {
 
   // Can the user go back in explorer history?
   const canExplorerGoBack = (): boolean => {
+    if (currentScreen === 'file_viewer') {
+      return !!returnPage;
+    }
+    if (currentScreen === 'history') {
+      return true;
+    }
     return explorerHistoryRef.current.length > 0;
   };
 
@@ -210,7 +217,7 @@ export function App() {
     if (currentScreen === 'file_viewer') {
       setCurrentScreen(returnPage);
     } else if (currentScreen === 'history') {
-      setCurrentScreen(previousScreenRef.current);
+      setCurrentScreen(historyReturnScreenRef.current);
     } else {
       const prev = explorerHistoryRef.current.pop();
       if (prev !== undefined) {
@@ -378,7 +385,7 @@ export function App() {
         showSwapButton={isDesktop && !isFirstExplorer}
         onSwapPanes={handleSwapPanes}
         onPathBarClick={() => {
-          previousScreenRef.current = currentScreen;
+          historyReturnScreenRef.current = currentScreen;
           setCurrentScreen('history');
         }}
       />
