@@ -33,7 +33,7 @@ export class FileViewerPage extends BasePage {
 
   // Debounced shared position save (prevents excessive Gateway PATCH on every scroll)
   private positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
-  private pendingPositionSave: { logicalLine: number } | null = null;
+  private pendingPositionSave: { progress: number } | null = null;
   private static readonly POSITION_SAVE_DEBOUNCE_MS = 2000;
 
   // Auto Scroll state (elapsed-time based, DocsReader4EH pattern)
@@ -97,10 +97,10 @@ export class FileViewerPage extends BasePage {
       this.buildWrappedLines();
 
       // Try shared position (Gateway) — no localStorage fallback
-      let savedLine: number | null = null;
+      let savedProgress: number | null = null;
       if (this.gatewayService) {
         try {
-          savedLine = await getG2SharedPosition(this.gatewayService, this.file.path);
+          savedProgress = await getG2SharedPosition(this.gatewayService, this.file.path);
         } catch {
           // Gateway unavailable — start from top
         }
@@ -108,12 +108,9 @@ export class FileViewerPage extends BasePage {
         addG2ToHistory(this.gatewayService, this.file.path).catch(() => {});
       }
 
-      if (savedLine !== null && savedLine >= 1 && savedLine <= this.lines.length) {
-        const targetLogical = savedLine - 1;
-        const firstVisual = this.wrappedLines.findIndex(
-          (wl) => wl.logicalLineIndex === targetLogical,
-        );
-        this.scrollPosition = firstVisual >= 0 ? firstVisual : 0;
+      if (savedProgress !== null && savedProgress >= 0 && savedProgress <= 1) {
+        const maxPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
+        this.scrollPosition = Math.round(savedProgress * maxPosition);
       } else {
         this.scrollPosition = 0;
       }
@@ -141,25 +138,26 @@ export class FileViewerPage extends BasePage {
   }
 
   /**
-   * Save reading position locally (instant) and to Gateway (debounced).
+   * Save reading position as scroll progress (0.0 ~ 1.0) to Gateway (debounced).
    * Gateway PATCH is coalesced: rapid scrolls only trigger one HTTP call
    * after 2s of inactivity. Immediate save on deactivate/top/bottom.
    */
   private saveCurrentPosition(): void {
-    if (this.wrappedLines.length === 0) return;
-    const idx = Math.min(this.scrollPosition, this.wrappedLines.length - 1);
-    const logicalLine = this.wrappedLines[idx].logicalLineIndex + 1;
+    const maxPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
+    const progress = maxPosition > 0
+      ? Math.min(1, Math.max(0, this.scrollPosition / maxPosition))
+      : 0;
 
     // Gateway shared position — debounced
     if (this.gatewayService) {
-      this.pendingPositionSave = { logicalLine };
+      this.pendingPositionSave = { progress };
       if (this.positionSaveTimer === null) {
         this.positionSaveTimer = setTimeout(() => {
           this.positionSaveTimer = null;
           if (this.pendingPositionSave && this.gatewayService) {
-            const { logicalLine: line } = this.pendingPositionSave;
+            const { progress: p } = this.pendingPositionSave;
             this.pendingPositionSave = null;
-            saveG2SharedPosition(this.gatewayService, this.file.path, line);
+            saveG2SharedPosition(this.gatewayService, this.file.path, p);
           }
         }, FileViewerPage.POSITION_SAVE_DEBOUNCE_MS);
       }
@@ -176,9 +174,9 @@ export class FileViewerPage extends BasePage {
       this.positionSaveTimer = null;
     }
     if (this.pendingPositionSave && this.gatewayService) {
-      const { logicalLine } = this.pendingPositionSave;
+      const { progress } = this.pendingPositionSave;
       this.pendingPositionSave = null;
-      saveG2SharedPosition(this.gatewayService, this.file.path, logicalLine);
+      saveG2SharedPosition(this.gatewayService, this.file.path, progress);
     }
   }
 

@@ -129,9 +129,9 @@ export class GatewayFileSystemService implements FileSystemService {
     return res.json();
   }
 
-  async patchPosition(filePath: string, logicalLine: number, updatedAt: number): Promise<void> {
+  async patchPosition(filePath: string, progress: number, updatedAt: number): Promise<void> {
     const res = await this.requestWithBody('PATCH', '/api/viewer-state/position', {
-      filePath, logicalLine, updatedAt,
+      filePath, progress, updatedAt,
     });
     if (!res.ok) throw new Error(`Failed to patch position: ${res.status}`);
   }

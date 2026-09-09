@@ -225,7 +225,7 @@ export interface OpenCodeProvider {
 // ============================================================
 
 export interface SharedReadingPosition {
-  logicalLine: number;
+  progress: number;   // 0.0 ~ 1.0 (scroll progress ratio)
   updatedAt: number;
 }
 

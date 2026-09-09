@@ -196,12 +196,12 @@ export async function handleViewerStatePatchPosition(request, response) {
     return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid JSON.');
   }
 
-  const { filePath, logicalLine, updatedAt } = parsed;
+  const { filePath, progress, updatedAt } = parsed;
   if (!filePath || typeof filePath !== 'string') {
     return errorResponse(response, 400, 'INVALID_REQUEST', 'filePath is required.');
   }
-  if (typeof logicalLine !== 'number' || logicalLine < 1) {
-    return errorResponse(response, 400, 'INVALID_REQUEST', 'logicalLine must be a positive number.');
+  if (typeof progress !== 'number' || progress < 0 || progress > 1) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'progress must be a number between 0 and 1.');
   }
   if (typeof updatedAt !== 'number') {
     return errorResponse(response, 400, 'INVALID_REQUEST', 'updatedAt is required.');
@@ -210,7 +210,7 @@ export async function handleViewerStatePatchPosition(request, response) {
   const state = await readViewerState();
   const existing = state.positions[filePath];
   if (!existing || existing.updatedAt < updatedAt) {
-    state.positions[filePath] = { logicalLine, updatedAt };
+    state.positions[filePath] = { progress, updatedAt };
     await writeViewerState(state);
   }
 

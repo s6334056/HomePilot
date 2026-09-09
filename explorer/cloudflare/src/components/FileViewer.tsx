@@ -3,14 +3,9 @@ import { loadAutoScrollSettings } from '../services/AutoScrollSettings';
 import { getSharedPosition, saveSharedPosition } from '../services/SharedPositionStore';
 import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
 
-const LINE_HEIGHT_PX = 22.4; // font-size: 14px * line-height: 1.6
-
-function logicalToScrollTop(logicalLine: number): number {
-  return Math.max(0, (logicalLine - 1)) * LINE_HEIGHT_PX;
-}
-
-function scrollTopToLogicalLine(scrollTop: number): number {
-  return Math.floor(scrollTop / LINE_HEIGHT_PX) + 1;
+function computeScrollProgress(el: HTMLDivElement): number {
+  const maxScroll = el.scrollHeight - el.clientHeight;
+  return maxScroll > 0 ? Math.min(1, Math.max(0, el.scrollTop / maxScroll)) : 0;
 }
 
 interface FileViewerProps {
@@ -39,11 +34,11 @@ export const FileViewer: React.FC<FileViewerProps> = ({
 
   const savePosition = useCallback(() => {
     if (!filePath || !viewerRef.current) return;
-    const scrollTop = viewerRef.current.scrollTop;
-    // Save to shared position (Gateway)
+    const el = viewerRef.current;
+    // Save scroll progress (0.0 ~ 1.0) to Gateway
     if (gatewayService) {
-      const logicalLine = scrollTopToLogicalLine(scrollTop);
-      saveSharedPosition(gatewayService, filePath, logicalLine);
+      const progress = computeScrollProgress(el);
+      saveSharedPosition(gatewayService, filePath, progress);
     }
   }, [filePath, gatewayService]);
 
@@ -175,11 +170,11 @@ export const FileViewer: React.FC<FileViewerProps> = ({
       // Try shared position (Gateway)
       if (gatewayService) {
         try {
-          const sharedLogicalLine = await getSharedPosition(gatewayService, filePath);
-          if (sharedLogicalLine !== null && sharedLogicalLine >= 1) {
-            const scrollTop = logicalToScrollTop(sharedLogicalLine);
+          const sharedProgress = await getSharedPosition(gatewayService, filePath);
+          if (sharedProgress !== null && sharedProgress >= 0 && sharedProgress <= 1) {
             requestAnimationFrame(() => {
-              el.scrollTop = scrollTop;
+              const maxScroll = el.scrollHeight - el.clientHeight;
+              el.scrollTop = sharedProgress * maxScroll;
               positionRestoredRef.current = true;
             });
             return;

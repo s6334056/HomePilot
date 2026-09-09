@@ -2,7 +2,7 @@ import { GatewayFileSystemService } from '../../services/GatewayFileSystemServic
 
 /**
  * G2SharedPositionStore manages reading position via Gateway API.
- * G2 uses logicalLine directly (no pixel conversion needed).
+ * Position is stored as a scroll progress ratio (0.0 ~ 1.0).
  * No localStorage fallback — Gateway is the Single Source of Truth.
  */
 
@@ -13,7 +13,7 @@ export async function getG2SharedPosition(
   try {
     const state = await gatewayService.getViewerState();
     const entry = state.positions[filePath];
-    return entry?.logicalLine ?? null;
+    return entry?.progress ?? null;
   } catch {
     return null;
   }
@@ -22,10 +22,10 @@ export async function getG2SharedPosition(
 export async function saveG2SharedPosition(
   gatewayService: GatewayFileSystemService,
   filePath: string,
-  logicalLine: number,
+  progress: number,
 ): Promise<void> {
   try {
-    await gatewayService.patchPosition(filePath, logicalLine, Date.now());
+    await gatewayService.patchPosition(filePath, progress, Date.now());
   } catch {
     // Gateway unavailable — silently ignore
   }
