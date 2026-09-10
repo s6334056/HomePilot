@@ -409,13 +409,6 @@
   border-radius: 4px;
   pointer-events: none;
   z-index: 10;
-  animation: auto-scroll-fade 1.5s ease-in-out forwards;
-}
-
-@keyframes auto-scroll-fade {
-  0% { opacity: 1; }
-  70% { opacity: 1; }
-  100% { opacity: 0; }
 }
 
 /* Agent Panel */

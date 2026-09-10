@@ -401,17 +401,6 @@ export class FileViewerPage extends BasePage {
     }
   }
 
-  private showAutoScrollIndicator(text: string): void {
-    this.autoScrollIndicator = text;
-    this.clearAutoScrollIndicatorTimer();
-    this.autoScrollIndicatorTimer = setTimeout(() => {
-      this.autoScrollIndicator = null;
-      this.autoScrollIndicatorTimer = null;
-      if (this.renderPage) this.renderPage();
-    }, 1500);
-    if (this.renderPage) this.renderPage();
-  }
-
   private isAtEnd(): boolean {
     return this.scrollPosition >= Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
   }
@@ -440,34 +429,40 @@ export class FileViewerPage extends BasePage {
       const maxPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
       this.scrollPosition = Math.min(this.scrollPosition + VIEWER_SCROLL_STEP, maxPosition);
       this.saveCurrentPosition();
-      if (this.renderPage) this.renderPage();
 
       // Reset countdown for next scroll
       const settings = loadAutoScrollSettings();
       this.autoScrollRemainingMs = settings.interval * 1000;
       this.autoScrollLastTickTime = Date.now();
     }
+
+    // Update countdown indicator
+    const remainingSeconds = Math.ceil(Math.max(0, this.autoScrollRemainingMs) / 1000);
+    this.autoScrollIndicator = String(remainingSeconds);
+    if (this.renderPage) this.renderPage();
   }
 
   private stopAutoScroll(): void {
     this.autoScrollEnabled = false;
     this.autoScrollRemainingMs = 0;
     this.autoScrollLastTickTime = 0;
+    this.autoScrollIndicator = null;
     this.onAutoTickChanged?.();
+    if (this.renderPage) this.renderPage();
     console.log(`[G2 AutoScroll] STOPPED`);
   }
 
   private toggleAutoScroll(): void {
     if (this.autoScrollEnabled) {
       this.stopAutoScroll();
-      this.showAutoScrollIndicator('\u25CF');
     } else {
       this.autoScrollEnabled = true;
       const settings = loadAutoScrollSettings();
       this.autoScrollRemainingMs = settings.interval * 1000;
       this.autoScrollLastTickTime = Date.now();
+      this.autoScrollIndicator = String(settings.interval);
       this.onAutoTickChanged?.();
-      this.showAutoScrollIndicator('\u25B6');
+      if (this.renderPage) this.renderPage();
       console.log(`[G2 AutoScroll] STARTED interval=${settings.interval}s`);
     }
   }

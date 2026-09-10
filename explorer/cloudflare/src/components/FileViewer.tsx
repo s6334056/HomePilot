@@ -27,8 +27,9 @@ export const FileViewer: React.FC<FileViewerProps> = ({
   const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoScrollEnabledRef = useRef(false);
   const isAutoScrollingRef = useRef(false);
+  const autoScrollNextScrollTimeRef = useRef<number>(0);
   const [indicatorText, setIndicatorText] = useState<string | null>(null);
-  const indicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoScrollIndicatorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Reading Position Save ──────────────────────────────────
 
@@ -65,16 +66,30 @@ export const FileViewer: React.FC<FileViewerProps> = ({
     }
   }, []);
 
-  const showIndicator = useCallback((text: string) => {
-    setIndicatorText(text);
-    if (indicatorTimerRef.current !== null) {
-      clearTimeout(indicatorTimerRef.current);
+  const stopIndicatorInterval = useCallback(() => {
+    if (autoScrollIndicatorIntervalRef.current !== null) {
+      clearInterval(autoScrollIndicatorIntervalRef.current);
+      autoScrollIndicatorIntervalRef.current = null;
     }
-    indicatorTimerRef.current = setTimeout(() => {
-      setIndicatorText(null);
-      indicatorTimerRef.current = null;
-    }, 1500);
   }, []);
+
+  const startIndicatorInterval = useCallback(() => {
+    stopIndicatorInterval();
+    autoScrollIndicatorIntervalRef.current = setInterval(() => {
+      if (!autoScrollEnabledRef.current) {
+        stopIndicatorInterval();
+        setIndicatorText(null);
+        return;
+      }
+      const remainingMs = autoScrollNextScrollTimeRef.current - Date.now();
+      if (remainingMs <= 0) {
+        setIndicatorText(null);
+        return;
+      }
+      const remainingSeconds = Math.ceil(remainingMs / 1000);
+      setIndicatorText(`${remainingSeconds} AUTO`);
+    }, 400);
+  }, [stopIndicatorInterval]);
 
   const isAtEnd = useCallback((): boolean => {
     const el = viewerRef.current;
@@ -84,14 +99,18 @@ export const FileViewer: React.FC<FileViewerProps> = ({
 
   const stopAutoScroll = useCallback(() => {
     autoScrollEnabledRef.current = false;
+    autoScrollNextScrollTimeRef.current = 0;
     clearAutoScrollTimer();
-  }, [clearAutoScrollTimer]);
+    stopIndicatorInterval();
+    setIndicatorText(null);
+  }, [clearAutoScrollTimer, stopIndicatorInterval]);
 
   const scheduleNextAutoScroll = useCallback(() => {
     clearAutoScrollTimer();
     if (!autoScrollEnabledRef.current) return;
 
     const settings = loadAutoScrollSettings();
+    autoScrollNextScrollTimeRef.current = Date.now() + settings.interval * 1000;
     autoScrollTimerRef.current = setTimeout(() => {
       autoScrollTimerRef.current = null;
 
@@ -129,13 +148,15 @@ export const FileViewer: React.FC<FileViewerProps> = ({
   const toggleAutoScroll = useCallback(() => {
     if (autoScrollEnabledRef.current) {
       stopAutoScroll();
-      showIndicator('\u25CF AUTO');
     } else {
       autoScrollEnabledRef.current = true;
-      showIndicator('\u25B6 AUTO');
+      const settings = loadAutoScrollSettings();
+      autoScrollNextScrollTimeRef.current = Date.now() + settings.interval * 1000;
+      setIndicatorText(`${settings.interval} AUTO`);
+      startIndicatorInterval();
       scheduleNextAutoScroll();
     }
-  }, [stopAutoScroll, showIndicator, scheduleNextAutoScroll]);
+  }, [stopAutoScroll, startIndicatorInterval, scheduleNextAutoScroll]);
 
   // Scroll listener: save position + reset auto scroll timer on manual scroll
   useEffect(() => {
@@ -195,13 +216,10 @@ export const FileViewer: React.FC<FileViewerProps> = ({
   useEffect(() => {
     return () => {
       clearAutoScrollTimer();
+      stopIndicatorInterval();
       autoScrollEnabledRef.current = false;
-      if (indicatorTimerRef.current !== null) {
-        clearTimeout(indicatorTimerRef.current);
-        indicatorTimerRef.current = null;
-      }
     };
-  }, [filePath, clearAutoScrollTimer]);
+  }, [filePath, clearAutoScrollTimer, stopIndicatorInterval]);
 
   return (
     <div className="file-viewer-container">

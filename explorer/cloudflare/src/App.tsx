@@ -17,10 +17,7 @@ import './App.css';
 type PaneType = 'explorer' | 'agent';
 type PaneOrder = [PaneType, PaneType];
 
-interface ExplorerHistoryEntry {
-  path: string;
-  selectedIndex: number;
-}
+
 
 function createFileService(): FileSystemService {
   const config = resolveConfig();
@@ -82,9 +79,10 @@ export function App() {
   const dragStartWidth = useRef<number>(0);
 
   const isInitializedRef = useRef(false);
-  const explorerHistoryRef = useRef<ExplorerHistoryEntry[]>([]);
+
   const previousScreenRef = useRef<ScreenType>('explorer');
   const historyReturnScreenRef = useRef<ScreenType>('explorer');
+  const historyReturnPageRef = useRef<ScreenType>('explorer');
   const prevIsDesktopRef = useRef<boolean>(window.innerWidth >= 1100);
   const [returnPage, setReturnPage] = useState<ScreenType>('explorer');
 
@@ -114,7 +112,7 @@ export function App() {
     };
   };
 
-  // Can the user go back in explorer history?
+  // Can the user go back?
   const canExplorerGoBack = (): boolean => {
     if (currentScreen === 'file_viewer') {
       return !!returnPage;
@@ -122,7 +120,9 @@ export function App() {
     if (currentScreen === 'history') {
       return true;
     }
-    return explorerHistoryRef.current.length > 0;
+    // Explorer: can go back if not at root
+    const parentPath = fileService.getParentPath(explorerPath);
+    return parentPath !== explorerPath;
   };
 
   // ── PWA Initialization ────────────────────────────────────
@@ -193,12 +193,9 @@ export function App() {
     }
   };
 
-  const handleOpenFile = async (file: FileSystemItem, index: number, source?: ScreenType) => {
+  const handleOpenFile = async (file: FileSystemItem, _index: number, source?: ScreenType) => {
     try {
       const content = await fileService.readFile(file.path);
-      if (source !== 'history') {
-        explorerHistoryRef.current.push({ path: explorerPath, selectedIndex: index });
-      }
       setSelectedFile(file);
       setFileContent(content);
       setReturnPage(source || 'explorer');
@@ -212,16 +209,33 @@ export function App() {
     }
   };
 
-  // Back button: return to previous screen based on returnPage
+  // Back button: return to previous screen based on current absolute path
   const handleExplorerBack = async () => {
     if (currentScreen === 'file_viewer') {
-      setCurrentScreen(returnPage);
+      if (returnPage === 'history') {
+        // FileViewer opened from History → go back to History
+        setCurrentScreen('history');
+      } else if (selectedFile) {
+        // FileViewer opened from Explorer → navigate to parent and select file by name
+        const fileName = selectedFile.name;
+        const parentPath = fileService.getParentPath(selectedFile.path);
+        const parentItems = await fileService.getDirectory(parentPath);
+        const idx = parentItems.findIndex(item => item.name === fileName);
+        const restoreIndex = idx >= 0 ? idx : 0;
+        await navigateToPath(parentPath, restoreIndex);
+      }
     } else if (currentScreen === 'history') {
+      setReturnPage(historyReturnPageRef.current);
       setCurrentScreen(historyReturnScreenRef.current);
     } else {
-      const prev = explorerHistoryRef.current.pop();
-      if (prev !== undefined) {
-        await navigateToPath(prev.path, prev.selectedIndex);
+      // Explorer: navigate to parent and select current folder by name
+      const currentName = explorerPath.split(/[\/\\]/).pop() || '';
+      const parentPath = fileService.getParentPath(explorerPath);
+      if (parentPath !== explorerPath) {
+        const parentItems = await fileService.getDirectory(parentPath);
+        const idx = parentItems.findIndex(item => item.name === currentName);
+        const restoreIndex = idx >= 0 ? idx : 0;
+        await navigateToPath(parentPath, restoreIndex);
       }
     }
   };
@@ -230,9 +244,8 @@ export function App() {
     await navigateToPath(explorerPath);
   };
 
-  // Folder click from FileTable → push history
-  const handleOpenDirectory = async (path: string, index: number) => {
-    explorerHistoryRef.current.push({ path: explorerPath, selectedIndex: index });
+  // Folder click from FileTable
+  const handleOpenDirectory = async (path: string, _index: number) => {
     await navigateToPath(path);
   };
 
@@ -337,7 +350,6 @@ export function App() {
     setExplorerPath(rootPath);
     setCurrentScreen('explorer');
     setSelectedFile(null);
-    explorerHistoryRef.current = [];
 
     // Load initial directory for PWA display
     try {
@@ -386,6 +398,7 @@ export function App() {
         onSwapPanes={handleSwapPanes}
         onPathBarClick={() => {
           historyReturnScreenRef.current = currentScreen;
+          historyReturnPageRef.current = returnPage;
           setCurrentScreen('history');
         }}
       />

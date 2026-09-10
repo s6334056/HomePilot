@@ -12,7 +12,6 @@ export class ExplorerPage extends BasePage {
   private currentPath: string;
   private items: FileSystemItem[] = [];
   private selectedIndex: number = 0;
-  private parentSelectedIndex?: number;
   private fileService: FileSystemService;
   private gatewayService: GatewayFileSystemService | null;
   private onStateChange?: (path: string, items: FileSystemItem[], selectedIndex: number) => void;
@@ -188,7 +187,6 @@ export class ExplorerPage extends BasePage {
     if (!item) return;
 
     if (item.type === "directory") {
-      this.parentSelectedIndex = this.selectedIndex;
       await this.loadDirectory(item.path);
       await this.navigate(this);
     } else {
@@ -196,7 +194,15 @@ export class ExplorerPage extends BasePage {
       const viewerPage = new FileViewerPage(
         item,
         this.fileService,
-        () => this.navigate(this),
+        async () => {
+          // Navigate back based on current file path
+          const parentPath = this.fileService.getParentPath(item.path);
+          const parentItems = await this.fileService.getDirectory(parentPath);
+          const idx = parentItems.findIndex(i => i.name === item.name);
+          const restoreIndex = idx >= 0 ? idx : 0;
+          await this.loadDirectory(parentPath, restoreIndex);
+          return this.navigate(this);
+        },
         this.onFileViewerStateChange,
         this.onAgentSessionList,
         this.gatewayService,
@@ -211,9 +217,11 @@ export class ExplorerPage extends BasePage {
   public async onDoubleClick() {
     const parentPath = this.fileService.getParentPath(this.currentPath);
     if (parentPath !== this.currentPath) {
-      // Non-root: go to parent directory
-      const restoreIndex = this.parentSelectedIndex;
-      this.parentSelectedIndex = undefined;
+      // Non-root: navigate to parent and select current folder by name
+      const currentName = this.currentPath.split(/[\/\\]/).pop() || '';
+      const parentItems = await this.fileService.getDirectory(parentPath);
+      const idx = parentItems.findIndex(item => item.name === currentName);
+      const restoreIndex = idx >= 0 ? idx : 0;
       await this.loadDirectory(parentPath, restoreIndex);
       await this.navigate(this);
     } else if (this.onAgentSessionList) {
