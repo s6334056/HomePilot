@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
+import https from 'node:https';
+import dns from 'node:dns/promises';
 import qrcode from 'qrcode-terminal';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -49,6 +51,9 @@ const OPENCODE_URL = `http://${OPENCODE_HOST}:${OPENCODE_PORT}`;
 
 const GATEWAY_STARTUP_TIMEOUT = 10_000;
 const TUNNEL_URL_TIMEOUT = 30_000;
+const TUNNEL_REACHABILITY_TIMEOUT = 180_000;
+const TUNNEL_REACHABILITY_INTERVAL = 5_000;
+const TUNNEL_REACHABILITY_REQUEST_TIMEOUT = 10_000;
 const OPENCODE_STARTUP_TIMEOUT = 15_000;
 
 // Parse command-line arguments for root folder
@@ -79,6 +84,26 @@ let gatewayTimeout = null;
 let tunnelTimeout = null;
 let opencodeTimeout = null;
 let lmStudioTimeout = null;
+let reachabilityTimeout = null;
+let reachabilityTimer = null;
+
+// --- DNS Resolver for Quick Tunnel reachability check ---
+const tunnelDnsResolver = new dns.Resolver();
+tunnelDnsResolver.setServers(['1.1.1.1', '8.8.8.8']);
+
+const tunnelHttpsAgent = new https.Agent({
+  lookup(hostname, options, callback) {
+    tunnelDnsResolver.resolve4(hostname)
+      .then((addresses) => {
+        if (options.all) {
+          callback(null, addresses.map((a) => ({ address: a, family: 4 })));
+        } else {
+          callback(null, addresses[0], 4);
+        }
+      })
+      .catch((err) => callback(err));
+  },
+});
 
 // --- Validate root folder ---
 if (!existsSync(ROOT_FOLDER)) {
@@ -432,7 +457,7 @@ function startCloudflared() {
   });
 
   tunnelTimeout = setTimeout(() => {
-    if (!tunnelReady) {
+    if (!tunnelUrl) {
       console.error('');
       console.error('HomePilot Quick Tunnel URL could not be detected within 30 seconds.');
       console.error('Please check your Internet connection.');
@@ -442,18 +467,97 @@ function startCloudflared() {
 }
 
 function onCloudflaredOutput(data) {
-  if (tunnelReady) return;
-
   const text = data.toString();
-  const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
-  if (match) {
-    tunnelUrl = match[0];
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (line.trim()) {
+      console.log(`[cloudflared] ${line}`);
+    }
+  }
+
+  if (!tunnelUrl) {
+    const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+    if (match) {
+      tunnelUrl = match[0];
+      if (tunnelTimeout) {
+        clearTimeout(tunnelTimeout);
+        tunnelTimeout = null;
+      }
+      reachabilityTimeout = setTimeout(() => {
+        if (!tunnelReady) {
+          console.error('');
+          console.error('Quick Tunnel reachability could not be confirmed within 3 minutes.');
+          console.error('The tunnel URL may not be reachable from the Internet yet.');
+          console.error(`URL: ${tunnelUrl}`);
+          shutdown();
+        }
+      }, TUNNEL_REACHABILITY_TIMEOUT);
+      console.log('');
+      console.log('Quick Tunnel');
+      console.log('  Status : CONNECTING');
+      console.log(`  URL    : ${tunnelUrl}`);
+      console.log('');
+      console.log('Verifying reachability...');
+      checkTunnelReachability();
+    }
+  }
+}
+
+async function checkTunnelReachability() {
+  if (tunnelReady || shuttingDown) return;
+
+  try {
+    await new Promise((resolve, reject) => {
+      const url = new URL(`${tunnelUrl}/api/health`);
+      const req = https.request({
+        hostname: url.hostname,
+        port: url.port || 443,
+        path: url.pathname,
+        method: 'GET',
+        agent: tunnelHttpsAgent,
+        timeout: TUNNEL_REACHABILITY_REQUEST_TIMEOUT,
+        headers: { 'Authorization': `Bearer ${gatewayToken}` },
+      }, (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              const data = JSON.parse(body);
+              if (data?.status === 'ok') {
+                resolve();
+              } else {
+                reject(new Error(`unexpected status: ${data?.status}`));
+              }
+            } catch {
+              reject(new Error('invalid JSON'));
+            }
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}`));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('timeout'));
+      });
+      req.end();
+    });
+
     tunnelReady = true;
-    if (tunnelTimeout) {
-      clearTimeout(tunnelTimeout);
-      tunnelTimeout = null;
+    if (reachabilityTimeout) {
+      clearTimeout(reachabilityTimeout);
+      reachabilityTimeout = null;
     }
     showReady();
+    return;
+  } catch {
+    // request failed, will retry below
+  }
+
+  if (!tunnelReady && !shuttingDown) {
+    reachabilityTimer = setTimeout(checkTunnelReachability, TUNNEL_REACHABILITY_INTERVAL);
   }
 }
 
@@ -478,7 +582,7 @@ function showReady() {
   console.log(`  Root     : ${ROOT_FOLDER}`);
   console.log(`  Gateway  : ${address}`);
   console.log(`  OpenCode : ${OPENCODE_URL}`);
-  console.log(`  Token    : ${gatewayToken}`);
+  console.log('  Token    : [REDACTED]');
   console.log(`  Worker   : ${WORKER_URL}`);
   console.log('');
   console.log('Quick Tunnel');
@@ -525,6 +629,14 @@ function shutdown() {
   if (lmStudioTimeout) {
     clearTimeout(lmStudioTimeout);
     lmStudioTimeout = null;
+  }
+  if (reachabilityTimeout) {
+    clearTimeout(reachabilityTimeout);
+    reachabilityTimeout = null;
+  }
+  if (reachabilityTimer) {
+    clearTimeout(reachabilityTimer);
+    reachabilityTimer = null;
   }
 
   console.log('');
