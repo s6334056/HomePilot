@@ -2,7 +2,7 @@ import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../../page-manager";
 import { G2AgentController } from "../g2-agent-controller";
 import { OpenCodeMessageWithParts } from "../message-mapper";
-import { AgentContext } from "../../../domain/types";
+import { AgentContext, OpenCodeQuestionRequest } from "../../../domain/types";
 import { ExplorerPage } from "../../pages/explorer-page";
 import { FileViewerPage } from "../../pages/file-viewer-page";
 
@@ -65,6 +65,7 @@ export class AgentChatPage extends BasePage {
   private scrollInverted: boolean = false;
   private scrollToBottomAfterSend: boolean = false;
   private agentCreatedCache: Map<string, number> = new Map();
+  private questionSelectedIndex: number = 0;
 
   constructor(
     controller: G2AgentController,
@@ -89,6 +90,7 @@ export class AgentChatPage extends BasePage {
     this.buildChatText();
     this.buildWrappedLines();
     this.scrollLine = Math.max(0, this.wrappedLines.length - CHAT_MAX_LINES);
+    this.questionSelectedIndex = 0;
 
     this.stateUnsubscribe = this.controller.subscribe((state) => {
       if (this.isActive) {
@@ -277,20 +279,110 @@ export class AgentChatPage extends BasePage {
     }
   }
 
+  private truncateText(text: string, maxChars: number): string {
+    if (text.length <= maxChars) return text;
+    if (maxChars <= 3) return text.substring(0, maxChars);
+    return text.substring(0, maxChars - 3) + "...";
+  }
+
+  private buildQuestionBody(q: OpenCodeQuestionRequest): string {
+    const MAX_LINES = CHAT_MAX_LINES;
+    const GUIDE_LINES = 1;
+    const OPTION_LINES = 1;
+    const DESC_LINES = 2;
+    const OPTION_COUNT = q.options?.length ?? 0;
+
+    const guideAndGap = GUIDE_LINES + 1;
+    const optionsTotal = OPTION_COUNT * OPTION_LINES;
+    const descBudget = Math.max(0, MAX_LINES - guideAndGap - optionsTotal);
+    const headerLines = q.header ? 1 : 0;
+    const gapAfterHeader = q.header ? 1 : 0;
+    const questionBudget = Math.max(1, MAX_LINES - guideAndGap - optionsTotal - headerLines - gapAfterHeader - 1);
+
+    const lines: string[] = [];
+    let lineCount = 0;
+
+    if (q.header) {
+      const maxW = CHAT_MAX_WIDTH - 2;
+      lines.push(`[${this.truncateText(q.header, maxW)}]`);
+      lines.push("");
+      lineCount += 2;
+    }
+
+    if (q.question) {
+      const qLines = this.wrapLine(q.question, CHAT_MAX_WIDTH);
+      const take = Math.min(qLines.length, questionBudget);
+      for (let i = 0; i < take; i++) {
+        if (i === take - 1 && qLines.length > questionBudget) {
+          lines.push(this.truncateText(qLines[i], CHAT_MAX_WIDTH - 3) + "...");
+        } else {
+          lines.push(qLines[i]);
+        }
+        lineCount++;
+      }
+      lines.push("");
+      lineCount++;
+    }
+
+    if (q.options && q.options.length > 0) {
+      for (let i = 0; i < q.options.length; i++) {
+        const opt = q.options[i];
+        const prefix = i === this.questionSelectedIndex ? "> " : "  ";
+        const labelMax = CHAT_MAX_WIDTH - prefix.length;
+        lines.push(`${prefix}${this.truncateText(opt.label, labelMax)}`);
+        lineCount++;
+
+        if (i === this.questionSelectedIndex && opt.description && descBudget > 0) {
+          const dLines = this.wrapLine(opt.description, CHAT_MAX_WIDTH - 2);
+          const dTake = Math.min(dLines.length, Math.min(DESC_LINES, descBudget));
+          for (let d = 0; d < dTake; d++) {
+            if (d === dTake - 1 && dLines.length > dTake) {
+              lines.push(`  ${this.truncateText(dLines[d], CHAT_MAX_WIDTH - 5)}...`);
+            } else {
+              lines.push(`  ${dLines[d]}`);
+            }
+            lineCount++;
+          }
+        }
+      }
+    }
+
+    while (lineCount < MAX_LINES - GUIDE_LINES) {
+      lines.push("");
+      lineCount++;
+    }
+
+    lines.push("Tap: Select  Double: Skip");
+
+    return lines.join("\n");
+  }
+
   public render(): PageRenderResult {
-    const voiceState = this.controller.getState().voiceState;
+    const state = this.controller.getState();
+    const voiceState = state.voiceState;
+    const pendingQuestions = state.pendingQuestions;
+    const qvConfirm = state.questionVoiceConfirm;
+    const isQuestionMode = pendingQuestions.length > 0 && voiceState === 'idle';
+    const isQuestionVoice = pendingQuestions.length > 0 && qvConfirm && voiceState !== 'idle';
 
     const headerProp = new TextContainerProperty({
       containerID: 1,
       containerName: "chat_header",
-      content: voiceState !== 'idle'
-        ? "[Voice Input]"
-        : this.buildHeaderLine(
+      content: (isQuestionMode || isQuestionVoice)
+        ? this.buildHeaderLine(
             this.currentPath || "Chat",
             "",
             CHAT_MAX_WIDTH,
-            `[${this.modelName}]`,
-          ),
+            "[Question]",
+          )
+        : voiceState !== 'idle'
+          ? "[Voice Input]"
+          : this.buildHeaderLine(
+              this.currentPath || "Chat",
+              "",
+              CHAT_MAX_WIDTH,
+              `[${this.modelName}]`,
+            ),
       xPosition: 4,
       yPosition: 2,
       width: 572,
@@ -301,7 +393,17 @@ export class AgentChatPage extends BasePage {
 
     let bodyContent: string;
 
-    if (voiceState === 'ready') {
+    if (isQuestionMode) {
+      bodyContent = this.buildQuestionBody(pendingQuestions[0]);
+    } else if (isQuestionVoice && voiceState === 'ready') {
+      bodyContent = "VOICE INPUT\n\nListening...";
+    } else if (isQuestionVoice && voiceState === 'transcribing') {
+      bodyContent = "VOICE INPUT\n\nTranscribing...";
+    } else if (isQuestionVoice && voiceState === 'confirmation') {
+      const transcript = this.controller.getState().transcript;
+      const wrappedTranscript = this.wrapLine(transcript, CHAT_MAX_WIDTH).join("\n");
+      bodyContent = `回答内容を確認\n\n${wrappedTranscript}\n\nTap: Send\nDouble: Cancel`;
+    } else if (voiceState === 'ready') {
       bodyContent = "VOICE INPUT\n\nListening...";
     } else if (voiceState === 'transcribing') {
       bodyContent = "VOICE INPUT\n\nTranscribing...";
@@ -358,7 +460,27 @@ export class AgentChatPage extends BasePage {
     };
   }
 
+  private isQuestionMode(): boolean {
+    const state = this.controller.getState();
+    return state.pendingQuestions.length > 0 && state.voiceState === 'idle';
+  }
+
+  private isQuestionVoiceActive(): boolean {
+    const state = this.controller.getState();
+    return state.pendingQuestions.length > 0 && state.questionVoiceConfirm && state.voiceState !== 'idle';
+  }
+
   public async onScrollUp() {
+    if (this.isQuestionVoiceActive()) return;
+    if (this.isQuestionMode()) {
+      const q = this.controller.getState().pendingQuestions[0];
+      const optionCount = q.options?.length ?? 0;
+      if (optionCount > 0 && this.questionSelectedIndex > 0) {
+        this.questionSelectedIndex--;
+        await this.renderPage();
+      }
+      return;
+    }
     if (this.scrollInverted) {
       if (this.scrollLine > 0) {
         this.scrollLine = Math.max(this.scrollLine - SCROLL_STEP, 0);
@@ -373,6 +495,16 @@ export class AgentChatPage extends BasePage {
   }
 
   public async onScrollDown() {
+    if (this.isQuestionVoiceActive()) return;
+    if (this.isQuestionMode()) {
+      const q = this.controller.getState().pendingQuestions[0];
+      const optionCount = q.options?.length ?? 0;
+      if (optionCount > 0 && this.questionSelectedIndex < optionCount - 1) {
+        this.questionSelectedIndex++;
+        await this.renderPage();
+      }
+      return;
+    }
     if (this.scrollInverted) {
       if (this.scrollLine < this.wrappedLines.length - CHAT_MAX_LINES) {
         this.scrollLine = Math.min(this.scrollLine + SCROLL_STEP, this.wrappedLines.length - CHAT_MAX_LINES);
@@ -430,7 +562,34 @@ export class AgentChatPage extends BasePage {
     };
   }
 
+  private async answerQuestion(answer: string | string[]): Promise<void> {
+    const pendingQuestions = this.controller.getState().pendingQuestions;
+    if (pendingQuestions.length === 0) return;
+    const q = pendingQuestions[0];
+    this.questionSelectedIndex = 0;
+    await this.controller.respondQuestion(q.id, answer);
+  }
+
   public async onClick() {
+    if (this.isQuestionVoiceActive()) {
+      const state = this.controller.getState();
+      if (state.voiceState === 'confirmation') {
+        await this.controller.confirmQuestionVoice();
+      }
+      return;
+    }
+
+    if (this.isQuestionMode()) {
+      const q = this.controller.getState().pendingQuestions[0];
+      if (q.options && q.options.length > 0) {
+        const selected = q.options[this.questionSelectedIndex];
+        if (selected) {
+          await this.answerQuestion(selected.label);
+        }
+      }
+      return;
+    }
+
     const voiceState = this.controller.getState().voiceState;
     if (voiceState === 'confirmation') {
       const transcript = this.controller.getState().transcript;
@@ -444,6 +603,16 @@ export class AgentChatPage extends BasePage {
   }
 
   public async onDoubleClick() {
+    if (this.isQuestionVoiceActive()) {
+      this.controller.cancelVoiceInput();
+      return;
+    }
+
+    if (this.isQuestionMode()) {
+      await this.answerQuestion('');
+      return;
+    }
+
     const voiceState = this.controller.getState().voiceState;
     if (voiceState === 'transcribing' || voiceState === 'confirmation') {
       this.controller.cancelVoiceInput();
@@ -455,10 +624,23 @@ export class AgentChatPage extends BasePage {
   }
 
   public async onLongPress() {
+    const state = this.controller.getState();
+    if (state.pendingQuestions.length > 0 && state.voiceState === 'idle') {
+      const q = state.pendingQuestions[0];
+      if (q.custom !== false) {
+        await this.controller.startQuestionVoiceInput();
+        return;
+      }
+    }
     await this.controller.startVoiceInput();
   }
 
   public async onLongPressRelease() {
+    const state = this.controller.getState();
+    if (state.questionVoiceConfirm && state.voiceState === 'ready') {
+      await this.controller.stopQuestionVoiceInput();
+      return;
+    }
     await this.controller.stopVoiceInput();
   }
 
