@@ -201,7 +201,10 @@ export class OpenCodeClient {
   }
 
   async respondQuestion(questionID: string, answer: string | string[]): Promise<void> {
-    await this.request<void>('POST', `/question/${questionID}`, { answer });
+    const answers = Array.isArray(answer)
+      ? answer.map((a) => [a])
+      : [[answer]];
+    await this.request<void>('POST', `/question/${questionID}/reply`, { answers });
   }
 
   async getProjects(): Promise<OpenCodeProject[]> {
@@ -305,29 +308,52 @@ export class OpenCodeClient {
 
   async getPendingQuestions(): Promise<OpenCodeQuestionRequest[]> {
     const data = await this.request<unknown>('GET', '/question');
+
+    const requests: Array<Record<string, unknown>> = [];
     if (Array.isArray(data)) {
-      return data.map((item: Record<string, unknown>) => ({
-        id: (item.id as string) || '',
-        sessionID: (item.sessionID as string) || '',
-        question: (item.question as string) || '',
-        header: item.header as string | undefined,
-        options: Array.isArray(item.options) ? item.options as Array<{ label: string; description?: string }> : undefined,
-        multiple: item.multiple as boolean | undefined,
-        tool: item.tool as { messageID?: string; callID?: string } | undefined,
-      }));
+      requests.push(...(data as Array<Record<string, unknown>>));
+    } else if (data && typeof data === 'object' && 'value' in data && Array.isArray((data as Record<string, unknown>).value)) {
+      requests.push(...((data as { value: Array<Record<string, unknown>> }).value));
     }
-    if (data && typeof data === 'object' && 'value' in data && Array.isArray((data as Record<string, unknown>).value)) {
-      return ((data as { value: Array<Record<string, unknown>> }).value).map((item) => ({
-        id: (item.id as string) || '',
-        sessionID: (item.sessionID as string) || '',
-        question: (item.question as string) || '',
-        header: item.header as string | undefined,
-        options: Array.isArray(item.options) ? item.options as Array<{ label: string; description?: string }> : undefined,
-        multiple: item.multiple as boolean | undefined,
-        tool: item.tool as { messageID?: string; callID?: string } | undefined,
-      }));
+
+    const result: OpenCodeQuestionRequest[] = [];
+    for (const item of requests) {
+      const parentID = (item.id as string) || '';
+      const sessionID = (item.sessionID as string) || '';
+      const tool = item.tool as { messageID?: string; callID?: string } | undefined;
+      const questions = Array.isArray(item.questions) ? item.questions as Array<Record<string, unknown>> : [];
+
+      if (questions.length === 0) {
+        const q = (item.question as string) || '';
+        if (q || item.header || item.options) {
+          result.push({
+            id: parentID,
+            sessionID,
+            question: q,
+            header: item.header as string | undefined,
+            options: Array.isArray(item.options) ? item.options as Array<{ label: string; description?: string }> : undefined,
+            multiple: item.multiple as boolean | undefined,
+            custom: item.custom as boolean | undefined,
+            tool,
+          });
+        }
+      } else {
+        for (let i = 0; i < questions.length; i++) {
+          const qItem = questions[i];
+          result.push({
+            id: questions.length === 1 ? parentID : `${parentID}_${i}`,
+            sessionID,
+            question: (qItem.question as string) || '',
+            header: qItem.header as string | undefined,
+            options: Array.isArray(qItem.options) ? qItem.options as Array<{ label: string; description?: string }> : undefined,
+            multiple: qItem.multiple as boolean | undefined,
+            custom: qItem.custom as boolean | undefined,
+            tool,
+          });
+        }
+      }
     }
-    return [];
+    return result;
   }
 
   getGatewayUrl(): string {

@@ -175,6 +175,7 @@ export interface OpenCodeQuestionRequest {
     description?: string;
   }>;
   multiple?: boolean;
+  custom?: boolean;
   tool?: {
     messageID?: string;
     callID?: string;

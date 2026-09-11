@@ -383,12 +383,16 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     );
   };
 
+  const questionInputRef = useRef<HTMLInputElement>(null);
+
   const renderQuestionDialog = () => {
     if (pendingQuestions.length === 0) return null;
     const q = pendingQuestions[0];
     const handleAnswer = (answer: string | string[]) => {
       actions.respondQuestion(q.id, answer);
     };
+    const hasOptions = q.options && q.options.length > 0;
+    const showFreeInput = !hasOptions || q.custom !== false;
     return (
       <div className="oc-dialog-overlay">
         <div className="oc-dialog">
@@ -397,24 +401,26 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
             <span>{q.header || 'Question'}</span>
           </div>
           <div className="oc-dialog-body">
-            <div className="oc-dialog-question-text">{q.question}</div>
-            {q.options && q.options.length > 0 && (
+            {q.question && <div className="oc-dialog-question-text">{q.question}</div>}
+            {hasOptions && (
               <div className="oc-dialog-options">
-                {q.options.map((opt, i) => (
+                {q.options!.map((opt, i) => (
                   <button
                     key={i}
                     className="oc-btn oc-btn-option"
                     onClick={() => handleAnswer(opt.label)}
                   >
-                    {opt.label}
-                    {opt.description && <span className="oc-option-desc">{opt.description}</span>}
+                    <div className="oc-option-label">{opt.label}</div>
+                    {opt.description && <div className="oc-option-desc">{opt.description}</div>}
                   </button>
                 ))}
               </div>
             )}
-            {!q.options && (
+            {showFreeInput && (
               <div className="oc-dialog-free-input">
+                {hasOptions && <div className="oc-dialog-free-input-label">自由入力</div>}
                 <input
+                  ref={questionInputRef}
                   type="text"
                   className="oc-input"
                   placeholder="回答を入力..."
@@ -428,6 +434,18 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
             )}
           </div>
           <div className="oc-dialog-actions">
+            {showFreeInput && (
+              <button
+                className="oc-btn oc-btn-grant"
+                onClick={() => {
+                  if (questionInputRef.current && questionInputRef.current.value.trim()) {
+                    handleAnswer(questionInputRef.current.value.trim());
+                  }
+                }}
+              >
+                回答
+              </button>
+            )}
             <button
               className="oc-btn oc-btn-deny"
               onClick={() => handleAnswer('')}

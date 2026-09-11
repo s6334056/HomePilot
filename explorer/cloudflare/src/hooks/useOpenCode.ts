@@ -318,6 +318,14 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         messages: msgWithParts,
         isLoadingMessages: false,
       }));
+      try {
+        const pendingPermissions = await client.getPendingPermissions();
+        setState((prev) => ({ ...prev, pendingPermissions }));
+      } catch { /* non-critical */ }
+      try {
+        const pendingQuestions = await client.getPendingQuestions();
+        setState((prev) => ({ ...prev, pendingQuestions }));
+      } catch { /* non-critical */ }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load messages';
       setState((prev) => ({ ...prev, isLoadingMessages: false, error: msg }));
