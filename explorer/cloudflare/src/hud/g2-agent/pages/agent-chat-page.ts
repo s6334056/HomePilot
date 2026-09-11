@@ -66,6 +66,8 @@ export class AgentChatPage extends BasePage {
   private scrollToBottomAfterSend: boolean = false;
   private agentCreatedCache: Map<string, number> = new Map();
   private questionSelectedIndex: number = 0;
+  private questionMultipleSelected: Set<string> = new Set();
+  private customSources: Set<string> = new Set();
 
   constructor(
     controller: G2AgentController,
@@ -290,10 +292,14 @@ export class AgentChatPage extends BasePage {
     const GUIDE_LINES = 1;
     const OPTION_LINES = 1;
     const DESC_LINES = 2;
+    const isMultiple = q.multiple === true;
     const OPTION_COUNT = q.options?.length ?? 0;
+    const CUSTOM_COUNT = this.questionMultipleSelected.size;
+    const ALL_ITEM_COUNT = OPTION_COUNT + CUSTOM_COUNT;
+    const TOTAL_ITEMS = isMultiple ? ALL_ITEM_COUNT + 1 : ALL_ITEM_COUNT;
 
     const guideAndGap = GUIDE_LINES + 1;
-    const optionsTotal = OPTION_COUNT * OPTION_LINES;
+    const optionsTotal = TOTAL_ITEMS * OPTION_LINES;
     const descBudget = Math.max(0, MAX_LINES - guideAndGap - optionsTotal);
     const headerLines = q.header ? 1 : 0;
     const gapAfterHeader = q.header ? 1 : 0;
@@ -327,12 +333,23 @@ export class AgentChatPage extends BasePage {
     if (q.options && q.options.length > 0) {
       for (let i = 0; i < q.options.length; i++) {
         const opt = q.options[i];
-        const prefix = i === this.questionSelectedIndex ? "> " : "  ";
-        const labelMax = CHAT_MAX_WIDTH - prefix.length;
-        lines.push(`${prefix}${this.truncateText(opt.label, labelMax)}`);
+        const isFocused = i === this.questionSelectedIndex;
+
+        if (isMultiple) {
+          const checked = this.questionMultipleSelected.has(opt.label);
+          const checkMark = checked ? '☑' : '☐';
+          const focusMark = isFocused ? '>' : ' ';
+          const prefix = `${focusMark}${checkMark} `;
+          const labelMax = CHAT_MAX_WIDTH - prefix.length;
+          lines.push(`${prefix}${this.truncateText(opt.label, labelMax)}`);
+        } else {
+          const prefix = isFocused ? "> " : "  ";
+          const labelMax = CHAT_MAX_WIDTH - prefix.length;
+          lines.push(`${prefix}${this.truncateText(opt.label, labelMax)}`);
+        }
         lineCount++;
 
-        if (i === this.questionSelectedIndex && opt.description && descBudget > 0) {
+        if (isFocused && opt.description && descBudget > 0) {
           const dLines = this.wrapLine(opt.description, CHAT_MAX_WIDTH - 2);
           const dTake = Math.min(dLines.length, Math.min(DESC_LINES, descBudget));
           for (let d = 0; d < dTake; d++) {
@@ -345,6 +362,27 @@ export class AgentChatPage extends BasePage {
           }
         }
       }
+    }
+
+    if (isMultiple) {
+      for (const customText of this.questionMultipleSelected) {
+        if (this.customSources.has(customText)) {
+          const isFocused = this.questionSelectedIndex === OPTION_COUNT + [...this.questionMultipleSelected].indexOf(customText);
+          const checked = true;
+          const checkMark = checked ? '☑' : '☐';
+          const focusMark = isFocused ? '>' : ' ';
+          const prefix = `${focusMark}${checkMark} `;
+          const labelMax = CHAT_MAX_WIDTH - prefix.length;
+          lines.push(`${prefix}${this.truncateText(customText, labelMax)}`);
+          lineCount++;
+        }
+      }
+
+      const confirmIndex = ALL_ITEM_COUNT;
+      const isConfirmFocused = this.questionSelectedIndex === confirmIndex;
+      const confirmPrefix = isConfirmFocused ? "> " : "  ";
+      lines.push(`${confirmPrefix}[回答する]`);
+      lineCount++;
     }
 
     while (lineCount < MAX_LINES - GUIDE_LINES) {
@@ -470,6 +508,11 @@ export class AgentChatPage extends BasePage {
     return state.pendingQuestions.length > 0 && state.questionVoiceConfirm && state.voiceState !== 'idle';
   }
 
+  private isMultipleQuestion(): boolean {
+    const q = this.controller.getState().pendingQuestions[0];
+    return !!q && q.multiple === true;
+  }
+
   public async onScrollUp() {
     if (this.isQuestionVoiceActive()) return;
     if (this.isQuestionMode()) {
@@ -499,7 +542,10 @@ export class AgentChatPage extends BasePage {
     if (this.isQuestionMode()) {
       const q = this.controller.getState().pendingQuestions[0];
       const optionCount = q.options?.length ?? 0;
-      if (optionCount > 0 && this.questionSelectedIndex < optionCount - 1) {
+      const maxIndex = q.multiple
+        ? optionCount + this.questionMultipleSelected.size
+        : optionCount - 1;
+      if (optionCount > 0 && this.questionSelectedIndex < maxIndex) {
         this.questionSelectedIndex++;
         await this.renderPage();
       }
@@ -567,24 +613,84 @@ export class AgentChatPage extends BasePage {
     if (pendingQuestions.length === 0) return;
     const q = pendingQuestions[0];
     this.questionSelectedIndex = 0;
+    this.questionMultipleSelected = new Set();
+    this.customSources = new Set();
     await this.controller.respondQuestion(q.id, answer);
+  }
+
+  private buildMultipleAnswer(): string[] {
+    const q = this.controller.getState().pendingQuestions[0];
+    if (!q) return [];
+    const optionLabels = (q.options ?? []).map((o) => o.label);
+    const selectedOptions = [...this.questionMultipleSelected].filter((t) => !this.customSources.has(t));
+    const customTexts = [...this.questionMultipleSelected].filter((t) => this.customSources.has(t));
+    const answer: string[] = [];
+    for (const item of selectedOptions) {
+      if (optionLabels.includes(item)) answer.push(item);
+    }
+    for (const item of customTexts) {
+      answer.push(item);
+    }
+    return answer;
   }
 
   public async onClick() {
     if (this.isQuestionVoiceActive()) {
       const state = this.controller.getState();
       if (state.voiceState === 'confirmation') {
-        await this.controller.confirmQuestionVoice();
+        const transcript = await this.controller.confirmQuestionVoice();
+        if (transcript) {
+          this.questionMultipleSelected.add(transcript);
+          this.customSources.add(transcript);
+          await this.renderPage();
+        }
       }
       return;
     }
 
     if (this.isQuestionMode()) {
       const q = this.controller.getState().pendingQuestions[0];
-      if (q.options && q.options.length > 0) {
-        const selected = q.options[this.questionSelectedIndex];
-        if (selected) {
-          await this.answerQuestion(selected.label);
+      const optionCount = q.options?.length ?? 0;
+
+      if (q.multiple) {
+        const allItems = optionCount + this.questionMultipleSelected.size;
+        const confirmIndex = allItems;
+
+        if (this.questionSelectedIndex === confirmIndex) {
+          const answer = this.buildMultipleAnswer();
+          await this.answerQuestion(answer);
+        } else if (this.questionSelectedIndex < optionCount) {
+          const label = q.options![this.questionSelectedIndex].label;
+          const next = new Set(this.questionMultipleSelected);
+          if (next.has(label)) {
+            next.delete(label);
+          } else {
+            next.add(label);
+          }
+          this.questionMultipleSelected = next;
+          await this.renderPage();
+        } else {
+          const customList = [...this.questionMultipleSelected].filter((t) => this.customSources.has(t));
+          const customIdx = this.questionSelectedIndex - optionCount;
+          const text = customList[customIdx];
+          if (text) {
+            const next = new Set(this.questionMultipleSelected);
+            if (next.has(text)) {
+              next.delete(text);
+              this.customSources.delete(text);
+            } else {
+              next.add(text);
+            }
+            this.questionMultipleSelected = next;
+            await this.renderPage();
+          }
+        }
+      } else {
+        if (q.options && q.options.length > 0) {
+          const selected = q.options[this.questionSelectedIndex];
+          if (selected) {
+            await this.answerQuestion(selected.label);
+          }
         }
       }
       return;

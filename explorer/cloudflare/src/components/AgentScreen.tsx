@@ -71,6 +71,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
   const activeSession = selectedSession;
 
+  const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
+
   const canGoBack = showSessionList ? false : !!selectedSessionID;
 
   const hasFetchedSessionsRef = useRef<boolean>(false);
@@ -388,13 +390,99 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const renderQuestionDialog = () => {
     if (pendingQuestions.length === 0) return null;
     const q = pendingQuestions[0];
-    const handleAnswer = (answer: string | string[]) => {
-      actions.respondQuestion(q.id, answer);
-    };
+    const isMultiple = q.multiple === true;
     const hasOptions = q.options && q.options.length > 0;
     const showFreeInput = !hasOptions || q.custom !== false;
+
+    const handleSingleAnswer = (answer: string) => {
+      setSelectedOptions(new Set());
+      actions.respondQuestion(q.id, answer);
+    };
+
+    const handleMultipleSubmit = () => {
+      const selected = Array.from(selectedOptions);
+      const customText = questionInputRef.current?.value.trim() || '';
+      const answer = customText ? [...selected, customText] : selected;
+      setSelectedOptions(new Set());
+      if (questionInputRef.current) questionInputRef.current.value = '';
+      actions.respondQuestion(q.id, answer);
+    };
+
+    const handleSkip = () => {
+      setSelectedOptions(new Set());
+      if (questionInputRef.current) questionInputRef.current.value = '';
+      actions.respondQuestion(q.id, '');
+    };
+
+    const toggleOption = (label: string) => {
+      setSelectedOptions((prev) => {
+        const next = new Set(prev);
+        if (next.has(label)) {
+          next.delete(label);
+        } else {
+          next.add(label);
+        }
+        return next;
+      });
+    };
+
+    if (isMultiple) {
+      return (
+        <div className="oc-dialog-overlay" key={q.id}>
+          <div className="oc-dialog">
+            <div className="oc-dialog-header">
+              <AlertCircle size={18} />
+              <span>{q.header || 'Question'}</span>
+            </div>
+            <div className="oc-dialog-body">
+              {q.question && <div className="oc-dialog-question-text">{q.question}</div>}
+              {hasOptions && (
+                <div className="oc-dialog-options">
+                  {q.options!.map((opt, i) => (
+                    <button
+                      key={i}
+                      className={`oc-btn oc-btn-option${selectedOptions.has(opt.label) ? ' oc-option-selected' : ''}`}
+                      onClick={() => toggleOption(opt.label)}
+                    >
+                      <div className="oc-option-label">
+                        <span className="oc-option-checkbox">{selectedOptions.has(opt.label) ? '☑' : '☐'}</span>
+                        {opt.label}
+                      </div>
+                      {opt.description && <div className="oc-option-desc">{opt.description}</div>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {showFreeInput && (
+                <div className="oc-dialog-free-input">
+                  {hasOptions && <div className="oc-dialog-free-input-label">自由入力</div>}
+                  <input
+                    ref={questionInputRef}
+                    type="text"
+                    className="oc-input"
+                    placeholder="回答を入力..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleMultipleSubmit();
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="oc-dialog-actions">
+              <button className="oc-btn oc-btn-grant" onClick={handleMultipleSubmit}>
+                回答する
+              </button>
+              <button className="oc-btn oc-btn-deny" onClick={handleSkip}>
+                Skip
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="oc-dialog-overlay">
+      <div className="oc-dialog-overlay" key={q.id}>
         <div className="oc-dialog">
           <div className="oc-dialog-header">
             <AlertCircle size={18} />
@@ -408,7 +496,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                   <button
                     key={i}
                     className="oc-btn oc-btn-option"
-                    onClick={() => handleAnswer(opt.label)}
+                    onClick={() => handleSingleAnswer(opt.label)}
                   >
                     <div className="oc-option-label">{opt.label}</div>
                     {opt.description && <div className="oc-option-desc">{opt.description}</div>}
@@ -426,7 +514,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                   placeholder="回答を入力..."
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
-                      handleAnswer((e.target as HTMLInputElement).value.trim());
+                      handleSingleAnswer((e.target as HTMLInputElement).value.trim());
                     }
                   }}
                 />
@@ -439,17 +527,14 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 className="oc-btn oc-btn-grant"
                 onClick={() => {
                   if (questionInputRef.current && questionInputRef.current.value.trim()) {
-                    handleAnswer(questionInputRef.current.value.trim());
+                    handleSingleAnswer(questionInputRef.current.value.trim());
                   }
                 }}
               >
                 回答
               </button>
             )}
-            <button
-              className="oc-btn oc-btn-deny"
-              onClick={() => handleAnswer('')}
-            >
+            <button className="oc-btn oc-btn-deny" onClick={handleSkip}>
               Skip
             </button>
           </div>

@@ -486,17 +486,22 @@ export class G2AgentController {
     await this.stopVoiceInput();
   }
 
-  async confirmQuestionVoice(): Promise<void> {
-    if (this.state.voiceState !== 'confirmation') return;
-    if (!this.state.questionVoiceConfirm) return;
+  async confirmQuestionVoice(): Promise<string | null> {
+    if (this.state.voiceState !== 'confirmation') return null;
+    if (!this.state.questionVoiceConfirm) return null;
 
     const transcript = this.state.transcript;
     this.updateState({ voiceState: 'idle', transcript: '', questionVoiceConfirm: false });
 
-    if (transcript && this.state.pendingQuestions.length > 0) {
-      const q = this.state.pendingQuestions[0];
-      await this.respondQuestion(q.id, transcript);
+    if (!transcript || this.state.pendingQuestions.length === 0) return null;
+
+    const q = this.state.pendingQuestions[0];
+    if (q.multiple) {
+      return transcript;
     }
+
+    await this.respondQuestion(q.id, transcript);
+    return null;
   }
 
   private stopMic(): void {

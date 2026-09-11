@@ -202,7 +202,7 @@ export class OpenCodeClient {
 
   async respondQuestion(questionID: string, answer: string | string[]): Promise<void> {
     const answers = Array.isArray(answer)
-      ? answer.map((a) => [a])
+      ? [answer]
       : [[answer]];
     await this.request<void>('POST', `/question/${questionID}/reply`, { answers });
   }

@@ -1851,6 +1851,16 @@
   border-color: var(--accent);
 }
 
+.oc-dialog-options .oc-btn-option.oc-option-selected {
+  border-color: var(--accent);
+  background-color: rgba(56, 139, 253, 0.08);
+}
+
+.oc-option-checkbox {
+  margin-right: 8px;
+  font-size: 14px;
+}
+
 .oc-option-label {
   font-size: 13px;
   font-weight: 500;
