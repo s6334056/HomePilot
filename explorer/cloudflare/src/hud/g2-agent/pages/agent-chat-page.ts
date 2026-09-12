@@ -294,6 +294,38 @@ export class AgentChatPage extends BasePage {
   }
 
   private buildQuestionBody(q: OpenCodeQuestionRequest): string {
+    if (q.multiple === true && (q.options?.length ?? 0) >= 4) {
+      const lines: string[] = [];
+      if (q.header) {
+        lines.push(`[${this.truncateText(q.header, CHAT_MAX_WIDTH - this.getStringWidth('[]'))}]`);
+        lines.push("");
+      }
+      if (q.question) {
+        const qLines = this.wrapLine(q.question, CHAT_MAX_WIDTH);
+        const messageLines = 2;
+        const headerLines = q.header ? 2 : 0;
+        const blankAfterQuestion = 1;
+        const qBudget = CHAT_MAX_LINES - messageLines - headerLines - blankAfterQuestion;
+        const take = Math.min(qLines.length, qBudget);
+        const truncated = qLines.length > qBudget;
+        for (let i = 0; i < take; i++) {
+          if (i === take - 1 && truncated) {
+            const ellipsisWidth = this.getCharWidth('.') * 3;
+            lines.push(this.truncateText(qLines[i], CHAT_MAX_WIDTH - ellipsisWidth));
+          } else {
+            lines.push(qLines[i]);
+          }
+        }
+        lines.push("");
+      }
+      lines.push("選択肢が多いため");
+      lines.push("PWAで回答してください");
+      while (lines.length < CHAT_MAX_LINES) {
+        lines.push("");
+      }
+      return lines.join("\n");
+    }
+
     const MAX_LINES = CHAT_MAX_LINES;
     const GUIDE_LINES = 1;
     const OPTION_LINES = 1;
@@ -526,9 +558,15 @@ export class AgentChatPage extends BasePage {
     return !!q && q.multiple === true;
   }
 
+  private isTooManyMultipleOptions(): boolean {
+    const q = this.controller.getState().pendingQuestions[0];
+    return !!q && q.multiple === true && (q.options?.length ?? 0) >= 4;
+  }
+
   public async onScrollUp() {
     if (this.isQuestionVoiceActive()) return;
     if (this.isQuestionMode()) {
+      if (this.isTooManyMultipleOptions()) return;
       if (this.questionSelectedIndex > 0) {
         this.questionSelectedIndex--;
         await this.renderPage();
@@ -551,6 +589,7 @@ export class AgentChatPage extends BasePage {
   public async onScrollDown() {
     if (this.isQuestionVoiceActive()) return;
     if (this.isQuestionMode()) {
+      if (this.isTooManyMultipleOptions()) return;
       const q = this.controller.getState().pendingQuestions[0];
       const optionCount = q.options?.length ?? 0;
       const customCount = this.customSources.size;
@@ -661,6 +700,7 @@ export class AgentChatPage extends BasePage {
     }
 
     if (this.isQuestionMode()) {
+      if (this.isTooManyMultipleOptions()) return;
       const q = this.controller.getState().pendingQuestions[0];
       const optionCount = q.options?.length ?? 0;
 
@@ -727,6 +767,10 @@ export class AgentChatPage extends BasePage {
     }
 
     if (this.isQuestionMode()) {
+      if (this.isTooManyMultipleOptions()) {
+        await this.onReturnToList();
+        return;
+      }
       await this.answerQuestion('');
       return;
     }
@@ -745,6 +789,7 @@ export class AgentChatPage extends BasePage {
     const state = this.controller.getState();
     if (state.pendingQuestions.length > 0 && state.voiceState === 'idle') {
       const q = state.pendingQuestions[0];
+      if (q.multiple === true && (q.options?.length ?? 0) >= 4) return;
       if (q.custom !== false) {
         await this.controller.startQuestionVoiceInput();
         return;

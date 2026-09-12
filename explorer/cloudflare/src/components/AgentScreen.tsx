@@ -92,6 +92,11 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   }, [gatewayUrl, gatewayToken, connected, actions]);
 
   useEffect(() => {
+    if (showSessionList || !selectedSessionID) {
+      prevSessionIDRef.current = null;
+      return;
+    }
+
     const sessionChanged = selectedSessionID !== prevSessionIDRef.current;
     prevSessionIDRef.current = selectedSessionID;
 
@@ -100,7 +105,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     } else if (messages.length > 0) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, selectedSessionID]);
+  }, [messages, selectedSessionID, showSessionList]);
 
   useEffect(() => {
     if (speech.state === 'completed' && speech.result) {
