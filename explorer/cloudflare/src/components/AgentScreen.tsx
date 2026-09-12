@@ -49,6 +49,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastHandledSpeechResultRef = useRef<string | null>(null);
+  const prevSessionIDRef = useRef<string | null>(null);
 
   const speech = useSpeechRecognition({ gatewayUrl, gatewayToken });
 
@@ -91,8 +92,15 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   }, [gatewayUrl, gatewayToken, connected, actions]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+    const sessionChanged = selectedSessionID !== prevSessionIDRef.current;
+    prevSessionIDRef.current = selectedSessionID;
+
+    if (sessionChanged) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+    } else if (messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, selectedSessionID]);
 
   useEffect(() => {
     if (speech.state === 'completed' && speech.result) {
@@ -330,7 +338,11 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
   const renderPermissionDialog = () => {
     if (pendingPermissions.length === 0) return null;
-    const perm = pendingPermissions[0];
+    const sessionPermissions = selectedSessionID
+      ? pendingPermissions.filter((p) => p.sessionID === selectedSessionID)
+      : [];
+    if (sessionPermissions.length === 0) return null;
+    const perm = sessionPermissions[0];
     return (
       <div className="oc-dialog-overlay">
         <div className="oc-dialog">
@@ -389,7 +401,11 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
   const renderQuestionDialog = () => {
     if (pendingQuestions.length === 0) return null;
-    const q = pendingQuestions[0];
+    const sessionQuestions = selectedSessionID
+      ? pendingQuestions.filter((q) => q.sessionID === selectedSessionID)
+      : [];
+    if (sessionQuestions.length === 0) return null;
+    const q = sessionQuestions[0];
     const isMultiple = q.multiple === true;
     const hasOptions = q.options && q.options.length > 0;
     const showFreeInput = !hasOptions || q.custom !== false;

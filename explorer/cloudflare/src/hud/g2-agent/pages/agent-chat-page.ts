@@ -281,10 +281,16 @@ export class AgentChatPage extends BasePage {
     }
   }
 
-  private truncateText(text: string, maxChars: number): string {
-    if (text.length <= maxChars) return text;
-    if (maxChars <= 3) return text.substring(0, maxChars);
-    return text.substring(0, maxChars - 3) + "...";
+  private truncateText(text: string, maxWidth: number): string {
+    let totalWidth = 0;
+    for (let i = 0; i < text.length; i++) {
+      const w = this.getCharWidth(text[i]);
+      if (totalWidth + w > maxWidth) {
+        return text.substring(0, i) + '...';
+      }
+      totalWidth += w;
+    }
+    return text;
   }
 
   private buildQuestionBody(q: OpenCodeQuestionRequest): string {
@@ -294,33 +300,36 @@ export class AgentChatPage extends BasePage {
     const DESC_LINES = 2;
     const isMultiple = q.multiple === true;
     const OPTION_COUNT = q.options?.length ?? 0;
-    const CUSTOM_COUNT = this.questionMultipleSelected.size;
+    const CUSTOM_COUNT = this.customSources.size;
     const ALL_ITEM_COUNT = OPTION_COUNT + CUSTOM_COUNT;
     const TOTAL_ITEMS = isMultiple ? ALL_ITEM_COUNT + 1 : ALL_ITEM_COUNT;
 
     const guideAndGap = GUIDE_LINES + 1;
+    const GAP_AFTER_QUESTION = 1;
     const optionsTotal = TOTAL_ITEMS * OPTION_LINES;
-    const descBudget = Math.max(0, MAX_LINES - guideAndGap - optionsTotal);
+    const descBudget = Math.max(0, MAX_LINES - guideAndGap - GAP_AFTER_QUESTION - optionsTotal);
     const headerLines = q.header ? 1 : 0;
     const gapAfterHeader = q.header ? 1 : 0;
-    const questionBudget = Math.max(1, MAX_LINES - guideAndGap - optionsTotal - headerLines - gapAfterHeader - 1);
+    const questionBudget = Math.max(0, MAX_LINES - guideAndGap - GAP_AFTER_QUESTION - optionsTotal - headerLines - gapAfterHeader);
 
     const lines: string[] = [];
     let lineCount = 0;
 
     if (q.header) {
-      const maxW = CHAT_MAX_WIDTH - 2;
+      const bracketWidth = this.getStringWidth('[]');
+      const maxW = CHAT_MAX_WIDTH - bracketWidth;
       lines.push(`[${this.truncateText(q.header, maxW)}]`);
       lines.push("");
       lineCount += 2;
     }
 
-    if (q.question) {
+    if (q.question && questionBudget > 0) {
       const qLines = this.wrapLine(q.question, CHAT_MAX_WIDTH);
       const take = Math.min(qLines.length, questionBudget);
       for (let i = 0; i < take; i++) {
         if (i === take - 1 && qLines.length > questionBudget) {
-          lines.push(this.truncateText(qLines[i], CHAT_MAX_WIDTH - 3) + "...");
+          const ellipsisWidth = this.getCharWidth('.') * 3;
+          lines.push(this.truncateText(qLines[i], CHAT_MAX_WIDTH - ellipsisWidth) + "...");
         } else {
           lines.push(qLines[i]);
         }
@@ -337,14 +346,16 @@ export class AgentChatPage extends BasePage {
 
         if (isMultiple) {
           const checked = this.questionMultipleSelected.has(opt.label);
-          const checkMark = checked ? '☑' : '☐';
+          const checkMark = checked ? '[X]' : '[ ]';
           const focusMark = isFocused ? '>' : ' ';
           const prefix = `${focusMark}${checkMark} `;
-          const labelMax = CHAT_MAX_WIDTH - prefix.length;
+          const prefixWidth = this.getStringWidth(prefix);
+          const labelMax = CHAT_MAX_WIDTH - prefixWidth;
           lines.push(`${prefix}${this.truncateText(opt.label, labelMax)}`);
         } else {
           const prefix = isFocused ? "> " : "  ";
-          const labelMax = CHAT_MAX_WIDTH - prefix.length;
+          const prefixWidth = this.getStringWidth(prefix);
+          const labelMax = CHAT_MAX_WIDTH - prefixWidth;
           lines.push(`${prefix}${this.truncateText(opt.label, labelMax)}`);
         }
         lineCount++;
@@ -354,7 +365,9 @@ export class AgentChatPage extends BasePage {
           const dTake = Math.min(dLines.length, Math.min(DESC_LINES, descBudget));
           for (let d = 0; d < dTake; d++) {
             if (d === dTake - 1 && dLines.length > dTake) {
-              lines.push(`  ${this.truncateText(dLines[d], CHAT_MAX_WIDTH - 5)}...`);
+              const indentWidth = this.getStringWidth('  ');
+              const ellipsisWidth = this.getCharWidth('.') * 3;
+              lines.push(`  ${this.truncateText(dLines[d], CHAT_MAX_WIDTH - indentWidth - ellipsisWidth)}...`);
             } else {
               lines.push(`  ${dLines[d]}`);
             }
@@ -365,16 +378,16 @@ export class AgentChatPage extends BasePage {
     }
 
     if (isMultiple) {
+      let customIndex = 0;
       for (const customText of this.questionMultipleSelected) {
         if (this.customSources.has(customText)) {
-          const isFocused = this.questionSelectedIndex === OPTION_COUNT + [...this.questionMultipleSelected].indexOf(customText);
-          const checked = true;
-          const checkMark = checked ? '☑' : '☐';
-          const focusMark = isFocused ? '>' : ' ';
-          const prefix = `${focusMark}${checkMark} `;
-          const labelMax = CHAT_MAX_WIDTH - prefix.length;
+          const isFocused = this.questionSelectedIndex === OPTION_COUNT + customIndex;
+          const prefix = isFocused ? '>[X] ' : ' [X] ';
+          const prefixWidth = this.getStringWidth(prefix);
+          const labelMax = CHAT_MAX_WIDTH - prefixWidth;
           lines.push(`${prefix}${this.truncateText(customText, labelMax)}`);
           lineCount++;
+          customIndex++;
         }
       }
 
@@ -516,9 +529,7 @@ export class AgentChatPage extends BasePage {
   public async onScrollUp() {
     if (this.isQuestionVoiceActive()) return;
     if (this.isQuestionMode()) {
-      const q = this.controller.getState().pendingQuestions[0];
-      const optionCount = q.options?.length ?? 0;
-      if (optionCount > 0 && this.questionSelectedIndex > 0) {
+      if (this.questionSelectedIndex > 0) {
         this.questionSelectedIndex--;
         await this.renderPage();
       }
@@ -542,10 +553,11 @@ export class AgentChatPage extends BasePage {
     if (this.isQuestionMode()) {
       const q = this.controller.getState().pendingQuestions[0];
       const optionCount = q.options?.length ?? 0;
+      const customCount = this.customSources.size;
       const maxIndex = q.multiple
-        ? optionCount + this.questionMultipleSelected.size
+        ? optionCount + customCount
         : optionCount - 1;
-      if (optionCount > 0 && this.questionSelectedIndex < maxIndex) {
+      if (this.questionSelectedIndex < maxIndex) {
         this.questionSelectedIndex++;
         await this.renderPage();
       }
@@ -653,7 +665,7 @@ export class AgentChatPage extends BasePage {
       const optionCount = q.options?.length ?? 0;
 
       if (q.multiple) {
-        const allItems = optionCount + this.questionMultipleSelected.size;
+        const allItems = optionCount + this.customSources.size;
         const confirmIndex = allItems;
 
         if (this.questionSelectedIndex === confirmIndex) {

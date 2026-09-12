@@ -488,6 +488,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         ...prev,
         pendingPermissions: prev.pendingPermissions.filter((p) => p.id !== permissionID),
       }));
+      await refreshMessages();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to respond to permission';
       setState((prev) => ({ ...prev, error: msg }));
@@ -506,6 +507,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
         ...prev,
         pendingQuestions: prev.pendingQuestions.filter((q) => q.id !== questionID),
       }));
+      await refreshMessages();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to respond to question';
       setState((prev) => ({ ...prev, error: msg }));
