@@ -419,6 +419,92 @@ export async function handleDelete(request, response) {
   json(response, 200, { ok: true, deleted, errors: errors.length > 0 ? errors : undefined });
 }
 
+// --- Mkdir ---
+
+export async function handleMkdir(request, response) {
+  const body = await readBody(request);
+  if (!body) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Request body is required.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid JSON.');
+  }
+
+  const { parentPath, name } = parsed;
+
+  if (!parentPath || typeof parentPath !== 'string') {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'parentPath is required.');
+  }
+  if (!name || typeof name !== 'string') {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'name is required.');
+  }
+
+  // Reject names containing path separators
+  if (/[\/\\]/.test(name)) {
+    return errorResponse(response, 400, 'INVALID_NAME', 'name must not contain path separators.');
+  }
+
+  // Reject empty names or names with only dots/spaces
+  if (!name.trim() || name === '.' || name === '..') {
+    return errorResponse(response, 400, 'INVALID_NAME', 'Invalid folder name.');
+  }
+
+  // Validate parent path
+  const parentValidation = validatePath(parentPath, CONFIG.ROOT_PATH);
+  if (!parentValidation.valid) {
+    if (parentValidation.error === 'FORBIDDEN') {
+      return errorResponse(response, 403, 'FORBIDDEN', 'Path is outside the allowed root.');
+    }
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid parent path.');
+  }
+
+  const parentResolved = parentValidation.resolvedPath;
+
+  // Check parent is a directory
+  try {
+    const parentStat = await stat(parentResolved);
+    if (!parentStat.isDirectory()) {
+      return errorResponse(response, 400, 'INVALID_REQUEST', 'The specified parent path is not a directory.');
+    }
+  } catch {
+    return errorResponse(response, 404, 'NOT_FOUND', 'Parent directory not found.');
+  }
+
+  // Build child path
+  const destResolved = resolve(parentResolved, name);
+
+  // Validate child path is within root
+  const destValidation = validatePath(destResolved, CONFIG.ROOT_PATH);
+  if (!destValidation.valid) {
+    if (destValidation.error === 'FORBIDDEN') {
+      return errorResponse(response, 403, 'FORBIDDEN', 'Destination is outside the allowed root.');
+    }
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid destination path.');
+  }
+
+  // Check destination does not already exist
+  try {
+    await stat(destResolved);
+    return errorResponse(response, 409, 'ALREADY_EXISTS', 'A file or directory with that name already exists.');
+  } catch {
+    // Good — destination does not exist
+  }
+
+  // Perform mkdir
+  try {
+    await mkdir(destResolved);
+  } catch (e) {
+    console.error(`[Mkdir] Failed: ${e.message}`);
+    return errorResponse(response, 500, 'INTERNAL_ERROR', 'Failed to create directory.');
+  }
+
+  json(response, 200, { ok: true, path: destResolved });
+}
+
 // --- OpenCode Proxy ---
 
 export function readBody(request) {

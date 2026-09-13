@@ -180,6 +180,15 @@ export class GatewayFileSystemService implements FileSystemService {
     return { deleted: data.deleted };
   }
 
+  async createFolder(parentPath: string, name: string): Promise<string> {
+    const res = await this.requestWithBody('POST', '/api/fs/mkdir', { parentPath, name });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || `Failed to create folder: ${res.status}`);
+    }
+    return data.path;
+  }
+
   private async request(endpoint: string, method: string = 'GET'): Promise<Response> {
     return fetch(`${this.baseUrl}${endpoint}`, {
       method,

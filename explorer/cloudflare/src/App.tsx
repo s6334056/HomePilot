@@ -11,6 +11,7 @@ import { HistoryPage } from './components/HistoryPage';
 import { AgentScreen } from './components/AgentScreen';
 import { SettingsModal } from './components/SettingsModal';
 import { RenameDialog } from './components/RenameDialog';
+import { CreateFolderDialog } from './components/CreateFolderDialog';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
 import { ContextActionMenu, ContextActionMenuItem } from './components/ContextActionMenu';
 import { G2RuntimeManager, G2RuntimeState } from './hud/g2-runtime';
@@ -67,6 +68,14 @@ export function App() {
   // Delete dialog state
   const [showDeleteDialog, setShowDeleteDialog] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  // Create folder dialog state
+  const [showCreateFolderDialog, setShowCreateFolderDialog] = useState<boolean>(false);
+  const [createFolderError, setCreateFolderError] = useState<string>('');
+  const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
+
+  // Explorer Ready state
+  const [isExplorerReady, setIsExplorerReady] = useState<boolean>(false);
 
   // Screen state
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('explorer');
@@ -163,6 +172,18 @@ export function App() {
 
       const rootPath = getRootPath();
       setExplorerPath(rootPath);
+
+      // Load root directory for Gateway service
+      if (isGatewayService(fileService)) {
+        try {
+          const loadedItems = await (fileService as GatewayFileSystemService).getDirectory(rootPath);
+          setItems(loadedItems);
+          setIsExplorerReady(true);
+        } catch {
+          setItems([]);
+          setIsExplorerReady(false);
+        }
+      }
     };
 
     init();
@@ -303,13 +324,20 @@ export function App() {
   const selectedCount = selectedPaths.size;
   const selectedItems = items.filter((i) => selectedPaths.has(i.path));
   const hasSelectedFolders = selectedItems.some((i) => i.type === 'directory');
-  const canRename = selectedCount === 1;
-  const canDelete = selectedCount >= 1;
 
   const actionMenuItems: ContextActionMenuItem[] = [
     {
+      label: 'フォルダを作成',
+      disabled: !isExplorerReady,
+      onClick: () => {
+        setCreateFolderError('');
+        setIsCreatingFolder(false);
+        setShowCreateFolderDialog(true);
+      },
+    },
+    {
       label: '名前を変更',
-      disabled: !canRename,
+      disabled: !isExplorerReady || selectedCount !== 1,
       onClick: () => {
         const target = selectedItems[0];
         if (target) {
@@ -321,7 +349,7 @@ export function App() {
     },
     {
       label: '削除',
-      disabled: !canDelete,
+      disabled: !isExplorerReady || selectedCount === 0,
       onClick: () => {
         setShowDeleteDialog(true);
       },
@@ -349,6 +377,32 @@ export function App() {
     setRenameTarget(null);
     setRenameError('');
   }, []);
+
+  // ── Create Folder ──────────────────────────────────────
+
+  const handleCreateFolderConfirm = useCallback(async (name: string) => {
+    setIsCreatingFolder(true);
+    setCreateFolderError('');
+    try {
+      await fileService.createFolder(explorerPath, name);
+      setShowCreateFolderDialog(false);
+      setCreateFolderError('');
+      setSelectedPaths(new Set());
+      setHighlightPath(null);
+      await navigateToPath(explorerPath);
+    } catch (e: any) {
+      setCreateFolderError(e.message || 'フォルダの作成に失敗しました。');
+    } finally {
+      setIsCreatingFolder(false);
+    }
+  }, [fileService, explorerPath]);
+
+  const handleCreateFolderCancel = useCallback(() => {
+    if (!isCreatingFolder) {
+      setShowCreateFolderDialog(false);
+      setCreateFolderError('');
+    }
+  }, [isCreatingFolder]);
 
   // ── Delete ───────────────────────────────────────────────
 
@@ -487,9 +541,11 @@ export function App() {
     try {
       const loadedItems = await newService.getDirectory(rootPath);
       setItems(loadedItems);
+      setIsExplorerReady(isGatewayService(newService));
     } catch (e) {
       console.error('[App] Failed to load directory after reconnect:', e);
       setItems([]);
+      setIsExplorerReady(false);
     }
   }, []);
 
@@ -644,6 +700,16 @@ export function App() {
         onConfirm={handleRenameConfirm}
         onCancel={handleRenameCancel}
         error={renameError}
+      />
+
+      {/* Create Folder Dialog */}
+      <CreateFolderDialog
+        isOpen={showCreateFolderDialog}
+        currentPath={explorerPath}
+        onConfirm={handleCreateFolderConfirm}
+        onCancel={handleCreateFolderCancel}
+        error={createFolderError}
+        isCreating={isCreatingFolder}
       />
 
       {/* Delete Confirm Dialog */}

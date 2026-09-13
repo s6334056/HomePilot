@@ -12,4 +12,5 @@ export interface FileSystemService {
   getRootPath(): string;
   renameItem(path: string, newName: string): Promise<string>;
   deleteItems(paths: string[]): Promise<{ deleted: number }>;
+  createFolder(parentPath: string, name: string): Promise<string>;
 }

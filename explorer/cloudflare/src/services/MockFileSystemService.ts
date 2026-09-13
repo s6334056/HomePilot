@@ -112,4 +112,28 @@ export class MockFileSystemService implements FileSystemService {
     }
     return { deleted };
   }
+
+  public async createFolder(parentPath: string, name: string): Promise<string> {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const parentNode = this.findNode(parentPath);
+    if (!parentNode) throw new Error(`Parent not found: ${parentPath}`);
+    if (parentNode.item.type !== 'directory') throw new Error(`Parent is not a directory: ${parentPath}`);
+    if (!parentNode.children) parentNode.children = [];
+
+    const newPath = parentPath === '/' ? `/${name}` : `${parentPath}/${name}`;
+    const existing = parentNode.children.find((c) => c.item.path === newPath);
+    if (existing) throw new Error('A file or directory with that name already exists.');
+
+    const newNode: MockFileSystemNode = {
+      item: {
+        id: newPath,
+        name,
+        type: 'directory',
+        path: newPath,
+        modifiedAt: new Date().toISOString(),
+      },
+    };
+    parentNode.children.push(newNode);
+    return newPath;
+  }
 }

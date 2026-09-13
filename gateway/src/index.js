@@ -4,7 +4,7 @@ import { generateToken, verifyToken } from './token.js';
 import {
   json, noContent, errorResponse,
   handleHealth, handleRoot, handleDirectory, handleFile,
-  handleRename, handleDelete,
+  handleRename, handleDelete, handleMkdir,
   handleOpenCodeProxy, handleOpenCodeProxyBody,
   handleViewerStateGet, handleViewerStatePatchPosition,
   handleViewerStatePatchHistory, handleViewerStateDeleteHistory,
@@ -151,6 +151,16 @@ const server = createServer(async (request, response) => {
       return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed.');
     }
     return handleDelete(request, response);
+  }
+
+  if (path === '/api/fs/mkdir') {
+    if (!verifyToken(requestToken, token)) {
+      return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+    if (request.method !== 'POST') {
+      return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed.');
+    }
+    return handleMkdir(request, response);
   }
 
   // --- OpenCode Proxy ---
