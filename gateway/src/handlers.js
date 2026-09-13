@@ -674,137 +674,6 @@ async function getUniqueName(destDir, name) {
   }
 }
 
-
-
-
-
-// export async function handleUpload(request, response) {
-//   const contentType = request.headers['content-type'] || '';
-//   if (!contentType.includes('multipart/form-data')) {
-//     return errorResponse(response, 400, 'INVALID_REQUEST', 'Content-Type must be multipart/form-data.');
-//   }
-
-//   let busboyInstance;
-//   try {
-//     busboyInstance = Busboy({ headers: request.headers, limits: { fileSize: Infinity, files: 100 } });
-//   } catch {
-//     return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid multipart data.');
-//   }
-
-//   const destPath = busboyInstance.fields['destPath'];
-//   if (!destPath || typeof destPath !== 'string') {
-//     busboyInstance.destroy();
-//     return errorResponse(response, 400, 'INVALID_REQUEST', 'destPath is required.');
-//   }
-
-//   const destValidation = validatePath(destPath, CONFIG.ROOT_PATH);
-//   if (!destValidation.valid) {
-//     busboyInstance.destroy();
-//     if (destValidation.error === 'FORBIDDEN') {
-//       return errorResponse(response, 403, 'FORBIDDEN', 'Destination is outside the allowed root.');
-//     }
-//     return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid destination path.');
-//   }
-
-//   const destResolved = destValidation.resolvedPath;
-
-//   let destStat;
-//   try {
-//     destStat = await stat(destResolved);
-//     if (!destStat.isDirectory()) {
-//       busboyInstance.destroy();
-//       return errorResponse(response, 400, 'INVALID_REQUEST', 'Destination is not a directory.');
-//     }
-//   } catch {
-//     busboyInstance.destroy();
-//     return errorResponse(response, 404, 'NOT_FOUND', 'Destination directory not found.');
-//   }
-
-//   const tmpDir = join(destResolved, '.hp_uploads');
-//   try { await mkdir(tmpDir, { recursive: true }); } catch { /* may exist */ }
-
-//   const files = [];
-//   const tmpFiles = [];
-//   let uploadError = null;
-
-//   busboyInstance.on('file', (fieldname, fileStream, info) => {
-//     const filename = info.filename || 'unnamed';
-//     const relativePath = filename;
-
-//     if (!isPathSafe(relativePath)) {
-//       fileStream.resume();
-//       uploadError = `Invalid path: ${relativePath}`;
-//       return;
-//     }
-
-//     const targetDir = join(destResolved, dirname(relativePath));
-//     const tmpName = `.upload_tmp_${randomUUID()}`;
-//     const tmpPath = join(tmpDir, tmpName);
-//     const finalName = filename;
-
-//     fileStream.on('limit', () => {
-//       uploadError = `File too large: ${filename}`;
-//     });
-
-//     const writeStream = createWriteStream(tmpPath);
-//     tmpFiles.push(tmpPath);
-
-//     fileStream.pipe(writeStream);
-
-//     writeStream.on('finish', () => {
-//       files.push({ tmpPath, finalPath, targetDir, finalName, relativePath });
-//     });
-
-//     writeStream.on('error', (err) => {
-//       uploadError = `Write error: ${err.message}`;
-//     });
-
-//     fileStream.on('error', (err) => {
-//       uploadError = `Stream error: ${err.message}`;
-//     });
-//   });
-
-//   busboyInstance.on('error', (err) => {
-//     uploadError = `Parse error: ${err.message}`;
-//   });
-
-//   busboyInstance.on('finish', async () => {
-//     if (uploadError) {
-//       for (const tmp of tmpFiles) {
-//         try { await unlink(tmp); } catch { /* ignore */ }
-//       }
-//       try { await rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
-//       return errorResponse(response, 500, 'UPLOAD_FAILED', uploadError);
-//     }
-
-//     let uploaded = 0;
-//     const errors = [];
-
-//     for (const f of files) {
-//       try {
-//         await mkdir(f.targetDir, { recursive: true });
-//         const uniqueName = await getUniqueName(f.targetDir, f.finalName);
-//         const uniqueFinalPath = join(f.targetDir, uniqueName);
-//         await rename(f.tmpPath, uniqueFinalPath);
-//         uploaded++;
-//       } catch (e) {
-//         errors.push({ path: f.relativePath, error: e.message });
-//         try { await unlink(f.tmpPath); } catch { /* ignore */ }
-//       }
-//     }
-
-//     try { await rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
-
-//     json(response, 200, { ok: true, uploaded, errors: errors.length > 0 ? errors : undefined });
-//   });
-
-//   request.pipe(busboyInstance);
-// }
-
-
-
-
-
 export async function handleUpload(request, response) {
   const contentType = request.headers['content-type'] || '';
 
@@ -866,12 +735,6 @@ export async function handleUpload(request, response) {
 
   let uploadError = null;
 
-  // busboyInstance.on('field', (fieldname, value) => {
-  //   if (fieldname === 'destPath') {
-  //     destPath = value;
-  //   }
-  // });
-
   busboyInstance.on('field', (fieldname, value) => {
     if (fieldname === 'destPath') {
       destPath = value;
@@ -879,108 +742,6 @@ export async function handleUpload(request, response) {
       relativePaths.push(value);
     }
   });
-
-
-
-
-
-  // busboyInstance.on('file', (fieldname, fileStream, info) => {
-  //   // Ignore unexpected multipart fields.
-  //   if (fieldname !== 'files') {
-  //     fileStream.resume();
-  //     return;
-  //   }
-
-  //   // const filename = info.filename || 'unnamed';
-  //   // const relativePath = filename;
-
-  //   // if (!isPathSafe(relativePath)) {
-  //   //   fileStream.resume();
-  //   //   uploadError = `Invalid path: ${relativePath}`;
-  //   //   return;
-  //   // }
-
-  //   const filename = info.filename || 'unnamed';
-  //   const fileIndex = files.length;
-  //   const relativePath = relativePaths[fileIndex];
-
-  //   if (!relativePath || !isPathSafe(relativePath)) {
-  //     fileStream.resume();
-  //     uploadError = `Invalid relative path for file: ${filename}`;
-  //     return;
-  //   }
-
-
-
-  // busboyInstance.on('file', (fieldname, fileStream, info) => {
-  //   if (fieldname !== 'files') {
-  //     fileStream.resume();
-  //     return;
-  //   }
-
-  //   const filename = info.filename || 'unnamed';
-  //   const fileIndex = uploadFileIndex++;
-  //   const relativePath = relativePaths[fileIndex];
-
-  //   if (!relativePath || !isPathSafe(relativePath)) {
-  //     fileStream.resume();
-  //     uploadError = `Invalid relative path for file: ${filename}`;
-  //     return;
-  //   }
-
-  //   const tmpPath = join(
-  //     tmpDir,
-  //     `.upload_tmp_${randomUUID()}`,
-  //   );
-
-  //   tmpFiles.push(tmpPath);
-
-  //   const writeStream = createWriteStream(tmpPath);
-
-  //   const writePromise = new Promise((resolveWrite) => {
-  //     let settled = false;
-
-  //     const finishWrite = () => {
-  //       if (settled) {
-  //         return;
-  //       }
-
-  //       settled = true;
-  //       resolveWrite();
-  //     };
-
-  //     fileStream.on('limit', () => {
-  //       uploadError = `File too large: ${relativePath}`;
-  //     });
-
-  //     fileStream.on('error', (err) => {
-  //       uploadError = `Stream error: ${err.message}`;
-  //       finishWrite();
-  //     });
-
-  //     writeStream.on('error', (err) => {
-  //       uploadError = `Write error: ${err.message}`;
-  //       finishWrite();
-  //     });
-
-  //     writeStream.on('finish', () => {
-  //       files.push({
-  //         tmpPath,
-  //         relativePath,
-  //       });
-
-  //       finishWrite();
-  //     });
-
-  //     fileStream.pipe(writeStream);
-  //   });
-
-  //   writePromises.push(writePromise);
-  // });
-
-
-
-
 
   let uploadFileIndex = 0;
 
@@ -1043,10 +804,6 @@ export async function handleUpload(request, response) {
     writePromises.push(writePromise);
   });
 
-
-
-
-
   busboyInstance.on('error', (err) => {
     uploadError = `Parse error: ${err.message}`;
   });
@@ -1055,8 +812,6 @@ export async function handleUpload(request, response) {
     try {
       // Wait until every file stream has finished writing.
       await Promise.all(writePromises);
-
-
 
       for (const file of files) {
         const relativePath = relativePaths[file.fileIndex];
@@ -1068,67 +823,6 @@ export async function handleUpload(request, response) {
 
         file.relativePath = relativePath;
       }
-
-
-
-
-
-      // Resolve unique names for top-level upload entries.
-      // A folder upload must not merge into an existing folder.
-      const topLevelNameMap = new Map();
-      const reservedTopLevelNames = new Set();
-
-      const getUniqueTopLevelName = async (name) => {
-        const ext = extname(name);
-        const base = ext ? name.slice(0, -ext.length) : name;
-
-        let candidate = name;
-        let index = 2;
-
-        while (true) {
-          let existsOnDisk = false;
-
-          try {
-            await stat(join(destResolved, candidate));
-            existsOnDisk = true;
-          } catch {
-            // Does not exist.
-          }
-
-          if (!existsOnDisk && !reservedTopLevelNames.has(candidate)) {
-            reservedTopLevelNames.add(candidate);
-            return candidate;
-          }
-
-          candidate = `${base} (${index})${ext}`;
-          index++;
-        }
-      };
-
-
-
-      for (const file of files) {
-        const parts = file.relativePath.split(/[\\/]+/).filter(Boolean);
-
-        if (parts.length === 0) {
-          uploadError = `Invalid relative path for file: ${file.filename}`;
-          break;
-        }
-
-        const topLevelName = parts[0];
-
-        if (!topLevelNameMap.has(topLevelName)) {
-          const uniqueTopLevelName =
-            await getUniqueTopLevelName(topLevelName);
-
-          topLevelNameMap.set(
-            topLevelName,
-            uniqueTopLevelName,
-          );
-        }
-      }
-
-
 
       // Validate destination only after Busboy has delivered the fields.
       if (!destPath || typeof destPath !== 'string') {
@@ -1164,6 +858,65 @@ export async function handleUpload(request, response) {
         }
       }
 
+      // Resolve unique names for top-level upload entries.
+      // A folder upload must not merge into an existing folder.
+      const topLevelNameMap = new Map();
+      const reservedTopLevelNames = new Set();
+
+      const getUniqueTopLevelName = async (name) => {
+        const ext = extname(name);
+        const base = ext ? name.slice(0, -ext.length) : name;
+
+        let candidate = name;
+        let index = 2;
+
+        while (true) {
+          let existsOnDisk = false;
+
+          try {
+            await stat(join(destResolved, candidate));
+            existsOnDisk = true;
+          } catch {
+            // Does not exist.
+          }
+
+          if (
+            !existsOnDisk &&
+            !reservedTopLevelNames.has(candidate)
+          ) {
+            reservedTopLevelNames.add(candidate);
+            return candidate;
+          }
+
+          candidate = `${base} (${index})${ext}`;
+          index++;
+        }
+      };
+
+      for (const file of files) {
+        const parts = file.relativePath
+          .split(/[\\/]+/)
+          .filter(Boolean);
+
+        if (parts.length === 0) {
+          uploadError =
+            `Invalid relative path for file: ${file.filename}`;
+          break;
+        }
+
+        const topLevelName = parts[0];
+
+        if (!topLevelNameMap.has(topLevelName)) {
+          const uniqueTopLevelName =
+            await getUniqueTopLevelName(topLevelName);
+
+          topLevelNameMap.set(
+            topLevelName,
+            uniqueTopLevelName,
+          );
+        }
+      }
+
       if (uploadError) {
         for (const tmp of tmpFiles) {
           try {
@@ -1192,36 +945,6 @@ export async function handleUpload(request, response) {
 
       for (const file of files) {
         try {
-
-
-
-          // const relativePath = file.relativePath;
-
-          // const targetDir = join(
-          //   destResolved,
-          //   dirname(relativePath),
-          // );
-
-          // const finalName = basename(relativePath);
-
-          // await mkdir(targetDir, { recursive: true });
-
-          // const uniqueName = await getUniqueName(
-          //   targetDir,
-          //   finalName,
-          // );
-
-          // const uniqueFinalPath = join(
-          //   targetDir,
-          //   uniqueName,
-          // );
-
-          // await rename(
-          //   file.tmpPath,
-          //   uniqueFinalPath,
-          // );
-
-
 
           const relativePath = file.relativePath;
           const parts = relativePath
@@ -1275,8 +998,6 @@ export async function handleUpload(request, response) {
             file.tmpPath,
             uniqueFinalPath,
           );
-
-
 
           uploaded++;
         } catch (e) {
@@ -1340,10 +1061,6 @@ export async function handleUpload(request, response) {
 
   request.pipe(busboyInstance);
 }
-
-
-
-
 
 // --- OpenCode Proxy ---
 
