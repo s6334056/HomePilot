@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Plus, Mic, Send, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2, Square, Copy, Check } from 'lucide-react';
+import { Plus, Mic, Send, AlertCircle, Loader2, Archive, Square, Copy, Check } from 'lucide-react';
 import { OpenCodeSessionInfo, OpenCodeProviderModel, AgentContext } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { Navbar } from './Navbar';
+import { ContextActionMenu, ContextActionMenuItem } from './ContextActionMenu';
 
 interface AgentScreenProps {
   currentPath: string;
@@ -36,7 +37,10 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const [connected, setConnected] = useState<boolean>(false);
   const [showArchivedSessions, setShowArchivedSessions] = useState<boolean>(false);
   const [operatingSessionId, setOperatingSessionId] = useState<string | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+  const [showSessionActionMenu, setShowSessionActionMenu] = useState<boolean>(false);
+  const [sessionActionMenuTriggerRect, setSessionActionMenuTriggerRect] = useState<DOMRect | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
   const [showModelSelect, setShowModelSelect] = useState<boolean>(false);
   const [availableModels, setAvailableModels] = useState<OpenCodeProviderModel[]>([]);
   const [selectedModelIndex, setSelectedModelIndex] = useState<number>(0);
@@ -269,37 +273,97 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     }
   });
 
-  const handleArchiveSession = async (sessionID: string) => {
-    if (operatingSessionId) return;
-    setOperatingSessionId(sessionID);
-    await actions.archiveSession(sessionID);
-    setOperatingSessionId(null);
+  const handleToggleSessionSelection = (sessionID: string) => {
+    setSelectedSessionIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(sessionID)) {
+        next.delete(sessionID);
+      } else {
+        next.add(sessionID);
+      }
+      return next;
+    });
   };
 
-  const handleRestoreSession = async (sessionID: string) => {
-    if (operatingSessionId) return;
-    setOperatingSessionId(sessionID);
-    await actions.restoreSession(sessionID);
-    setOperatingSessionId(null);
+  const handleOpenSessionActionMenu = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSessionActionMenuTriggerRect((event.currentTarget as HTMLElement).getBoundingClientRect());
+    setShowSessionActionMenu(true);
   };
 
-  const handleDeleteSession = async (sessionID: string) => {
-    if (operatingSessionId) return;
-    setOperatingSessionId(sessionID);
-    setDeleteConfirmId(null);
-    await actions.deleteSession(sessionID);
-    setOperatingSessionId(null);
+  const handleCloseSessionActionMenu = () => {
+    setShowSessionActionMenu(false);
+    setSessionActionMenuTriggerRect(null);
+  };
+
+  const handleSelectedSessionOperation = async (
+    operation: (sessionID: string) => Promise<unknown>,
+  ) => {
+    const sessionIDs = Array.from(selectedSessionIds);
+    if (sessionIDs.length === 0 || operatingSessionId) return;
+    setOperatingSessionId('batch');
+    try {
+      for (const sessionID of sessionIDs) {
+        await operation(sessionID);
+      }
+      setSelectedSessionIds(new Set());
+    } finally {
+      setOperatingSessionId(null);
+    }
+  };
+
+  const handleSelectedSessionDelete = async () => {
+    const sessionIDs = Array.from(selectedSessionIds);
+    if (sessionIDs.length === 0 || operatingSessionId) return;
+    setShowDeleteConfirm(false);
+    setOperatingSessionId('batch');
+    try {
+      for (const sessionID of sessionIDs) {
+        await actions.deleteSession(sessionID);
+      }
+      setSelectedSessionIds(new Set());
+    } finally {
+      setOperatingSessionId(null);
+    }
   };
 
   const handleToggleArchived = () => {
     setShowArchivedSessions((prev) => {
       const next = !prev;
+      setSelectedSessionIds(new Set());
       if (next) {
         actions.refreshArchivedSessions();
       }
       return next;
     });
   };
+
+  const selectedSessionCount = selectedSessionIds.size;
+  const sessionActionMenuItems: ContextActionMenuItem[] = showArchivedSessions
+    ? [
+        {
+          label: 'アーカイブから復帰',
+          disabled: selectedSessionCount === 0 || !!operatingSessionId,
+          onClick: () => handleSelectedSessionOperation(actions.restoreSession),
+        },
+        {
+          label: '削除',
+          disabled: selectedSessionCount === 0 || !!operatingSessionId,
+          onClick: () => setShowDeleteConfirm(true),
+        },
+      ]
+    : [
+        {
+          label: 'アーカイブ',
+          disabled: selectedSessionCount === 0 || !!operatingSessionId,
+          onClick: () => handleSelectedSessionOperation(actions.archiveSession),
+        },
+        {
+          label: '削除',
+          disabled: selectedSessionCount === 0 || !!operatingSessionId,
+          onClick: () => setShowDeleteConfirm(true),
+        },
+      ];
 
   const handleCopyMessage = useCallback(async (msgId: string, text: string) => {
     try {
@@ -677,6 +741,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           showSettingsButton={showSettingsButton}
           showSwapButton={showSwapButton}
           onSwapPanes={onSwapPanes}
+          onOpenActionMenu={handleOpenSessionActionMenu}
         />
         {error && (
           <div className="oc-error-banner">
@@ -704,44 +769,30 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 {isLoadingArchivedSessions && archivedSessions.length === 0 && (
                   <div className="oc-loading">Loading archived sessions...</div>
                 )}
-                {archivedSessions.map((session) => (
-                  <div key={session.id} className="agent-session-item-wrapper">
-                    <button
-                      className={`agent-session-item ${session.id === selectedSessionID ? 'active' : ''}`}
-                      onClick={() => handleSelectSession(session.id)}
-                      disabled={operatingSessionId === session.id}
-                    >
-                      <span className="agent-session-title">
-                        {formatSessionTitle(session)}
-                      </span>
-                      <span className="agent-session-date">
-                        {formatTime(session.time?.updated)}
-                      </span>
-                    </button>
-                    <div className="agent-session-actions">
+                {archivedSessions.map((session) => {
+                  const isSelected = selectedSessionIds.has(session.id);
+                  return (
+                    <div key={session.id} className={`agent-session-item-wrapper ${isSelected ? 'selected' : ''}`}>
                       <button
-                        className="agent-session-action-btn"
-                        onClick={() => handleRestoreSession(session.id)}
+                        className={`agent-session-item ${session.id === selectedSessionID ? 'active' : ''}`}
+                        onClick={() => handleSelectSession(session.id)}
                         disabled={operatingSessionId === session.id}
-                        title="Restore from archive"
                       >
-                        {operatingSessionId === session.id ? (
-                          <Loader2 size={13} className="oc-spinning" />
-                        ) : (
-                          <ArchiveRestore size={13} />
-                        )}
+                        <span className="agent-session-title">
+                          {formatSessionTitle(session)}
+                        </span>
+                        <span className="agent-session-date">
+                          {formatTime(session.time?.updated)}
+                        </span>
                       </button>
-                      <button
-                        className="agent-session-action-btn agent-session-action-btn--danger"
-                        onClick={() => setDeleteConfirmId(session.id)}
-                        disabled={operatingSessionId === session.id}
-                        title="Delete session"
-                      >
-                        <Trash2 size={13} />
+                      <button className="agent-session-select" onClick={() => handleToggleSessionSelection(session.id)} disabled={!!operatingSessionId} title="セッションを選択" aria-label="セッションを選択">
+                        <span className={`file-select-checkbox ${isSelected ? 'checked' : ''}`}>
+                          {isSelected && <Check size={14} />}
+                        </span>
                       </button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {archivedSessions.length === 0 && !isLoadingArchivedSessions && (
                   <div className="agent-session-empty">
                     No archived sessions.
@@ -753,50 +804,36 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 {isLoadingSessions && sessions.length === 0 && (
                   <div className="oc-loading">Loading sessions...</div>
                 )}
-                {sessions.map((session) => (
-                  <div key={session.id} className="agent-session-item-wrapper">
-                    <button
-                      className={`agent-session-item ${session.id === selectedSessionID ? 'active' : ''}`}
-                      onClick={() => handleSelectSession(session.id)}
-                      disabled={operatingSessionId === session.id}
-                    >
-                      <span className="agent-session-title">
-                        {unreadSessionIds.includes(session.id) && (
-                          <span className="agent-session-unread" />
-                        )}
-                        {processingSessionIds.includes(session.id) && (
-                          <span className="agent-session-processing" />
-                        )}
-                        {formatSessionTitle(session)}
-                      </span>
-                      <span className="agent-session-date">
-                        {formatTime(session.time?.updated)}
-                      </span>
-                    </button>
-                    <div className="agent-session-actions">
+                {sessions.map((session) => {
+                  const isSelected = selectedSessionIds.has(session.id);
+                  return (
+                    <div key={session.id} className={`agent-session-item-wrapper ${isSelected ? 'selected' : ''}`}>
                       <button
-                        className="agent-session-action-btn"
-                        onClick={() => handleArchiveSession(session.id)}
+                        className={`agent-session-item ${session.id === selectedSessionID ? 'active' : ''}`}
+                        onClick={() => handleSelectSession(session.id)}
                         disabled={operatingSessionId === session.id}
-                        title="Archive session"
                       >
-                        {operatingSessionId === session.id ? (
-                          <Loader2 size={13} className="oc-spinning" />
-                        ) : (
-                          <Archive size={13} />
-                        )}
+                        <span className="agent-session-title">
+                          {unreadSessionIds.includes(session.id) && (
+                            <span className="agent-session-unread" />
+                          )}
+                          {processingSessionIds.includes(session.id) && (
+                            <span className="agent-session-processing" />
+                          )}
+                          {formatSessionTitle(session)}
+                        </span>
+                        <span className="agent-session-date">
+                          {formatTime(session.time?.updated)}
+                        </span>
                       </button>
-                      <button
-                        className="agent-session-action-btn agent-session-action-btn--danger"
-                        onClick={() => setDeleteConfirmId(session.id)}
-                        disabled={operatingSessionId === session.id}
-                        title="Delete session"
-                      >
-                        <Trash2 size={13} />
+                      <button className="agent-session-select" onClick={() => handleToggleSessionSelection(session.id)} disabled={!!operatingSessionId} title="セッションを選択" aria-label="セッションを選択">
+                        <span className={`file-select-checkbox ${isSelected ? 'checked' : ''}`}>
+                          {isSelected && <Check size={14} />}
+                        </span>
                       </button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {sessions.length === 0 && !isLoadingSessions && (
                   <div className="agent-session-empty">
                     No sessions yet. Create one to get started.
@@ -806,8 +843,8 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
             )}
           </div>
         </div>
-        {deleteConfirmId && (
-          <div className="oc-dialog-overlay" onClick={() => setDeleteConfirmId(null)}>
+        {showDeleteConfirm && (
+          <div className="oc-dialog-overlay" onClick={() => setShowDeleteConfirm(false)}>
             <div className="oc-dialog" onClick={(e) => e.stopPropagation()}>
               <div className="oc-dialog-header">
                 <AlertCircle size={18} />
@@ -819,13 +856,13 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
               <div className="oc-dialog-actions">
                 <button
                   className="oc-btn"
-                  onClick={() => setDeleteConfirmId(null)}
+                  onClick={() => setShowDeleteConfirm(false)}
                 >
                   Cancel
                 </button>
                 <button
                   className="oc-btn oc-btn-deny"
-                  onClick={() => handleDeleteSession(deleteConfirmId)}
+                  onClick={handleSelectedSessionDelete}
                 >
                   Delete
                 </button>
@@ -833,6 +870,12 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
             </div>
           </div>
         )}
+        <ContextActionMenu
+          isOpen={showSessionActionMenu}
+          items={sessionActionMenuItems}
+          onClose={handleCloseSessionActionMenu}
+          triggerRect={sessionActionMenuTriggerRect}
+        />
         {showModelSelect && (
           <div className="oc-dialog-overlay" onClick={handleModelSelectCancel}>
             <div className="oc-dialog oc-dialog-model-select" onClick={(e) => e.stopPropagation()}>

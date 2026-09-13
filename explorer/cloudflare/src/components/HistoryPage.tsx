@@ -1,21 +1,28 @@
-import React, { useEffect, useState } from 'react';
-import { Clock, FileText, Trash2 } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Clock, FileText, Check } from 'lucide-react';
 import { FileViewHistoryEntry } from '../domain/types';
 import { getHistory, removeFromHistory, checkHistoryFilesExist } from '../services/ViewerHistoryStore';
 import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
+import { ContextActionMenu, ContextActionMenuItem } from './ContextActionMenu';
 
 interface HistoryPageProps {
   gatewayService: GatewayFileSystemService;
   onSelectFile: (path: string) => void;
+  onActionMenuReady?: (handler: (event: React.MouseEvent) => void) => void;
 }
 
 export const HistoryPage: React.FC<HistoryPageProps> = ({
   gatewayService,
   onSelectFile,
+  onActionMenuReady,
 }) => {
   const [history, setHistory] = useState<FileViewHistoryEntry[]>([]);
   const [existenceMap, setExistenceMap] = useState<Map<string, boolean>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+  const [isRemoving, setIsRemoving] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const [actionMenuTriggerRect, setActionMenuTriggerRect] = useState<DOMRect | null>(null);
 
   useEffect(() => {
     loadHistory();
@@ -31,10 +38,56 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
     setLoading(false);
   };
 
-  const handleRemove = async (path: string) => {
-    await removeFromHistory(gatewayService, path);
-    await loadHistory();
+  const handleToggleSelect = (path: string) => {
+    setSelectedPaths((previous) => {
+      const next = new Set(previous);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
   };
+
+  const handleRemoveSelected = async () => {
+    const paths = Array.from(selectedPaths);
+    if (paths.length === 0 || isRemoving) return;
+    setIsRemoving(true);
+    try {
+      for (const path of paths) {
+        await removeFromHistory(gatewayService, path);
+      }
+      setSelectedPaths(new Set());
+      await loadHistory();
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const handleOpenActionMenu = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+    setActionMenuTriggerRect((event.currentTarget as HTMLElement).getBoundingClientRect());
+    setShowActionMenu(true);
+  }, []);
+
+  const handleCloseActionMenu = useCallback(() => {
+    setShowActionMenu(false);
+    setActionMenuTriggerRect(null);
+  }, []);
+
+  useEffect(() => {
+    onActionMenuReady?.(handleOpenActionMenu);
+    return () => onActionMenuReady?.(() => {});
+  }, [handleOpenActionMenu, onActionMenuReady]);
+
+  const actionMenuItems: ContextActionMenuItem[] = [
+    {
+      label: '履歴削除',
+      disabled: selectedPaths.size === 0 || isRemoving,
+      onClick: handleRemoveSelected,
+    },
+  ];
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString('ja-JP', {
@@ -72,7 +125,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
             <th>Name</th>
             <th className="col-type" style={{ width: '130px' }}>Status</th>
             <th className="col-modified" style={{ width: '160px' }}>Last Viewed</th>
-            <th style={{ width: '40px' }}></th>
+            <th className="col-select"></th>
           </tr>
         </thead>
         <tbody>
@@ -80,18 +133,19 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
             const exists = existenceMap.get(entry.path);
             const isUnknown = !existenceMap.has(entry.path);
             const fileName = entry.path.split(/[\/\\]/).pop() || entry.path;
+            const isSelected = selectedPaths.has(entry.path);
 
             return (
               <tr
                 key={entry.path}
-                className={`file-row ${exists === false ? 'file-deleted' : ''}`}
+                className={`file-row ${exists === false ? 'file-deleted' : ''} ${isSelected ? 'selected' : ''}`}
                 onClick={() => {
                   if (exists !== false) {
                     onSelectFile(entry.path);
                   }
                 }}
               >
-                <td>
+                <td className="file-row-main">
                   <div className="file-name-cell">
                     <FileText size={18} className="icon-file" />
                     <span className="file-name-text">{fileName}</span>
@@ -113,23 +167,28 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                 <td className="cell-muted col-modified">
                   {formatDate(entry.lastViewedAt)}
                 </td>
-                <td>
-                  <button
-                    className="btn-icon"
+                <td className="file-row-select">
+                  <div
+                    className={`file-select-checkbox ${isSelected ? 'checked' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleRemove(entry.path);
+                      handleToggleSelect(entry.path);
                     }}
-                    title="Remove from history"
                   >
-                    <Trash2 size={14} />
-                  </button>
+                    {isSelected && <Check size={14} />}
+                  </div>
                 </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      <ContextActionMenu
+        isOpen={showActionMenu}
+        items={actionMenuItems}
+        onClose={handleCloseActionMenu}
+        triggerRect={actionMenuTriggerRect}
+      />
     </div>
   );
 };

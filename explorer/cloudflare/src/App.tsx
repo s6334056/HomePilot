@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, type MouseEvent as ReactMouseEvent } from 'react';
 import { MockFileSystemService } from './services/MockFileSystemService';
 import { GatewayFileSystemService } from './services/GatewayFileSystemService';
 import { FileSystemService } from './services/FileSystemService';
@@ -61,6 +61,7 @@ export function App() {
   // Action menu state
   const [showActionMenu, setShowActionMenu] = useState<boolean>(false);
   const [actionMenuTriggerRect, setActionMenuTriggerRect] = useState<DOMRect | null>(null);
+  const [historyActionMenuHandler, setHistoryActionMenuHandler] = useState<((event: ReactMouseEvent) => void) | null>(null);
 
   // Rename dialog state
   const [showRenameDialog, setShowRenameDialog] = useState<boolean>(false);
@@ -327,6 +328,10 @@ export function App() {
   const handleCloseActionMenu = useCallback(() => {
     setShowActionMenu(false);
     setActionMenuTriggerRect(null);
+  }, []);
+
+  const handleHistoryActionMenuReady = useCallback((handler: (event: ReactMouseEvent) => void) => {
+    setHistoryActionMenuHandler(() => handler);
   }, []);
 
   const selectedCount = selectedPaths.size;
@@ -659,7 +664,11 @@ export function App() {
           historyReturnPageRef.current = returnPage;
           setCurrentScreen('history');
         }}
-        onOpenActionMenu={currentScreen === 'explorer' ? handleOpenActionMenu : undefined}
+        onOpenActionMenu={currentScreen === 'explorer'
+          ? handleOpenActionMenu
+          : currentScreen === 'history'
+            ? historyActionMenuHandler || undefined
+            : undefined}
       />
 
       <div className="main-content-container">
@@ -689,6 +698,7 @@ export function App() {
           {currentScreen === 'history' && isGatewayService(fileService) && (
             <HistoryPage
               gatewayService={fileService as GatewayFileSystemService}
+              onActionMenuReady={handleHistoryActionMenuReady}
               onSelectFile={(path) => {
                 // Open file from history with source='history'
                 const fileName = path.split(/[\/\\]/).pop() || path;

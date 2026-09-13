@@ -33,6 +33,7 @@ interface AgentNavbarProps extends NavbarBaseProps {
   onReload: () => void;
   onOpenSettings: () => void;
   onOpenExplorer: () => void;
+  onOpenActionMenu?: (e: React.MouseEvent) => void;
 }
 
 type NavbarProps = ExplorerNavbarProps | AgentNavbarProps;
@@ -72,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
         + parseFloat(getComputedStyle(badgeEl).marginRight || '0')
       : 0;
 
-    const menuBtnWidth = props.mode === 'explorer' ? 32 : 0;
+    const menuBtnWidth = props.onOpenActionMenu ? 32 : 0;
     const available = innerWidth - badgeWidth - menuBtnWidth;
     if (available <= 0) {
       setDisplayPath(truncatePath(props.currentPath));
@@ -137,7 +138,7 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
           >
             {displayPath}
           </span>
-          {props.mode === 'explorer' && props.onOpenActionMenu && (
+          {props.onOpenActionMenu && (
             <button
               className="btn-icon path-bar-menu-btn"
               onClick={props.onOpenActionMenu}
@@ -201,6 +202,15 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
         <span className="path-bar-text" title={props.currentPath}>
           {displayPath}
         </span>
+        {props.onOpenActionMenu && (
+          <button
+            className="btn-icon path-bar-menu-btn"
+            onClick={props.onOpenActionMenu}
+            title="Actions"
+          >
+            <MoreVertical size={16} />
+          </button>
+        )}
       </nav>
     </div>
   );

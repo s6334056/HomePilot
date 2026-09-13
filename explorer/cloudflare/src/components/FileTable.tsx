@@ -39,7 +39,7 @@ export const FileTable: React.FC<FileTableProps> = ({
             <th className="col-size" style={{ width: '110px' }}>Size</th>
             <th className="col-type" style={{ width: '130px' }}>Type</th>
             <th className="col-modified" style={{ width: '160px' }}>Modified</th>
-            <th className="col-select" style={{ width: '44px' }}></th>
+            <th className="col-select"></th>
           </tr>
         </thead>
         <tbody>

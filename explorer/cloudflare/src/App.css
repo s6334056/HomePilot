@@ -331,6 +331,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .icon-folder {
@@ -343,6 +344,10 @@
 
 .file-name-text {
   font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .focus-pill {
@@ -2031,6 +2036,39 @@
   overflow: hidden;
 }
 
+.agent-session-item-wrapper.selected .agent-session-item {
+  border-color: var(--accent);
+  background-color: rgba(56, 139, 253, 0.1);
+}
+
+.agent-session-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  padding: 0;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  cursor: pointer;
+}
+
+.agent-session-select:hover:not(:disabled) {
+  background-color: var(--bg-sub);
+}
+
+.agent-session-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agent-session-item-wrapper.selected .agent-session-select {
+  border-color: var(--accent);
+  background-color: rgba(56, 139, 253, 0.1);
+}
+
 /* Session Action Buttons */
 .agent-session-actions {
   display: flex;
@@ -2418,6 +2456,8 @@
 
 /* Select checkbox column */
 .col-select {
+  width: 44px;
+  min-width: 44px;
   text-align: center;
 }
 
@@ -2426,6 +2466,10 @@
 }
 
 .file-row-select {
+  width: 44px;
+  min-width: 44px;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
   cursor: pointer;
   text-align: center;
   vertical-align: middle;
@@ -2442,6 +2486,16 @@
   background-color: var(--bg-main);
   color: transparent;
   transition: all 0.15s ease;
+}
+
+@media (max-width: 640px) {
+  .file-table {
+    table-layout: fixed;
+  }
+
+  .file-row-main {
+    overflow: hidden;
+  }
 }
 
 .file-select-checkbox:hover {
@@ -2782,4 +2836,3 @@
   white-space: nowrap;
   max-width: 300px;
 }
-
