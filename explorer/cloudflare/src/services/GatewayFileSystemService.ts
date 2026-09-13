@@ -217,8 +217,13 @@ export class GatewayFileSystemService implements FileSystemService {
     const formData = new FormData();
     formData.append('destPath', parentPath);
 
+    // for (const item of files) {
+    //   formData.append('files', item.file, item.relativePath);
+    // }
+
     for (const item of files) {
-      formData.append('files', item.file, item.relativePath);
+      formData.append('files', item.file, item.file.name);
+      formData.append('relativePaths', item.relativePath);
     }
 
     return new Promise<UploadResult>((resolve, reject) => {

@@ -839,6 +839,7 @@ export async function handleUpload(request, response) {
   // destPath is a multipart field, so it cannot be read synchronously
   // from the Busboy instance. Store it when the field event arrives.
   let destPath = null;
+  const relativePaths = [];
 
   // Store uploaded files in a temporary directory first.
   // The final destination is validated only after all multipart fields
@@ -865,33 +866,137 @@ export async function handleUpload(request, response) {
 
   let uploadError = null;
 
+  // busboyInstance.on('field', (fieldname, value) => {
+  //   if (fieldname === 'destPath') {
+  //     destPath = value;
+  //   }
+  // });
+
   busboyInstance.on('field', (fieldname, value) => {
     if (fieldname === 'destPath') {
       destPath = value;
+    } else if (fieldname === 'relativePaths') {
+      relativePaths.push(value);
     }
   });
 
+
+
+
+
+  // busboyInstance.on('file', (fieldname, fileStream, info) => {
+  //   // Ignore unexpected multipart fields.
+  //   if (fieldname !== 'files') {
+  //     fileStream.resume();
+  //     return;
+  //   }
+
+  //   // const filename = info.filename || 'unnamed';
+  //   // const relativePath = filename;
+
+  //   // if (!isPathSafe(relativePath)) {
+  //   //   fileStream.resume();
+  //   //   uploadError = `Invalid path: ${relativePath}`;
+  //   //   return;
+  //   // }
+
+  //   const filename = info.filename || 'unnamed';
+  //   const fileIndex = files.length;
+  //   const relativePath = relativePaths[fileIndex];
+
+  //   if (!relativePath || !isPathSafe(relativePath)) {
+  //     fileStream.resume();
+  //     uploadError = `Invalid relative path for file: ${filename}`;
+  //     return;
+  //   }
+
+
+
+  // busboyInstance.on('file', (fieldname, fileStream, info) => {
+  //   if (fieldname !== 'files') {
+  //     fileStream.resume();
+  //     return;
+  //   }
+
+  //   const filename = info.filename || 'unnamed';
+  //   const fileIndex = uploadFileIndex++;
+  //   const relativePath = relativePaths[fileIndex];
+
+  //   if (!relativePath || !isPathSafe(relativePath)) {
+  //     fileStream.resume();
+  //     uploadError = `Invalid relative path for file: ${filename}`;
+  //     return;
+  //   }
+
+  //   const tmpPath = join(
+  //     tmpDir,
+  //     `.upload_tmp_${randomUUID()}`,
+  //   );
+
+  //   tmpFiles.push(tmpPath);
+
+  //   const writeStream = createWriteStream(tmpPath);
+
+  //   const writePromise = new Promise((resolveWrite) => {
+  //     let settled = false;
+
+  //     const finishWrite = () => {
+  //       if (settled) {
+  //         return;
+  //       }
+
+  //       settled = true;
+  //       resolveWrite();
+  //     };
+
+  //     fileStream.on('limit', () => {
+  //       uploadError = `File too large: ${relativePath}`;
+  //     });
+
+  //     fileStream.on('error', (err) => {
+  //       uploadError = `Stream error: ${err.message}`;
+  //       finishWrite();
+  //     });
+
+  //     writeStream.on('error', (err) => {
+  //       uploadError = `Write error: ${err.message}`;
+  //       finishWrite();
+  //     });
+
+  //     writeStream.on('finish', () => {
+  //       files.push({
+  //         tmpPath,
+  //         relativePath,
+  //       });
+
+  //       finishWrite();
+  //     });
+
+  //     fileStream.pipe(writeStream);
+  //   });
+
+  //   writePromises.push(writePromise);
+  // });
+
+
+
+
+
+  let uploadFileIndex = 0;
+
   busboyInstance.on('file', (fieldname, fileStream, info) => {
-    // Ignore unexpected multipart fields.
     if (fieldname !== 'files') {
       fileStream.resume();
       return;
     }
 
+    const fileIndex = uploadFileIndex++;
     const filename = info.filename || 'unnamed';
-    const relativePath = filename;
-
-    if (!isPathSafe(relativePath)) {
-      fileStream.resume();
-      uploadError = `Invalid path: ${relativePath}`;
-      return;
-    }
 
     const tmpPath = join(
       tmpDir,
       `.upload_tmp_${randomUUID()}`,
     );
-
     tmpFiles.push(tmpPath);
 
     const writeStream = createWriteStream(tmpPath);
@@ -909,7 +1014,7 @@ export async function handleUpload(request, response) {
       };
 
       fileStream.on('limit', () => {
-        uploadError = `File too large: ${relativePath}`;
+        uploadError = `File too large: ${filename}`;
       });
 
       fileStream.on('error', (err) => {
@@ -925,7 +1030,8 @@ export async function handleUpload(request, response) {
       writeStream.on('finish', () => {
         files.push({
           tmpPath,
-          relativePath,
+          fileIndex,
+          filename,
         });
 
         finishWrite();
@@ -937,6 +1043,10 @@ export async function handleUpload(request, response) {
     writePromises.push(writePromise);
   });
 
+
+
+
+
   busboyInstance.on('error', (err) => {
     uploadError = `Parse error: ${err.message}`;
   });
@@ -945,6 +1055,21 @@ export async function handleUpload(request, response) {
     try {
       // Wait until every file stream has finished writing.
       await Promise.all(writePromises);
+
+
+
+      for (const file of files) {
+        const relativePath = relativePaths[file.fileIndex];
+
+        if (!relativePath || !isPathSafe(relativePath)) {
+          uploadError = `Invalid relative path for file: ${file.filename}`;
+          break;
+        }
+
+        file.relativePath = relativePath;
+      }
+
+
 
       // Validate destination only after Busboy has delivered the fields.
       if (!destPath || typeof destPath !== 'string') {
