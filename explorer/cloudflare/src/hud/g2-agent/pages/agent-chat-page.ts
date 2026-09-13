@@ -566,11 +566,6 @@ export class AgentChatPage extends BasePage {
     return this.getCurrentSessionQuestion() !== null && state.questionVoiceConfirm && state.voiceState !== 'idle';
   }
 
-  private isMultipleQuestion(): boolean {
-    const q = this.getCurrentSessionQuestion();
-    return !!q && q.multiple === true;
-  }
-
   private isTooManyMultipleOptions(): boolean {
     const q = this.getCurrentSessionQuestion();
     return !!q && q.multiple === true && (q.options?.length ?? 0) >= 4;
@@ -915,8 +910,8 @@ export class AgentChatPage extends BasePage {
       if (q.multiple === true && (q.options?.length ?? 0) >= 4) return;
       if (q.custom !== false) {
         await this.controller.startQuestionVoiceInput();
-        return;
       }
+      return;
     }
     await this.controller.startVoiceInput();
   }

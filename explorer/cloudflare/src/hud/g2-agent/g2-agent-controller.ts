@@ -519,7 +519,11 @@ export class G2AgentController {
 
     if (!transcript || this.state.pendingQuestions.length === 0) return null;
 
-    const q = this.state.pendingQuestions[0];
+    const q = this.state.selectedSessionID
+      ? this.state.pendingQuestions.find((q) => q.sessionID === this.state.selectedSessionID) || null
+      : null;
+    if (!q) return null;
+
     if (q.multiple) {
       return transcript;
     }
