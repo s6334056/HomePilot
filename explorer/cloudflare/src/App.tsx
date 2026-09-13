@@ -14,6 +14,7 @@ import { RenameDialog } from './components/RenameDialog';
 import { CreateFolderDialog } from './components/CreateFolderDialog';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
 import { ContextActionMenu, ContextActionMenuItem } from './components/ContextActionMenu';
+import { Toast } from './components/Toast';
 import { G2RuntimeManager, G2RuntimeState } from './hud/g2-runtime';
 import { addToHistory } from './services/ViewerHistoryStore';
 import './App.css';
@@ -76,6 +77,9 @@ export function App() {
 
   // Explorer Ready state
   const [isExplorerReady, setIsExplorerReady] = useState<boolean>(false);
+
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; detail?: string } | null>(null);
 
   // Screen state
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('explorer');
@@ -336,6 +340,13 @@ export function App() {
       },
     },
     {
+      label: 'ダウンロード',
+      disabled: !isExplorerReady || selectedCount === 0,
+      onClick: () => {
+        handleDownload();
+      },
+    },
+    {
       label: '名前を変更',
       disabled: !isExplorerReady || selectedCount !== 1,
       onClick: () => {
@@ -428,6 +439,48 @@ export function App() {
       setShowDeleteDialog(false);
     }
   }, [isDeleting]);
+
+  // ── Download ──────────────────────────────────────────────
+
+  const handleDownload = useCallback(async () => {
+    const paths = Array.from(selectedPaths);
+    if (paths.length === 0) return;
+
+    const hasDirectory = selectedItems.some((i) => i.type === 'directory');
+
+    let downloadFilename: string;
+    if (paths.length === 1 && !hasDirectory) {
+      downloadFilename = selectedItems[0]?.name || 'file';
+    } else if (paths.length === 1 && hasDirectory) {
+      downloadFilename = (selectedItems[0]?.name || 'folder') + '.zip';
+    } else {
+      downloadFilename = 'download.zip';
+    }
+
+    try {
+      const result = await fileService.downloadItems(paths, hasDirectory);
+
+      if (result.url) {
+        const a = document.createElement('a');
+        a.href = result.url;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else if (result.blob) {
+        const url = URL.createObjectURL(result.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      setToast({ message: 'ダウンロードを開始しました', detail: downloadFilename });
+    } catch (e: any) {
+      alert(`ダウンロードに失敗しました: ${e.message}`);
+    }
+  }, [selectedPaths, selectedItems, fileService]);
 
   // Folder click from FileTable
   const handleOpenDirectory = async (path: string, _index: number) => {
@@ -780,6 +833,15 @@ export function App() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          detail={toast.detail}
+          onDone={() => setToast(null)}
+        />
       )}
     </div>
   );

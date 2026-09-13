@@ -189,6 +189,25 @@ export class GatewayFileSystemService implements FileSystemService {
     return data.path;
   }
 
+  getDownloadUrl(path: string): string | null {
+    if (!this._isAvailable) return null;
+    const encoded = encodeURIComponent(path);
+    return `${this.baseUrl}/api/fs/download?path=${encoded}&token=${this.token}`;
+  }
+
+  async downloadItems(paths: string[], hasDirectory: boolean): Promise<{ blob?: Blob; url?: string }> {
+    if (paths.length === 1 && !hasDirectory) {
+      const url = this.getDownloadUrl(paths[0]);
+      return { url: url || undefined };
+    }
+    const res = await this.requestWithBody('POST', '/api/fs/download', { paths });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error?.message || `Failed to download: ${res.status}`);
+    }
+    return { blob: await res.blob() };
+  }
+
   private async request(endpoint: string, method: string = 'GET'): Promise<Response> {
     return fetch(`${this.baseUrl}${endpoint}`, {
       method,

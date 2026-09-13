@@ -5,6 +5,7 @@ import {
   json, noContent, errorResponse,
   handleHealth, handleRoot, handleDirectory, handleFile,
   handleRename, handleDelete, handleMkdir,
+  handleDownloadGet, handleDownloadPost,
   handleOpenCodeProxy, handleOpenCodeProxyBody,
   handleViewerStateGet, handleViewerStatePatchPosition,
   handleViewerStatePatchHistory, handleViewerStateDeleteHistory,
@@ -161,6 +162,19 @@ const server = createServer(async (request, response) => {
       return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed.');
     }
     return handleMkdir(request, response);
+  }
+
+  if (path === '/api/fs/download') {
+    if (!verifyToken(requestToken, token)) {
+      return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+    if (request.method === 'GET') {
+      return handleDownloadGet(request, response, url);
+    }
+    if (request.method === 'POST') {
+      return handleDownloadPost(request, response);
+    }
+    return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only GET and POST are allowed on /api/fs/download.');
   }
 
   // --- OpenCode Proxy ---

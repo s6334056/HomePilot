@@ -1,7 +1,9 @@
 import { readdir, stat, readFile, writeFile, mkdir, rename, unlink, rm } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import { resolve, dirname, basename } from 'node:path';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
+import archiver from 'archiver';
 import { CONFIG } from './config.js';
 import { validatePath, isTextFile } from './pathValidator.js';
 
@@ -503,6 +505,143 @@ export async function handleMkdir(request, response) {
   }
 
   json(response, 200, { ok: true, path: destResolved });
+}
+
+// --- Download ---
+
+export async function handleDownloadGet(request, response, url) {
+  const filePath = url.searchParams.get('path');
+  if (!filePath) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', "The 'path' query parameter is required.");
+  }
+
+  const validation = validatePath(filePath, CONFIG.ROOT_PATH);
+  if (!validation.valid) {
+    if (validation.error === 'FORBIDDEN') {
+      return errorResponse(response, 403, 'FORBIDDEN', 'Path is outside the allowed root.');
+    }
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid path.');
+  }
+
+  const resolved = validation.resolvedPath;
+
+  let stats;
+  try {
+    stats = await stat(resolved);
+  } catch {
+    return errorResponse(response, 404, 'NOT_FOUND', 'File not found.');
+  }
+
+  if (!stats.isFile()) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'The specified path is not a file. Use POST for directories.');
+  }
+
+  const filename = basename(resolved);
+
+  response.writeHead(200, {
+    ...CORS_HEADERS,
+    'Content-Type': 'application/octet-stream',
+    'Content-Disposition': `attachment; filename="${filename}"`,
+    'Content-Length': stats.size,
+  });
+
+  createReadStream(resolved).pipe(response);
+}
+
+export async function handleDownloadPost(request, response) {
+  const body = await readBody(request);
+  if (!body) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Request body is required.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid JSON.');
+  }
+
+  const { paths } = parsed;
+
+  if (!Array.isArray(paths) || paths.length === 0) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'paths array is required.');
+  }
+
+  const validatedPaths = [];
+  for (const p of paths) {
+    if (!p || typeof p !== 'string') {
+      return errorResponse(response, 400, 'INVALID_REQUEST', 'Each path must be a non-empty string.');
+    }
+    const validation = validatePath(p, CONFIG.ROOT_PATH);
+    if (!validation.valid) {
+      if (validation.error === 'FORBIDDEN') {
+        return errorResponse(response, 403, 'FORBIDDEN', `Path is outside the allowed root: ${p}`);
+      }
+      return errorResponse(response, 400, 'INVALID_REQUEST', `Invalid path: ${p}`);
+    }
+    validatedPaths.push({ requested: p, resolved: validation.resolvedPath });
+  }
+
+  let stats;
+  for (const vp of validatedPaths) {
+    try {
+      stats = await stat(vp.resolved);
+    } catch {
+      return errorResponse(response, 404, 'NOT_FOUND', `Not found: ${vp.requested}`);
+    }
+  }
+
+  let filename;
+  if (validatedPaths.length === 1) {
+    const single = validatedPaths[0];
+    const singleStat = await stat(single.resolved);
+    if (singleStat.isDirectory()) {
+      filename = basename(single.resolved) + '.zip';
+    } else {
+      filename = basename(single.resolved);
+    }
+  } else {
+    filename = 'download.zip';
+  }
+
+  const archive = archiver('zip', { zlib: { level: 6 } });
+
+  archive.on('warning', (err) => {
+    if (err.code === 'SYMLINKNOTSUPPORTED') {
+      console.warn('[Download] Symlink skipped:', err.message);
+      return;
+    }
+    console.warn('[Download] Archive warning:', err);
+  });
+
+  archive.on('error', (err) => {
+    console.error('[Download] Archive error:', err);
+    if (!response.headersSent) {
+      errorResponse(response, 500, 'INTERNAL_ERROR', 'Failed to create archive.');
+    } else {
+      response.destroy();
+    }
+  });
+
+  response.writeHead(200, {
+    ...CORS_HEADERS,
+    'Content-Type': 'application/zip',
+    'Content-Disposition': `attachment; filename="${filename}"`,
+  });
+
+  archive.pipe(response);
+
+  for (const vp of validatedPaths) {
+    const itemStat = await stat(vp.resolved);
+    const name = basename(vp.resolved);
+    if (itemStat.isDirectory()) {
+      archive.directory(vp.resolved, name);
+    } else {
+      archive.file(vp.resolved, { name });
+    }
+  }
+
+  archive.finalize();
 }
 
 // --- OpenCode Proxy ---

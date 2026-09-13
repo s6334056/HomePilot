@@ -136,4 +136,12 @@ export class MockFileSystemService implements FileSystemService {
     parentNode.children.push(newNode);
     return newPath;
   }
+
+  public getDownloadUrl(_path: string): string | null {
+    return null;
+  }
+
+  public async downloadItems(_paths: string[], _hasDirectory: boolean): Promise<{ blob?: Blob; url?: string }> {
+    return {};
+  }
 }
