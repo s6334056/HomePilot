@@ -674,56 +674,210 @@ async function getUniqueName(destDir, name) {
   }
 }
 
+
+
+
+
+// export async function handleUpload(request, response) {
+//   const contentType = request.headers['content-type'] || '';
+//   if (!contentType.includes('multipart/form-data')) {
+//     return errorResponse(response, 400, 'INVALID_REQUEST', 'Content-Type must be multipart/form-data.');
+//   }
+
+//   let busboyInstance;
+//   try {
+//     busboyInstance = Busboy({ headers: request.headers, limits: { fileSize: Infinity, files: 100 } });
+//   } catch {
+//     return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid multipart data.');
+//   }
+
+//   const destPath = busboyInstance.fields['destPath'];
+//   if (!destPath || typeof destPath !== 'string') {
+//     busboyInstance.destroy();
+//     return errorResponse(response, 400, 'INVALID_REQUEST', 'destPath is required.');
+//   }
+
+//   const destValidation = validatePath(destPath, CONFIG.ROOT_PATH);
+//   if (!destValidation.valid) {
+//     busboyInstance.destroy();
+//     if (destValidation.error === 'FORBIDDEN') {
+//       return errorResponse(response, 403, 'FORBIDDEN', 'Destination is outside the allowed root.');
+//     }
+//     return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid destination path.');
+//   }
+
+//   const destResolved = destValidation.resolvedPath;
+
+//   let destStat;
+//   try {
+//     destStat = await stat(destResolved);
+//     if (!destStat.isDirectory()) {
+//       busboyInstance.destroy();
+//       return errorResponse(response, 400, 'INVALID_REQUEST', 'Destination is not a directory.');
+//     }
+//   } catch {
+//     busboyInstance.destroy();
+//     return errorResponse(response, 404, 'NOT_FOUND', 'Destination directory not found.');
+//   }
+
+//   const tmpDir = join(destResolved, '.hp_uploads');
+//   try { await mkdir(tmpDir, { recursive: true }); } catch { /* may exist */ }
+
+//   const files = [];
+//   const tmpFiles = [];
+//   let uploadError = null;
+
+//   busboyInstance.on('file', (fieldname, fileStream, info) => {
+//     const filename = info.filename || 'unnamed';
+//     const relativePath = filename;
+
+//     if (!isPathSafe(relativePath)) {
+//       fileStream.resume();
+//       uploadError = `Invalid path: ${relativePath}`;
+//       return;
+//     }
+
+//     const targetDir = join(destResolved, dirname(relativePath));
+//     const tmpName = `.upload_tmp_${randomUUID()}`;
+//     const tmpPath = join(tmpDir, tmpName);
+//     const finalName = filename;
+
+//     fileStream.on('limit', () => {
+//       uploadError = `File too large: ${filename}`;
+//     });
+
+//     const writeStream = createWriteStream(tmpPath);
+//     tmpFiles.push(tmpPath);
+
+//     fileStream.pipe(writeStream);
+
+//     writeStream.on('finish', () => {
+//       files.push({ tmpPath, finalPath, targetDir, finalName, relativePath });
+//     });
+
+//     writeStream.on('error', (err) => {
+//       uploadError = `Write error: ${err.message}`;
+//     });
+
+//     fileStream.on('error', (err) => {
+//       uploadError = `Stream error: ${err.message}`;
+//     });
+//   });
+
+//   busboyInstance.on('error', (err) => {
+//     uploadError = `Parse error: ${err.message}`;
+//   });
+
+//   busboyInstance.on('finish', async () => {
+//     if (uploadError) {
+//       for (const tmp of tmpFiles) {
+//         try { await unlink(tmp); } catch { /* ignore */ }
+//       }
+//       try { await rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+//       return errorResponse(response, 500, 'UPLOAD_FAILED', uploadError);
+//     }
+
+//     let uploaded = 0;
+//     const errors = [];
+
+//     for (const f of files) {
+//       try {
+//         await mkdir(f.targetDir, { recursive: true });
+//         const uniqueName = await getUniqueName(f.targetDir, f.finalName);
+//         const uniqueFinalPath = join(f.targetDir, uniqueName);
+//         await rename(f.tmpPath, uniqueFinalPath);
+//         uploaded++;
+//       } catch (e) {
+//         errors.push({ path: f.relativePath, error: e.message });
+//         try { await unlink(f.tmpPath); } catch { /* ignore */ }
+//       }
+//     }
+
+//     try { await rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+
+//     json(response, 200, { ok: true, uploaded, errors: errors.length > 0 ? errors : undefined });
+//   });
+
+//   request.pipe(busboyInstance);
+// }
+
+
+
+
+
 export async function handleUpload(request, response) {
   const contentType = request.headers['content-type'] || '';
+
   if (!contentType.includes('multipart/form-data')) {
-    return errorResponse(response, 400, 'INVALID_REQUEST', 'Content-Type must be multipart/form-data.');
+    return errorResponse(
+      response,
+      400,
+      'INVALID_REQUEST',
+      'Content-Type must be multipart/form-data.',
+    );
   }
 
   let busboyInstance;
+
   try {
-    busboyInstance = Busboy({ headers: request.headers, limits: { fileSize: Infinity, files: 100 } });
+    busboyInstance = Busboy({
+      headers: request.headers,
+      limits: {
+        fileSize: Infinity,
+        files: 100,
+      },
+    });
   } catch {
-    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid multipart data.');
+    return errorResponse(
+      response,
+      400,
+      'INVALID_REQUEST',
+      'Invalid multipart data.',
+    );
   }
 
-  const destPath = busboyInstance.fields['destPath'];
-  if (!destPath || typeof destPath !== 'string') {
-    busboyInstance.destroy();
-    return errorResponse(response, 400, 'INVALID_REQUEST', 'destPath is required.');
-  }
+  // destPath is a multipart field, so it cannot be read synchronously
+  // from the Busboy instance. Store it when the field event arrives.
+  let destPath = null;
 
-  const destValidation = validatePath(destPath, CONFIG.ROOT_PATH);
-  if (!destValidation.valid) {
-    busboyInstance.destroy();
-    if (destValidation.error === 'FORBIDDEN') {
-      return errorResponse(response, 403, 'FORBIDDEN', 'Destination is outside the allowed root.');
-    }
-    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid destination path.');
-  }
+  // Store uploaded files in a temporary directory first.
+  // The final destination is validated only after all multipart fields
+  // and files have been received.
+  const tmpDir = join(
+    CONFIG.ROOT_PATH,
+    `.hp_upload_tmp_${randomUUID()}`,
+  );
 
-  const destResolved = destValidation.resolvedPath;
-
-  let destStat;
   try {
-    destStat = await stat(destResolved);
-    if (!destStat.isDirectory()) {
-      busboyInstance.destroy();
-      return errorResponse(response, 400, 'INVALID_REQUEST', 'Destination is not a directory.');
-    }
+    await mkdir(tmpDir, { recursive: true });
   } catch {
-    busboyInstance.destroy();
-    return errorResponse(response, 404, 'NOT_FOUND', 'Destination directory not found.');
+    return errorResponse(
+      response,
+      500,
+      'UPLOAD_FAILED',
+      'Failed to create temporary upload directory.',
+    );
   }
-
-  const tmpDir = join(destResolved, '.hp_uploads');
-  try { await mkdir(tmpDir, { recursive: true }); } catch { /* may exist */ }
 
   const files = [];
   const tmpFiles = [];
+  const writePromises = [];
+
   let uploadError = null;
 
+  busboyInstance.on('field', (fieldname, value) => {
+    if (fieldname === 'destPath') {
+      destPath = value;
+    }
+  });
+
   busboyInstance.on('file', (fieldname, fileStream, info) => {
+    // Ignore unexpected multipart fields.
+    if (fieldname !== 'files') {
+      fileStream.resume();
+      return;
+    }
+
     const filename = info.filename || 'unnamed';
     const relativePath = filename;
 
@@ -733,31 +887,54 @@ export async function handleUpload(request, response) {
       return;
     }
 
-    const targetDir = join(destResolved, dirname(relativePath));
-    const tmpName = `.upload_tmp_${randomUUID()}`;
-    const tmpPath = join(tmpDir, tmpName);
-    const finalName = filename;
+    const tmpPath = join(
+      tmpDir,
+      `.upload_tmp_${randomUUID()}`,
+    );
 
-    fileStream.on('limit', () => {
-      uploadError = `File too large: ${filename}`;
-    });
-
-    const writeStream = createWriteStream(tmpPath);
     tmpFiles.push(tmpPath);
 
-    fileStream.pipe(writeStream);
+    const writeStream = createWriteStream(tmpPath);
 
-    writeStream.on('finish', () => {
-      files.push({ tmpPath, finalPath, targetDir, finalName, relativePath });
+    const writePromise = new Promise((resolveWrite) => {
+      let settled = false;
+
+      const finishWrite = () => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        resolveWrite();
+      };
+
+      fileStream.on('limit', () => {
+        uploadError = `File too large: ${relativePath}`;
+      });
+
+      fileStream.on('error', (err) => {
+        uploadError = `Stream error: ${err.message}`;
+        finishWrite();
+      });
+
+      writeStream.on('error', (err) => {
+        uploadError = `Write error: ${err.message}`;
+        finishWrite();
+      });
+
+      writeStream.on('finish', () => {
+        files.push({
+          tmpPath,
+          relativePath,
+        });
+
+        finishWrite();
+      });
+
+      fileStream.pipe(writeStream);
     });
 
-    writeStream.on('error', (err) => {
-      uploadError = `Write error: ${err.message}`;
-    });
-
-    fileStream.on('error', (err) => {
-      uploadError = `Stream error: ${err.message}`;
-    });
+    writePromises.push(writePromise);
   });
 
   busboyInstance.on('error', (err) => {
@@ -765,37 +942,164 @@ export async function handleUpload(request, response) {
   });
 
   busboyInstance.on('finish', async () => {
-    if (uploadError) {
-      for (const tmp of tmpFiles) {
-        try { await unlink(tmp); } catch { /* ignore */ }
+    try {
+      // Wait until every file stream has finished writing.
+      await Promise.all(writePromises);
+
+      // Validate destination only after Busboy has delivered the fields.
+      if (!destPath || typeof destPath !== 'string') {
+        uploadError = 'destPath is required.';
       }
-      try { await rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
-      return errorResponse(response, 500, 'UPLOAD_FAILED', uploadError);
-    }
 
-    let uploaded = 0;
-    const errors = [];
+      let destResolved = null;
 
-    for (const f of files) {
+      if (!uploadError) {
+        const destValidation = validatePath(
+          destPath,
+          CONFIG.ROOT_PATH,
+        );
+
+        if (!destValidation.valid) {
+          if (destValidation.error === 'FORBIDDEN') {
+            uploadError = 'Destination is outside the allowed root.';
+          } else {
+            uploadError = 'Invalid destination path.';
+          }
+        } else {
+          destResolved = destValidation.resolvedPath;
+
+          try {
+            const destStat = await stat(destResolved);
+
+            if (!destStat.isDirectory()) {
+              uploadError = 'Destination is not a directory.';
+            }
+          } catch {
+            uploadError = 'Destination directory not found.';
+          }
+        }
+      }
+
+      if (uploadError) {
+        for (const tmp of tmpFiles) {
+          try {
+            await unlink(tmp);
+          } catch {
+            // Ignore cleanup errors.
+          }
+        }
+
+        try {
+          await rm(tmpDir, { recursive: true, force: true });
+        } catch {
+          // Ignore cleanup errors.
+        }
+
+        return errorResponse(
+          response,
+          400,
+          'UPLOAD_FAILED',
+          uploadError,
+        );
+      }
+
+      let uploaded = 0;
+      const errors = [];
+
+      for (const file of files) {
+        try {
+          const relativePath = file.relativePath;
+
+          const targetDir = join(
+            destResolved,
+            dirname(relativePath),
+          );
+
+          const finalName = basename(relativePath);
+
+          await mkdir(targetDir, { recursive: true });
+
+          const uniqueName = await getUniqueName(
+            targetDir,
+            finalName,
+          );
+
+          const uniqueFinalPath = join(
+            targetDir,
+            uniqueName,
+          );
+
+          await rename(
+            file.tmpPath,
+            uniqueFinalPath,
+          );
+
+          uploaded++;
+        } catch (e) {
+          errors.push({
+            path: file.relativePath,
+            error: e.message,
+          });
+
+          try {
+            await unlink(file.tmpPath);
+          } catch {
+            // Ignore cleanup errors.
+          }
+        }
+      }
+
       try {
-        await mkdir(f.targetDir, { recursive: true });
-        const uniqueName = await getUniqueName(f.targetDir, f.finalName);
-        const uniqueFinalPath = join(f.targetDir, uniqueName);
-        await rename(f.tmpPath, uniqueFinalPath);
-        uploaded++;
-      } catch (e) {
-        errors.push({ path: f.relativePath, error: e.message });
-        try { await unlink(f.tmpPath); } catch { /* ignore */ }
+        await rm(tmpDir, {
+          recursive: true,
+          force: true,
+        });
+      } catch {
+        // Ignore cleanup errors.
+      }
+
+      json(response, 200, {
+        ok: true,
+        uploaded,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (e) {
+      console.error(`[Upload] Failed: ${e.message}`);
+
+      for (const tmp of tmpFiles) {
+        try {
+          await unlink(tmp);
+        } catch {
+          // Ignore cleanup errors.
+        }
+      }
+
+      try {
+        await rm(tmpDir, {
+          recursive: true,
+          force: true,
+        });
+      } catch {
+        // Ignore cleanup errors.
+      }
+
+      if (!response.headersSent) {
+        return errorResponse(
+          response,
+          500,
+          'UPLOAD_FAILED',
+          'Failed to upload files.',
+        );
       }
     }
-
-    try { await rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
-
-    json(response, 200, { ok: true, uploaded, errors: errors.length > 0 ? errors : undefined });
   });
 
   request.pipe(busboyInstance);
 }
+
+
+
+
 
 // --- OpenCode Proxy ---
 
