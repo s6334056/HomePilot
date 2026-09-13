@@ -83,4 +83,33 @@ export class MockFileSystemService implements FileSystemService {
     const node = this.findNode(path);
     return node ? { ...node.item } : null;
   }
+
+  public async renameItem(path: string, newName: string): Promise<string> {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const node = this.findNode(path);
+    if (!node) throw new Error(`Not found: ${path}`);
+    const parentPath = path.substring(0, path.lastIndexOf('/'));
+    const newPath = parentPath + '/' + newName;
+    node.item.name = newName;
+    node.item.path = newPath;
+    node.item.id = newPath;
+    return newPath;
+  }
+
+  public async deleteItems(paths: string[]): Promise<{ deleted: number }> {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    let deleted = 0;
+    for (const p of paths) {
+      const parentPath = p.substring(0, p.lastIndexOf('/'));
+      const parentNode = this.findNode(parentPath);
+      if (parentNode && parentNode.children) {
+        const idx = parentNode.children.findIndex((c) => c.item.path === p);
+        if (idx >= 0) {
+          parentNode.children.splice(idx, 1);
+          deleted++;
+        }
+      }
+    }
+    return { deleted };
+  }
 }

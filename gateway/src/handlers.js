@@ -1,5 +1,5 @@
-import { readdir, stat, readFile, writeFile, mkdir } from 'node:fs/promises';
-import { resolve, dirname } from 'node:path';
+import { readdir, stat, readFile, writeFile, mkdir, rename, unlink, rm } from 'node:fs/promises';
+import { resolve, dirname, basename } from 'node:path';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { CONFIG } from './config.js';
@@ -270,6 +270,153 @@ export async function handleViewerStateDeleteHistory(request, response, url) {
   }
 
   json(response, 200, { ok: true });
+}
+
+// --- Rename ---
+
+export async function handleRename(request, response) {
+  const body = await readBody(request);
+  if (!body) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Request body is required.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid JSON.');
+  }
+
+  const { path: filePath, newName } = parsed;
+
+  if (!filePath || typeof filePath !== 'string') {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'path is required.');
+  }
+  if (!newName || typeof newName !== 'string') {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'newName is required.');
+  }
+
+  // Reject names containing path separators
+  if (/[\/\\]/.test(newName)) {
+    return errorResponse(response, 400, 'INVALID_NAME', 'newName must not contain path separators.');
+  }
+
+  // Reject empty names or names with only dots/spaces
+  if (!newName.trim() || newName === '.' || newName === '..') {
+    return errorResponse(response, 400, 'INVALID_NAME', 'Invalid file name.');
+  }
+
+  // Validate source path
+  const srcValidation = validatePath(filePath, CONFIG.ROOT_PATH);
+  if (!srcValidation.valid) {
+    if (srcValidation.error === 'FORBIDDEN') {
+      return errorResponse(response, 403, 'FORBIDDEN', 'Path is outside the allowed root.');
+    }
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid path.');
+  }
+
+  const srcResolved = srcValidation.resolvedPath;
+
+  // Check source exists
+  let srcStats;
+  try {
+    srcStats = await stat(srcResolved);
+  } catch {
+    return errorResponse(response, 404, 'NOT_FOUND', 'File or directory not found.');
+  }
+
+  // Build destination path
+  const parentDir = dirname(srcResolved);
+  const destResolved = resolve(parentDir, newName);
+
+  // Validate destination path is within root
+  const destValidation = validatePath(destResolved, CONFIG.ROOT_PATH);
+  if (!destValidation.valid) {
+    if (destValidation.error === 'FORBIDDEN') {
+      return errorResponse(response, 403, 'FORBIDDEN', 'Destination is outside the allowed root.');
+    }
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid destination path.');
+  }
+
+  // Check destination does not already exist
+  try {
+    await stat(destResolved);
+    return errorResponse(response, 409, 'ALREADY_EXISTS', 'A file or directory with that name already exists.');
+  } catch {
+    // Good — destination does not exist
+  }
+
+  // Perform rename
+  try {
+    await rename(srcResolved, destResolved);
+  } catch (e) {
+    console.error(`[Rename] Failed: ${e.message}`);
+    return errorResponse(response, 500, 'INTERNAL_ERROR', 'Failed to rename.');
+  }
+
+  json(response, 200, { ok: true, path: destResolved });
+}
+
+// --- Delete ---
+
+export async function handleDelete(request, response) {
+  const body = await readBody(request);
+  if (!body) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Request body is required.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid JSON.');
+  }
+
+  const { paths } = parsed;
+
+  if (!Array.isArray(paths) || paths.length === 0) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'paths array is required.');
+  }
+
+  // Validate all paths first
+  const validatedPaths = [];
+  for (const p of paths) {
+    if (!p || typeof p !== 'string') {
+      return errorResponse(response, 400, 'INVALID_REQUEST', 'Each path must be a non-empty string.');
+    }
+    const validation = validatePath(p, CONFIG.ROOT_PATH);
+    if (!validation.valid) {
+      if (validation.error === 'FORBIDDEN') {
+        return errorResponse(response, 403, 'FORBIDDEN', `Path is outside the allowed root: ${p}`);
+      }
+      return errorResponse(response, 400, 'INVALID_REQUEST', `Invalid path: ${p}`);
+    }
+    validatedPaths.push(validation.resolvedPath);
+  }
+
+  // Delete each path
+  let deleted = 0;
+  const errors = [];
+  for (let i = 0; i < validatedPaths.length; i++) {
+    const resolved = validatedPaths[i];
+    try {
+      const s = await stat(resolved);
+      if (s.isDirectory()) {
+        await rm(resolved, { recursive: true, force: false });
+      } else {
+        await unlink(resolved);
+      }
+      deleted++;
+    } catch (e) {
+      errors.push({ path: paths[i], error: e.message });
+    }
+  }
+
+  if (errors.length > 0 && deleted === 0) {
+    return errorResponse(response, 500, 'DELETE_FAILED', 'Failed to delete items.');
+  }
+
+  json(response, 200, { ok: true, deleted, errors: errors.length > 0 ? errors : undefined });
 }
 
 // --- OpenCode Proxy ---

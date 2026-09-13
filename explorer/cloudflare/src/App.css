@@ -2412,4 +2412,235 @@
   50% { opacity: 0.5; }
 }
 
+/* ============================================================
+   Multi-select & File Operations
+   ============================================================ */
+
+/* Select checkbox column */
+.col-select {
+  text-align: center;
+}
+
+.file-row-main {
+  cursor: pointer;
+}
+
+.file-row-select {
+  cursor: pointer;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.file-select-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
+  background-color: var(--bg-main);
+  color: transparent;
+  transition: all 0.15s ease;
+}
+
+.file-select-checkbox:hover {
+  border-color: var(--accent);
+}
+
+.file-select-checkbox.checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.file-row.selected {
+  background-color: rgba(56, 139, 253, 0.1);
+}
+
+.file-row.selected:hover {
+  background-color: rgba(56, 139, 253, 0.15);
+}
+
+.file-row.highlighted {
+  background-color: rgba(56, 139, 253, 0.18);
+  border-left: 3px solid var(--accent);
+}
+
+.file-row.highlighted:hover {
+  background-color: rgba(56, 139, 253, 0.22);
+}
+
+/* Path bar menu button */
+.path-bar-menu-btn {
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+/* ============================================================
+   Context Action Menu
+   ============================================================ */
+
+.hp-context-menu {
+  position: fixed;
+  z-index: 1100;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  min-width: 160px;
+  padding: 4px 0;
+}
+
+.hp-context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.hp-context-menu-item:hover:not(.hp-context-menu-item--disabled) {
+  background-color: var(--bg-sub);
+}
+
+.hp-context-menu-item--disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ============================================================
+   Dialog (Rename / Delete Confirm)
+   ============================================================ */
+
+.hp-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.hp-dialog {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.hp-dialog-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.hp-dialog-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hp-dialog-body {
+  padding: 16px 20px;
+}
+
+.hp-dialog-input {
+  width: 100%;
+  padding: 8px 12px;
+  background-color: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--font-mono);
+  box-sizing: border-box;
+}
+
+.hp-dialog-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.hp-dialog-message {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.hp-dialog-message:last-child {
+  margin-bottom: 0;
+}
+
+.hp-dialog-message-warning {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.hp-dialog-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #f85149;
+  background-color: rgba(248, 81, 73, 0.1);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.hp-dialog-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  justify-content: flex-end;
+}
+
+.hp-dialog-btn {
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background-color: var(--bg-main);
+  color: var(--text);
+  transition: all 0.15s ease;
+}
+
+.hp-dialog-btn:hover:not(:disabled) {
+  background-color: var(--bg-sub);
+}
+
+.hp-dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hp-dialog-btn-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.hp-dialog-btn-primary:hover:not(:disabled) {
+  background-color: rgba(56, 139, 253, 0.1);
+}
+
+.hp-dialog-btn-danger {
+  border-color: rgba(248, 81, 73, 0.3);
+  color: #f85149;
+}
+
+.hp-dialog-btn-danger:hover:not(:disabled) {
+  background-color: rgba(248, 81, 73, 0.1);
+  border-color: #f85149;
+}
 

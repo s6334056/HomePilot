@@ -160,6 +160,26 @@ export class GatewayFileSystemService implements FileSystemService {
     }
   }
 
+  // ── Filesystem Operations ────────────────────────────────
+
+  async renameItem(path: string, newName: string): Promise<string> {
+    const res = await this.requestWithBody('POST', '/api/fs/rename', { path, newName });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || `Failed to rename: ${res.status}`);
+    }
+    return data.path;
+  }
+
+  async deleteItems(paths: string[]): Promise<{ deleted: number }> {
+    const res = await this.requestWithBody('POST', '/api/fs/delete', { paths });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || `Failed to delete: ${res.status}`);
+    }
+    return { deleted: data.deleted };
+  }
+
   private async request(endpoint: string, method: string = 'GET'): Promise<Response> {
     return fetch(`${this.baseUrl}${endpoint}`, {
       method,

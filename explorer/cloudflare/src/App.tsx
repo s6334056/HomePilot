@@ -10,6 +10,9 @@ import { FileViewer } from './components/FileViewer';
 import { HistoryPage } from './components/HistoryPage';
 import { AgentScreen } from './components/AgentScreen';
 import { SettingsModal } from './components/SettingsModal';
+import { RenameDialog } from './components/RenameDialog';
+import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
+import { ContextActionMenu, ContextActionMenuItem } from './components/ContextActionMenu';
 import { G2RuntimeManager, G2RuntimeState } from './hud/g2-runtime';
 import { addToHistory } from './services/ViewerHistoryStore';
 import './App.css';
@@ -45,9 +48,25 @@ export function App() {
     isGatewayService(fileService) ? '' : '/home'
   );
   const [items, setItems] = useState<FileSystemItem[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<FileSystemItem | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
+
+  // Return highlight (temporary highlight when navigating back)
+  const [highlightPath, setHighlightPath] = useState<string | null>(null);
+
+  // Action menu state
+  const [showActionMenu, setShowActionMenu] = useState<boolean>(false);
+  const [actionMenuTriggerRect, setActionMenuTriggerRect] = useState<DOMRect | null>(null);
+
+  // Rename dialog state
+  const [showRenameDialog, setShowRenameDialog] = useState<boolean>(false);
+  const [renameTarget, setRenameTarget] = useState<FileSystemItem | null>(null);
+  const [renameError, setRenameError] = useState<string>('');
+
+  // Delete dialog state
+  const [showDeleteDialog, setShowDeleteDialog] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   // Screen state
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('explorer');
@@ -101,7 +120,8 @@ export function App() {
 
   // Build Live Context from current Explorer state (PWA only — called at message send time)
   const buildLiveContext = (): AgentContext => {
-    const item = items[selectedIndex] || null;
+    const firstPath = selectedPaths.values().next().value;
+    const item = firstPath ? items.find((i) => i.path === firstPath) || null : null;
     return {
       currentPath: explorerPath,
       selectedItem: item,
@@ -148,6 +168,20 @@ export function App() {
     init();
   }, [fileService, g2Runtime]);
 
+  // ── Return Highlight Scroll ─────────────────────────────
+  useEffect(() => {
+    if (!highlightPath || currentScreen !== 'explorer') return;
+
+    const frame = requestAnimationFrame(() => {
+      const row = document.querySelector(`.file-row[data-path="${CSS.escape(highlightPath)}"]`);
+      if (row) {
+        row.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [highlightPath, currentScreen, items]);
+
   // ── G2 Runtime ────────────────────────────────────────────
 
   const handleStartG2Runtime = useCallback(async () => {
@@ -168,7 +202,7 @@ export function App() {
   // ── PWA Navigation (independent of G2) ────────────────────
 
   // Internal navigate (no history management)
-  const navigateToPath = async (path: string, restoreIndex?: number) => {
+  const navigateToPath = async (path: string) => {
     const newService = fileService;
     const rootPath = isGatewayService(newService)
       ? (newService as GatewayFileSystemService).getRootPath()
@@ -178,18 +212,15 @@ export function App() {
     setExplorerPath(resolvedPath);
     setCurrentScreen('explorer');
     setSelectedFile(null);
+    setSelectedPaths(new Set());
 
     // Load directory for PWA display
     try {
       const loadedItems = await newService.getDirectory(resolvedPath);
       setItems(loadedItems);
-      setSelectedIndex(restoreIndex != null
-        ? Math.max(0, Math.min(restoreIndex, loadedItems.length - 1))
-        : 0);
     } catch (e) {
       console.error('[App] Failed to load directory:', e);
       setItems([]);
-      setSelectedIndex(0);
     }
   };
 
@@ -216,33 +247,133 @@ export function App() {
         // FileViewer opened from History → go back to History
         setCurrentScreen('history');
       } else if (selectedFile) {
-        // FileViewer opened from Explorer → navigate to parent and select file by name
-        const fileName = selectedFile.name;
+        // FileViewer opened from Explorer → navigate to parent
         const parentPath = fileService.getParentPath(selectedFile.path);
-        const parentItems = await fileService.getDirectory(parentPath);
-        const idx = parentItems.findIndex(item => item.name === fileName);
-        const restoreIndex = idx >= 0 ? idx : 0;
-        await navigateToPath(parentPath, restoreIndex);
+        setHighlightPath(selectedFile.path);
+        await navigateToPath(parentPath);
       }
     } else if (currentScreen === 'history') {
       setReturnPage(historyReturnPageRef.current);
       setCurrentScreen(historyReturnScreenRef.current);
     } else {
-      // Explorer: navigate to parent and select current folder by name
-      const currentName = explorerPath.split(/[\/\\]/).pop() || '';
+      // Explorer: navigate to parent
       const parentPath = fileService.getParentPath(explorerPath);
       if (parentPath !== explorerPath) {
-        const parentItems = await fileService.getDirectory(parentPath);
-        const idx = parentItems.findIndex(item => item.name === currentName);
-        const restoreIndex = idx >= 0 ? idx : 0;
-        await navigateToPath(parentPath, restoreIndex);
+        setHighlightPath(explorerPath);
+        await navigateToPath(parentPath);
       }
     }
   };
 
   const handleExplorerReload = async () => {
+    setHighlightPath(null);
     await navigateToPath(explorerPath);
   };
+
+  // ── Multi-select handlers ────────────────────────────────
+
+  const handleToggleSelect = useCallback((path: string) => {
+    setHighlightPath(null);
+    setSelectedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  // ── Action Menu ──────────────────────────────────────────
+
+  const handleOpenActionMenu = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setHighlightPath(null);
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setActionMenuTriggerRect(rect);
+    setShowActionMenu(true);
+  }, []);
+
+  const handleCloseActionMenu = useCallback(() => {
+    setShowActionMenu(false);
+    setActionMenuTriggerRect(null);
+  }, []);
+
+  const selectedCount = selectedPaths.size;
+  const selectedItems = items.filter((i) => selectedPaths.has(i.path));
+  const hasSelectedFolders = selectedItems.some((i) => i.type === 'directory');
+  const canRename = selectedCount === 1;
+  const canDelete = selectedCount >= 1;
+
+  const actionMenuItems: ContextActionMenuItem[] = [
+    {
+      label: '名前を変更',
+      disabled: !canRename,
+      onClick: () => {
+        const target = selectedItems[0];
+        if (target) {
+          setRenameTarget(target);
+          setRenameError('');
+          setShowRenameDialog(true);
+        }
+      },
+    },
+    {
+      label: '削除',
+      disabled: !canDelete,
+      onClick: () => {
+        setShowDeleteDialog(true);
+      },
+    },
+  ];
+
+  // ── Rename ───────────────────────────────────────────────
+
+  const handleRenameConfirm = useCallback(async (newName: string) => {
+    if (!renameTarget) return;
+    try {
+      await fileService.renameItem(renameTarget.path, newName);
+      setShowRenameDialog(false);
+      setRenameTarget(null);
+      setSelectedPaths(new Set());
+      setHighlightPath(null);
+      await navigateToPath(explorerPath);
+    } catch (e: any) {
+      setRenameError(e.message || '名前の変更に失敗しました。');
+    }
+  }, [renameTarget, fileService, explorerPath]);
+
+  const handleRenameCancel = useCallback(() => {
+    setShowRenameDialog(false);
+    setRenameTarget(null);
+    setRenameError('');
+  }, []);
+
+  // ── Delete ───────────────────────────────────────────────
+
+  const handleDeleteConfirm = useCallback(async () => {
+    const paths = Array.from(selectedPaths);
+    if (paths.length === 0) return;
+    setIsDeleting(true);
+    try {
+      await fileService.deleteItems(paths);
+      setShowDeleteDialog(false);
+      setSelectedPaths(new Set());
+      setHighlightPath(null);
+      await navigateToPath(explorerPath);
+    } catch (e: any) {
+      alert(`削除に失敗しました: ${e.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [selectedPaths, fileService, explorerPath]);
+
+  const handleDeleteCancel = useCallback(() => {
+    if (!isDeleting) {
+      setShowDeleteDialog(false);
+    }
+  }, [isDeleting]);
 
   // Folder click from FileTable
   const handleOpenDirectory = async (path: string, _index: number) => {
@@ -350,16 +481,15 @@ export function App() {
     setExplorerPath(rootPath);
     setCurrentScreen('explorer');
     setSelectedFile(null);
+    setSelectedPaths(new Set());
 
     // Load initial directory for PWA display
     try {
       const loadedItems = await newService.getDirectory(rootPath);
       setItems(loadedItems);
-      setSelectedIndex(0);
     } catch (e) {
       console.error('[App] Failed to load directory after reconnect:', e);
       setItems([]);
-      setSelectedIndex(0);
     }
   }, []);
 
@@ -401,6 +531,7 @@ export function App() {
           historyReturnPageRef.current = returnPage;
           setCurrentScreen('history');
         }}
+        onOpenActionMenu={currentScreen === 'explorer' ? handleOpenActionMenu : undefined}
       />
 
       <div className="main-content-container">
@@ -408,12 +539,14 @@ export function App() {
           {currentScreen === 'explorer' && (
             <FileTable
               items={items}
-              selectedIndex={selectedIndex}
-              onSelectItem={(idx) => {
-                setSelectedIndex(idx);
+              selectedPaths={selectedPaths}
+              highlightPath={highlightPath}
+              onSelectItem={() => {
+                // No-op: selection is now via toggle; item click opens/navigates
               }}
               onOpenDirectory={handleOpenDirectory}
               onOpenFile={handleOpenFile}
+              onToggleSelect={handleToggleSelect}
             />
           )}
 
@@ -494,6 +627,33 @@ export function App() {
         g2RuntimeState={g2RuntimeState}
         onStartG2Runtime={handleStartG2Runtime}
         onStopG2Runtime={handleStopG2Runtime}
+      />
+
+      {/* Context Action Menu */}
+      <ContextActionMenu
+        isOpen={showActionMenu}
+        items={actionMenuItems}
+        onClose={handleCloseActionMenu}
+        triggerRect={actionMenuTriggerRect}
+      />
+
+      {/* Rename Dialog */}
+      <RenameDialog
+        isOpen={showRenameDialog}
+        currentName={renameTarget?.name || ''}
+        onConfirm={handleRenameConfirm}
+        onCancel={handleRenameCancel}
+        error={renameError}
+      />
+
+      {/* Delete Confirm Dialog */}
+      <DeleteConfirmDialog
+        isOpen={showDeleteDialog}
+        count={selectedCount}
+        hasFolders={hasSelectedFolders}
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+        isDeleting={isDeleting}
       />
 
       {/* G2 Runtime Active Modal */}

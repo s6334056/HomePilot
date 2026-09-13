@@ -10,4 +10,6 @@ export interface FileSystemService {
   getItem(path: string): Promise<FileSystemItem | null>;
   getParentPath(path: string): string;
   getRootPath(): string;
+  renameItem(path: string, newName: string): Promise<string>;
+  deleteItems(paths: string[]): Promise<{ deleted: number }>;
 }

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ArrowLeft, RefreshCw, Settings, Bot, FolderOpen, ArrowLeftRight } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Settings, Bot, FolderOpen, ArrowLeftRight, MoreVertical } from 'lucide-react';
 import { truncatePath, computeHeadTailPath } from '../utils/pathUtils';
 
 export type NavbarMode = 'explorer' | 'agent';
@@ -23,6 +23,7 @@ interface ExplorerNavbarProps extends NavbarBaseProps {
   onOpenSettings: () => void;
   onOpenAgent: () => void;
   onPathBarClick?: () => void;
+  onOpenActionMenu?: (e: React.MouseEvent) => void;
 }
 
 interface AgentNavbarProps extends NavbarBaseProps {
@@ -71,7 +72,8 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
         + parseFloat(getComputedStyle(badgeEl).marginRight || '0')
       : 0;
 
-    const available = innerWidth - badgeWidth;
+    const menuBtnWidth = props.mode === 'explorer' ? 32 : 0;
+    const available = innerWidth - badgeWidth - menuBtnWidth;
     if (available <= 0) {
       setDisplayPath(truncatePath(props.currentPath));
       return;
@@ -135,6 +137,15 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
           >
             {displayPath}
           </span>
+          {props.mode === 'explorer' && props.onOpenActionMenu && (
+            <button
+              className="btn-icon path-bar-menu-btn"
+              onClick={props.onOpenActionMenu}
+              title="Actions"
+            >
+              <MoreVertical size={16} />
+            </button>
+          )}
         </nav>
       </div>
     );

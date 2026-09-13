@@ -4,6 +4,7 @@ import { generateToken, verifyToken } from './token.js';
 import {
   json, noContent, errorResponse,
   handleHealth, handleRoot, handleDirectory, handleFile,
+  handleRename, handleDelete,
   handleOpenCodeProxy, handleOpenCodeProxyBody,
   handleViewerStateGet, handleViewerStatePatchPosition,
   handleViewerStatePatchHistory, handleViewerStateDeleteHistory,
@@ -129,6 +130,27 @@ const server = createServer(async (request, response) => {
       return handleViewerStateDeleteHistory(request, response, url);
     }
     return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only PATCH and DELETE are allowed on /api/viewer-state/history.');
+  }
+
+  // --- Filesystem Operations ---
+  if (path === '/api/fs/rename') {
+    if (!verifyToken(requestToken, token)) {
+      return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+    if (request.method !== 'POST') {
+      return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed.');
+    }
+    return handleRename(request, response);
+  }
+
+  if (path === '/api/fs/delete') {
+    if (!verifyToken(requestToken, token)) {
+      return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+    if (request.method !== 'POST') {
+      return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed.');
+    }
+    return handleDelete(request, response);
   }
 
   // --- OpenCode Proxy ---
