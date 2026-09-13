@@ -1,5 +1,5 @@
 import { FileSystemItem, SharedViewerState } from '../domain/types';
-import { FileSystemService } from './FileSystemService';
+import { FileSystemService, UploadItem, UploadResult } from './FileSystemService';
 
 export class GatewayFileSystemService implements FileSystemService {
   private baseUrl: string;
@@ -206,6 +206,61 @@ export class GatewayFileSystemService implements FileSystemService {
       throw new Error(data.error?.message || `Failed to download: ${res.status}`);
     }
     return { blob: await res.blob() };
+  }
+
+  async uploadItems(
+    parentPath: string,
+    files: UploadItem[],
+    onProgress?: (loaded: number, total: number) => void,
+    signal?: AbortSignal,
+  ): Promise<UploadResult> {
+    const formData = new FormData();
+    formData.append('destPath', parentPath);
+
+    for (const item of files) {
+      formData.append('files', item.file, item.relativePath);
+    }
+
+    return new Promise<UploadResult>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(
+        'POST',
+        `${this.baseUrl}/api/fs/upload?token=${encodeURIComponent(this.token)}`,
+      );
+
+      if (signal) {
+        if (signal.aborted) {
+          xhr.abort();
+          reject(new DOMException('Aborted', 'AbortError'));
+          return;
+        }
+        signal.addEventListener('abort', () => xhr.abort(), { once: true });
+      }
+
+      xhr.upload.onprogress = (e) => {
+        if (onProgress && e.lengthComputable) {
+          onProgress(e.loaded, e.total);
+        }
+      };
+
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve({ uploaded: data.uploaded || 0, errors: data.errors || [] });
+          } else {
+            reject(new Error(data.error?.message || `Upload failed: ${xhr.status}`));
+          }
+        } catch {
+          reject(new Error(`Upload failed: ${xhr.status}`));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('Upload failed: network error'));
+      xhr.onabort = () => reject(new DOMException('Aborted', 'AbortError'));
+
+      xhr.send(formData);
+    });
   }
 
   private async request(endpoint: string, method: string = 'GET'): Promise<Response> {

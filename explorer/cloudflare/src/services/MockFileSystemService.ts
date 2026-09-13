@@ -1,5 +1,5 @@
 import { FileSystemItem } from '../domain/types';
-import { FileSystemService } from './FileSystemService';
+import { FileSystemService, UploadItem, UploadResult } from './FileSystemService';
 import { MOCK_FILE_SYSTEM_ROOT, MockFileSystemNode } from '../domain/mockData';
 
 export class MockFileSystemService implements FileSystemService {
@@ -143,5 +143,15 @@ export class MockFileSystemService implements FileSystemService {
 
   public async downloadItems(_paths: string[], _hasDirectory: boolean): Promise<{ blob?: Blob; url?: string }> {
     return {};
+  }
+
+  public async uploadItems(
+    _parentPath: string,
+    files: UploadItem[],
+    _onProgress?: (loaded: number, total: number) => void,
+    _signal?: AbortSignal,
+  ): Promise<UploadResult> {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    return { uploaded: files.length, errors: [] };
   }
 }

@@ -13,6 +13,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { RenameDialog } from './components/RenameDialog';
 import { CreateFolderDialog } from './components/CreateFolderDialog';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
+import { UploadDialog } from './components/UploadDialog';
 import { ContextActionMenu, ContextActionMenuItem } from './components/ContextActionMenu';
 import { Toast } from './components/Toast';
 import { G2RuntimeManager, G2RuntimeState } from './hud/g2-runtime';
@@ -74,6 +75,9 @@ export function App() {
   const [showCreateFolderDialog, setShowCreateFolderDialog] = useState<boolean>(false);
   const [createFolderError, setCreateFolderError] = useState<string>('');
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
+
+  // Upload dialog state
+  const [showUploadDialog, setShowUploadDialog] = useState<boolean>(false);
 
   // Explorer Ready state
   const [isExplorerReady, setIsExplorerReady] = useState<boolean>(false);
@@ -340,6 +344,13 @@ export function App() {
       },
     },
     {
+      label: 'アップロード',
+      disabled: !isExplorerReady,
+      onClick: () => {
+        setShowUploadDialog(true);
+      },
+    },
+    {
       label: 'ダウンロード',
       disabled: !isExplorerReady || selectedCount === 0,
       onClick: () => {
@@ -439,6 +450,14 @@ export function App() {
       setShowDeleteDialog(false);
     }
   }, [isDeleting]);
+
+  // ── Upload ───────────────────────────────────────────────
+
+  const handleUploadComplete = useCallback(async () => {
+    setShowUploadDialog(false);
+    setToast({ message: 'アップロードを完了しました' });
+    await navigateToPath(explorerPath);
+  }, [explorerPath]);
 
   // ── Download ──────────────────────────────────────────────
 
@@ -773,6 +792,15 @@ export function App() {
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
         isDeleting={isDeleting}
+      />
+
+      {/* Upload Dialog */}
+      <UploadDialog
+        isOpen={showUploadDialog}
+        fileService={fileService}
+        currentPath={explorerPath}
+        onComplete={handleUploadComplete}
+        onCancel={() => setShowUploadDialog(false)}
       />
 
       {/* G2 Runtime Active Modal */}

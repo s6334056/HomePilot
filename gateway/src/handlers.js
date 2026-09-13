@@ -1,8 +1,11 @@
 import { readdir, stat, readFile, writeFile, mkdir, rename, unlink, rm } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
-import { resolve, dirname, basename } from 'node:path';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { resolve, dirname, basename, join, normalize, relative, extname } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
+import { pipeline } from 'node:stream/promises';
+import Busboy from 'busboy';
 import archiver from 'archiver';
 import { CONFIG } from './config.js';
 import { validatePath, isTextFile } from './pathValidator.js';
@@ -642,6 +645,156 @@ export async function handleDownloadPost(request, response) {
   }
 
   archive.finalize();
+}
+
+// --- Upload ---
+
+function isPathSafe(relativePath) {
+  if (!relativePath || typeof relativePath !== 'string') return false;
+  const normalized = normalize(relativePath);
+  if (normalized.startsWith('..') || normalized === '.' || normalized === '') return false;
+  if (/^([A-Z]:|\\\\)/i.test(normalized)) return false;
+  return true;
+}
+
+async function getUniqueName(destDir, name) {
+  const ext = extname(name);
+  const base = ext ? name.slice(0, -ext.length) : name;
+
+  let candidate = name;
+  let i = 2;
+  while (true) {
+    try {
+      await stat(join(destDir, candidate));
+      candidate = `${base} (${i})${ext}`;
+      i++;
+    } catch {
+      return candidate;
+    }
+  }
+}
+
+export async function handleUpload(request, response) {
+  const contentType = request.headers['content-type'] || '';
+  if (!contentType.includes('multipart/form-data')) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Content-Type must be multipart/form-data.');
+  }
+
+  let busboyInstance;
+  try {
+    busboyInstance = Busboy({ headers: request.headers, limits: { fileSize: Infinity, files: 100 } });
+  } catch {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid multipart data.');
+  }
+
+  const destPath = busboyInstance.fields['destPath'];
+  if (!destPath || typeof destPath !== 'string') {
+    busboyInstance.destroy();
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'destPath is required.');
+  }
+
+  const destValidation = validatePath(destPath, CONFIG.ROOT_PATH);
+  if (!destValidation.valid) {
+    busboyInstance.destroy();
+    if (destValidation.error === 'FORBIDDEN') {
+      return errorResponse(response, 403, 'FORBIDDEN', 'Destination is outside the allowed root.');
+    }
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid destination path.');
+  }
+
+  const destResolved = destValidation.resolvedPath;
+
+  let destStat;
+  try {
+    destStat = await stat(destResolved);
+    if (!destStat.isDirectory()) {
+      busboyInstance.destroy();
+      return errorResponse(response, 400, 'INVALID_REQUEST', 'Destination is not a directory.');
+    }
+  } catch {
+    busboyInstance.destroy();
+    return errorResponse(response, 404, 'NOT_FOUND', 'Destination directory not found.');
+  }
+
+  const tmpDir = join(destResolved, '.hp_uploads');
+  try { await mkdir(tmpDir, { recursive: true }); } catch { /* may exist */ }
+
+  const files = [];
+  const tmpFiles = [];
+  let uploadError = null;
+
+  busboyInstance.on('file', (fieldname, fileStream, info) => {
+    const filename = info.filename || 'unnamed';
+    const relativePath = filename;
+
+    if (!isPathSafe(relativePath)) {
+      fileStream.resume();
+      uploadError = `Invalid path: ${relativePath}`;
+      return;
+    }
+
+    const targetDir = join(destResolved, dirname(relativePath));
+    const tmpName = `.upload_tmp_${randomUUID()}`;
+    const tmpPath = join(tmpDir, tmpName);
+    const finalName = filename;
+
+    fileStream.on('limit', () => {
+      uploadError = `File too large: ${filename}`;
+    });
+
+    const writeStream = createWriteStream(tmpPath);
+    tmpFiles.push(tmpPath);
+
+    fileStream.pipe(writeStream);
+
+    writeStream.on('finish', () => {
+      files.push({ tmpPath, finalPath, targetDir, finalName, relativePath });
+    });
+
+    writeStream.on('error', (err) => {
+      uploadError = `Write error: ${err.message}`;
+    });
+
+    fileStream.on('error', (err) => {
+      uploadError = `Stream error: ${err.message}`;
+    });
+  });
+
+  busboyInstance.on('error', (err) => {
+    uploadError = `Parse error: ${err.message}`;
+  });
+
+  busboyInstance.on('finish', async () => {
+    if (uploadError) {
+      for (const tmp of tmpFiles) {
+        try { await unlink(tmp); } catch { /* ignore */ }
+      }
+      try { await rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return errorResponse(response, 500, 'UPLOAD_FAILED', uploadError);
+    }
+
+    let uploaded = 0;
+    const errors = [];
+
+    for (const f of files) {
+      try {
+        await mkdir(f.targetDir, { recursive: true });
+        const uniqueName = await getUniqueName(f.targetDir, f.finalName);
+        const uniqueFinalPath = join(f.targetDir, uniqueName);
+        await rename(f.tmpPath, uniqueFinalPath);
+        uploaded++;
+      } catch (e) {
+        errors.push({ path: f.relativePath, error: e.message });
+        try { await unlink(f.tmpPath); } catch { /* ignore */ }
+      }
+    }
+
+    try { await rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+
+    json(response, 200, { ok: true, uploaded, errors: errors.length > 0 ? errors : undefined });
+  });
+
+  request.pipe(busboyInstance);
 }
 
 // --- OpenCode Proxy ---
