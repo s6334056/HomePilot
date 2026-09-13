@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, Send, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2, Square } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Plus, Mic, Send, AlertCircle, Loader2, Archive, ArchiveRestore, Trash2, Square, Copy, Check } from 'lucide-react';
 import { OpenCodeSessionInfo, OpenCodeProviderModel, AgentContext } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -44,6 +44,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const [modelError, setModelError] = useState<string | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState<boolean>(false);
   const [sessionCreateError, setSessionCreateError] = useState<string | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const lastSelectedModelIndexRef = useRef<number>(0);
   const modelListRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -299,6 +300,16 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       return next;
     });
   };
+
+  const handleCopyMessage = useCallback(async (msgId: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMessageId(msgId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch {
+      // Silently fail - clipboard API may not be available
+    }
+  }, []);
 
   const formatSessionTitle = (session: OpenCodeSessionInfo): string => {
     if (session.title && session.title.trim()) {
@@ -973,11 +984,26 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 <div className="agent-message-content">
                   {renderMessageContent(msg)}
                 </div>
-                {(createdTime || (isAssistant && durationMs !== undefined)) && (
-                  <div className="agent-message-timestamp">
-                    {createdTime && formatDateTime(createdTime)}
-                    {isAssistant && durationMs !== undefined && createdTime && (
-                      <span className="agent-message-duration"> · {formatDuration(durationMs)}</span>
+                {(createdTime || (isAssistant && durationMs !== undefined) || (msg.contentText && !msg.id.startsWith('temp-assistant-'))) && (
+                  <div className="agent-message-footer">
+                    <div className="agent-message-timestamp">
+                      {createdTime && formatDateTime(createdTime)}
+                      {isAssistant && durationMs !== undefined && createdTime && (
+                        <span className="agent-message-duration"> · {formatDuration(durationMs)}</span>
+                      )}
+                    </div>
+                    {msg.contentText && !msg.id.startsWith('temp-assistant-') && (
+                      <button
+                        className="agent-message-copy-btn"
+                        onClick={() => handleCopyMessage(msg.id, msg.contentText)}
+                        title="Copy message"
+                      >
+                        {copiedMessageId === msg.id ? (
+                          <Check size={13} />
+                        ) : (
+                          <Copy size={13} />
+                        )}
+                      </button>
                     )}
                   </div>
                 )}

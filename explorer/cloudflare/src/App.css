@@ -1207,10 +1207,48 @@
   background-color: var(--bg-card);
 }
 
+.agent-message-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+}
+
 .agent-message-timestamp {
   font-size: 11px;
   color: var(--text-dim);
-  padding: 0 16px;
+}
+
+.agent-message-copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.agent-message:hover .agent-message-copy-btn {
+  opacity: 1;
+}
+
+.agent-message-copy-btn:hover {
+  color: var(--text);
+}
+
+.agent-message-copy-btn:active {
+  transform: scale(0.95);
+}
+
+@media (hover: none) {
+  .agent-message-copy-btn {
+    opacity: 1;
+  }
 }
 
 .agent-message-duration {
