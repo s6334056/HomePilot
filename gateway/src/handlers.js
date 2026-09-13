@@ -1071,6 +1071,65 @@ export async function handleUpload(request, response) {
 
 
 
+
+
+      // Resolve unique names for top-level upload entries.
+      // A folder upload must not merge into an existing folder.
+      const topLevelNameMap = new Map();
+      const reservedTopLevelNames = new Set();
+
+      const getUniqueTopLevelName = async (name) => {
+        const ext = extname(name);
+        const base = ext ? name.slice(0, -ext.length) : name;
+
+        let candidate = name;
+        let index = 2;
+
+        while (true) {
+          let existsOnDisk = false;
+
+          try {
+            await stat(join(destResolved, candidate));
+            existsOnDisk = true;
+          } catch {
+            // Does not exist.
+          }
+
+          if (!existsOnDisk && !reservedTopLevelNames.has(candidate)) {
+            reservedTopLevelNames.add(candidate);
+            return candidate;
+          }
+
+          candidate = `${base} (${index})${ext}`;
+          index++;
+        }
+      };
+
+
+
+      for (const file of files) {
+        const parts = file.relativePath.split(/[\\/]+/).filter(Boolean);
+
+        if (parts.length === 0) {
+          uploadError = `Invalid relative path for file: ${file.filename}`;
+          break;
+        }
+
+        const topLevelName = parts[0];
+
+        if (!topLevelNameMap.has(topLevelName)) {
+          const uniqueTopLevelName =
+            await getUniqueTopLevelName(topLevelName);
+
+          topLevelNameMap.set(
+            topLevelName,
+            uniqueTopLevelName,
+          );
+        }
+      }
+
+
+
       // Validate destination only after Busboy has delivered the fields.
       if (!destPath || typeof destPath !== 'string') {
         uploadError = 'destPath is required.';
@@ -1133,14 +1192,72 @@ export async function handleUpload(request, response) {
 
       for (const file of files) {
         try {
+
+
+
+          // const relativePath = file.relativePath;
+
+          // const targetDir = join(
+          //   destResolved,
+          //   dirname(relativePath),
+          // );
+
+          // const finalName = basename(relativePath);
+
+          // await mkdir(targetDir, { recursive: true });
+
+          // const uniqueName = await getUniqueName(
+          //   targetDir,
+          //   finalName,
+          // );
+
+          // const uniqueFinalPath = join(
+          //   targetDir,
+          //   uniqueName,
+          // );
+
+          // await rename(
+          //   file.tmpPath,
+          //   uniqueFinalPath,
+          // );
+
+
+
           const relativePath = file.relativePath;
+          const parts = relativePath
+            .split(/[\\/]+/)
+            .filter(Boolean);
 
-          const targetDir = join(
-            destResolved,
-            dirname(relativePath),
-          );
+          const topLevelName = parts[0];
+          const mappedTopLevelName =
+            topLevelNameMap.get(topLevelName);
 
-          const finalName = basename(relativePath);
+          if (!mappedTopLevelName) {
+            throw new Error(
+              `Top-level upload name was not resolved: ${topLevelName}`,
+            );
+          }
+
+          const remainingParts = parts.slice(1);
+
+          let targetDir;
+          let finalName;
+
+          if (remainingParts.length === 0) {
+            // Single file directly under the upload destination.
+            targetDir = destResolved;
+            finalName = mappedTopLevelName;
+          } else {
+            // Replace only the top-level folder name.
+            targetDir = join(
+              destResolved,
+              mappedTopLevelName,
+              ...remainingParts.slice(0, -1),
+            );
+
+            finalName =
+              remainingParts[remainingParts.length - 1];
+          }
 
           await mkdir(targetDir, { recursive: true });
 
@@ -1158,6 +1275,8 @@ export async function handleUpload(request, response) {
             file.tmpPath,
             uniqueFinalPath,
           );
+
+
 
           uploaded++;
         } catch (e) {
