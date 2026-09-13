@@ -1,7 +1,6 @@
 import {
   OpenCodeSessionInfo,
   OpenCodeProviderModel,
-  OpenCodeQuestionRequest,
   AgentContext,
 } from '../../domain/types';
 import { OpenCodeClient } from '../../services/OpenCodeClient';
@@ -167,6 +166,7 @@ export class G2AgentController {
     }
 
     await this.fetchPendingQuestions();
+    await this.fetchPendingPermissions();
   }
 
   async fetchPendingQuestions(): Promise<void> {
@@ -179,6 +179,16 @@ export class G2AgentController {
     }
   }
 
+  async fetchPendingPermissions(): Promise<void> {
+    if (!this.client) return;
+    try {
+      const pendingPermissions = await this.client.getPendingPermissions();
+      this.updateState({ pendingPermissions });
+    } catch {
+      // Non-critical: pending permissions failure should not break agent chat
+    }
+  }
+
   async respondQuestion(questionID: string, answer: string | string[]): Promise<void> {
     if (!this.client) return;
     try {
@@ -188,6 +198,19 @@ export class G2AgentController {
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to respond to question';
+      this.updateState({ error: msg });
+    }
+  }
+
+  async respondPermission(permissionID: string, response: 'grant' | 'deny' | 'always'): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.respondPermission(permissionID, response);
+      this.updateState({
+        pendingPermissions: this.state.pendingPermissions.filter((p) => p.id !== permissionID),
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to respond to permission';
       this.updateState({ error: msg });
     }
   }
@@ -273,6 +296,7 @@ export class G2AgentController {
       this.updateState({ messages });
       this.checkAndClearProcessing(sessionID, messages);
       await this.fetchPendingQuestions();
+      await this.fetchPendingPermissions();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to send message';
       // Do NOT clear persistent processing entry here.

@@ -2,7 +2,7 @@ import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../../page-manager";
 import { G2AgentController } from "../g2-agent-controller";
 import { OpenCodeMessageWithParts } from "../message-mapper";
-import { AgentContext, OpenCodeQuestionRequest } from "../../../domain/types";
+import { AgentContext, OpenCodeQuestionRequest, OpenCodePermissionRequest } from "../../../domain/types";
 import { ExplorerPage } from "../../pages/explorer-page";
 import { FileViewerPage } from "../../pages/file-viewer-page";
 
@@ -68,6 +68,7 @@ export class AgentChatPage extends BasePage {
   private questionSelectedIndex: number = 0;
   private questionMultipleSelected: Set<string> = new Set();
   private customSources: Set<string> = new Set();
+  private permissionSelectedIndex: number = 0;
 
   constructor(
     controller: G2AgentController,
@@ -102,6 +103,9 @@ export class AgentChatPage extends BasePage {
         if (this.scrollToBottomAfterSend) {
           this.scrollToBottomAfterSend = false;
           this.scrollLine = Math.max(0, this.wrappedLines.length - CHAT_MAX_LINES);
+        }
+        if (state.selectedSessionID && state.pendingPermissions.some((p) => p.sessionID === state.selectedSessionID)) {
+          this.permissionSelectedIndex = 0;
         }
         this.renderPage();
       }
@@ -340,20 +344,10 @@ export class AgentChatPage extends BasePage {
     const GAP_AFTER_QUESTION = 1;
     const optionsTotal = TOTAL_ITEMS * OPTION_LINES;
     const descBudget = Math.max(0, MAX_LINES - guideAndGap - GAP_AFTER_QUESTION - optionsTotal);
-    const headerLines = q.header ? 1 : 0;
-    const gapAfterHeader = q.header ? 1 : 0;
-    const questionBudget = Math.max(0, MAX_LINES - guideAndGap - GAP_AFTER_QUESTION - optionsTotal - headerLines - gapAfterHeader);
+    const questionBudget = Math.max(0, MAX_LINES - guideAndGap - GAP_AFTER_QUESTION - optionsTotal);
 
     const lines: string[] = [];
     let lineCount = 0;
-
-    if (q.header) {
-      const bracketWidth = this.getStringWidth('[]');
-      const maxW = CHAT_MAX_WIDTH - bracketWidth;
-      lines.push(`[${this.truncateText(q.header, maxW)}]`);
-      lines.push("");
-      lineCount += 2;
-    }
 
     if (q.question && questionBudget > 0) {
       const qLines = this.wrapLine(q.question, CHAT_MAX_WIDTH);
@@ -435,7 +429,10 @@ export class AgentChatPage extends BasePage {
       lineCount++;
     }
 
-    lines.push("Tap: Select  Double: Skip");
+    const guideLine = q.custom !== false
+      ? "Tap: Select  Double: Skip  Long: Voice"
+      : "Tap: Select  Double: Skip";
+    lines.push(guideLine);
 
     return lines.join("\n");
   }
@@ -443,10 +440,11 @@ export class AgentChatPage extends BasePage {
   public render(): PageRenderResult {
     const state = this.controller.getState();
     const voiceState = state.voiceState;
-    const pendingQuestions = state.pendingQuestions;
+    const currentQuestion = this.getCurrentSessionQuestion();
     const qvConfirm = state.questionVoiceConfirm;
-    const isQuestionMode = pendingQuestions.length > 0 && voiceState === 'idle';
-    const isQuestionVoice = pendingQuestions.length > 0 && qvConfirm && voiceState !== 'idle';
+    const isQuestionMode = currentQuestion !== null && voiceState === 'idle';
+    const isQuestionVoice = currentQuestion !== null && qvConfirm && voiceState !== 'idle';
+    const isPermissionMode = this.isPermissionMode();
 
     const headerProp = new TextContainerProperty({
       containerID: 1,
@@ -458,14 +456,21 @@ export class AgentChatPage extends BasePage {
             CHAT_MAX_WIDTH,
             "[Question]",
           )
-        : voiceState !== 'idle'
-          ? "[Voice Input]"
-          : this.buildHeaderLine(
+        : isPermissionMode
+          ? this.buildHeaderLine(
               this.currentPath || "Chat",
               "",
               CHAT_MAX_WIDTH,
-              `[${this.modelName}]`,
-            ),
+              "[Permission]",
+            )
+          : voiceState !== 'idle'
+            ? "[Voice Input]"
+            : this.buildHeaderLine(
+                this.currentPath || "Chat",
+                "",
+                CHAT_MAX_WIDTH,
+                `[${this.modelName}]`,
+              ),
       xPosition: 4,
       yPosition: 2,
       width: 572,
@@ -476,8 +481,17 @@ export class AgentChatPage extends BasePage {
 
     let bodyContent: string;
 
-    if (isQuestionMode) {
-      bodyContent = this.buildQuestionBody(pendingQuestions[0]);
+    if (isPermissionMode) {
+      const perm = this.getCurrentSessionPermission();
+      if (perm) {
+        bodyContent = this.buildPermissionBody(perm);
+      } else {
+        bodyContent = this.wrappedLines.length > 0
+          ? this.wrappedLines.slice(this.scrollLine, Math.min(this.scrollLine + CHAT_MAX_LINES, this.wrappedLines.length)).join("\n")
+          : "  (No messages yet)";
+      }
+    } else if (isQuestionMode && currentQuestion) {
+      bodyContent = this.buildQuestionBody(currentQuestion);
     } else if (isQuestionVoice && voiceState === 'ready') {
       bodyContent = "VOICE INPUT\n\nListening...";
     } else if (isQuestionVoice && voiceState === 'transcribing') {
@@ -544,27 +558,110 @@ export class AgentChatPage extends BasePage {
   }
 
   private isQuestionMode(): boolean {
-    const state = this.controller.getState();
-    return state.pendingQuestions.length > 0 && state.voiceState === 'idle';
+    return this.getCurrentSessionQuestion() !== null && this.controller.getState().voiceState === 'idle';
   }
 
   private isQuestionVoiceActive(): boolean {
     const state = this.controller.getState();
-    return state.pendingQuestions.length > 0 && state.questionVoiceConfirm && state.voiceState !== 'idle';
+    return this.getCurrentSessionQuestion() !== null && state.questionVoiceConfirm && state.voiceState !== 'idle';
   }
 
   private isMultipleQuestion(): boolean {
-    const q = this.controller.getState().pendingQuestions[0];
+    const q = this.getCurrentSessionQuestion();
     return !!q && q.multiple === true;
   }
 
   private isTooManyMultipleOptions(): boolean {
-    const q = this.controller.getState().pendingQuestions[0];
+    const q = this.getCurrentSessionQuestion();
     return !!q && q.multiple === true && (q.options?.length ?? 0) >= 4;
+  }
+
+  private getCurrentSessionQuestion(): OpenCodeQuestionRequest | null {
+    const state = this.controller.getState();
+    if (!state.selectedSessionID) return null;
+    return state.pendingQuestions.find((q) => q.sessionID === state.selectedSessionID) || null;
+  }
+
+  private isPermissionMode(): boolean {
+    const state = this.controller.getState();
+    if (state.voiceState !== 'idle') return false;
+    if (!state.selectedSessionID) return false;
+    return state.pendingPermissions.some((p) => p.sessionID === state.selectedSessionID);
+  }
+
+  private getCurrentSessionPermission(): OpenCodePermissionRequest | null {
+    const state = this.controller.getState();
+    if (!state.selectedSessionID) return null;
+    return state.pendingPermissions.find((p) => p.sessionID === state.selectedSessionID) || null;
+  }
+
+  private buildPermissionBody(perm: OpenCodePermissionRequest): string {
+    const METADATA_LABEL_MAP: Record<string, string> = { filepath: 'ファイル', parentDir: '親フォルダ' };
+    const OPTION_LABELS = ['拒否', '一度だけ許可', '常に許可'];
+
+    const MAX_LINES = CHAT_MAX_LINES;
+    const GUIDE_LINES = 1;
+
+    const lines: string[] = [];
+    let lineCount = 0;
+
+    if (perm.permission) {
+      lines.push(perm.permission);
+      lineCount++;
+    }
+
+    if (perm.patterns && perm.patterns.length > 0) {
+      for (const pat of perm.patterns) {
+        const prefixWidth = this.getStringWidth('  ');
+        const maxW = CHAT_MAX_WIDTH - prefixWidth;
+        lines.push(`  ${this.truncateText(pat, maxW)}`);
+        lineCount++;
+      }
+    }
+
+    if (perm.metadata) {
+      const keys = ['filepath', 'parentDir'];
+      for (const key of keys) {
+        const val = perm.metadata[key];
+        if (val != null) {
+          const label = METADATA_LABEL_MAP[key] || key;
+          const prefix = `${label}: `;
+          const prefixWidth = this.getStringWidth(prefix);
+          const maxW = CHAT_MAX_WIDTH - prefixWidth;
+          lines.push(`${prefix}${this.truncateText(String(val), maxW)}`);
+          lineCount++;
+        }
+      }
+    }
+
+    for (let i = 0; i < OPTION_LABELS.length; i++) {
+      const isFocused = i === this.permissionSelectedIndex;
+      const prefix = isFocused ? '> ' : '  ';
+      const prefixWidth = this.getStringWidth(prefix);
+      const maxW = CHAT_MAX_WIDTH - prefixWidth;
+      lines.push(`${prefix}${this.truncateText(OPTION_LABELS[i], maxW)}`);
+      lineCount++;
+    }
+
+    while (lineCount < MAX_LINES - GUIDE_LINES) {
+      lines.push('');
+      lineCount++;
+    }
+
+    lines.push('Tap: Select  Double: Back');
+
+    return lines.join('\n');
   }
 
   public async onScrollUp() {
     if (this.isQuestionVoiceActive()) return;
+    if (this.isPermissionMode()) {
+      if (this.permissionSelectedIndex > 0) {
+        this.permissionSelectedIndex--;
+        await this.renderPage();
+      }
+      return;
+    }
     if (this.isQuestionMode()) {
       if (this.isTooManyMultipleOptions()) return;
       if (this.questionSelectedIndex > 0) {
@@ -588,9 +685,17 @@ export class AgentChatPage extends BasePage {
 
   public async onScrollDown() {
     if (this.isQuestionVoiceActive()) return;
+    if (this.isPermissionMode()) {
+      if (this.permissionSelectedIndex < 2) {
+        this.permissionSelectedIndex++;
+        await this.renderPage();
+      }
+      return;
+    }
     if (this.isQuestionMode()) {
       if (this.isTooManyMultipleOptions()) return;
-      const q = this.controller.getState().pendingQuestions[0];
+      const q = this.getCurrentSessionQuestion();
+      if (!q) return;
       const optionCount = q.options?.length ?? 0;
       const customCount = this.customSources.size;
       const maxIndex = q.multiple
@@ -660,9 +765,8 @@ export class AgentChatPage extends BasePage {
   }
 
   private async answerQuestion(answer: string | string[]): Promise<void> {
-    const pendingQuestions = this.controller.getState().pendingQuestions;
-    if (pendingQuestions.length === 0) return;
-    const q = pendingQuestions[0];
+    const q = this.getCurrentSessionQuestion();
+    if (!q) return;
     this.questionSelectedIndex = 0;
     this.questionMultipleSelected = new Set();
     this.customSources = new Set();
@@ -670,7 +774,7 @@ export class AgentChatPage extends BasePage {
   }
 
   private buildMultipleAnswer(): string[] {
-    const q = this.controller.getState().pendingQuestions[0];
+    const q = this.getCurrentSessionQuestion();
     if (!q) return [];
     const optionLabels = (q.options ?? []).map((o) => o.label);
     const selectedOptions = [...this.questionMultipleSelected].filter((t) => !this.customSources.has(t));
@@ -699,9 +803,22 @@ export class AgentChatPage extends BasePage {
       return;
     }
 
+    if (this.isPermissionMode()) {
+      const perm = this.getCurrentSessionPermission();
+      if (perm) {
+        const replies: Array<'deny' | 'grant' | 'always'> = ['deny', 'grant', 'always'];
+        const reply = replies[this.permissionSelectedIndex];
+        if (reply) {
+          await this.controller.respondPermission(perm.id, reply);
+        }
+      }
+      return;
+    }
+
     if (this.isQuestionMode()) {
       if (this.isTooManyMultipleOptions()) return;
-      const q = this.controller.getState().pendingQuestions[0];
+      const q = this.getCurrentSessionQuestion();
+      if (!q) return;
       const optionCount = q.options?.length ?? 0;
 
       if (q.multiple) {
@@ -766,6 +883,11 @@ export class AgentChatPage extends BasePage {
       return;
     }
 
+    if (this.isPermissionMode()) {
+      await this.onReturnToList();
+      return;
+    }
+
     if (this.isQuestionMode()) {
       if (this.isTooManyMultipleOptions()) {
         await this.onReturnToList();
@@ -786,9 +908,10 @@ export class AgentChatPage extends BasePage {
   }
 
   public async onLongPress() {
+    if (this.isPermissionMode()) return;
     const state = this.controller.getState();
-    if (state.pendingQuestions.length > 0 && state.voiceState === 'idle') {
-      const q = state.pendingQuestions[0];
+    const q = this.getCurrentSessionQuestion();
+    if (q && state.voiceState === 'idle') {
       if (q.multiple === true && (q.options?.length ?? 0) >= 4) return;
       if (q.custom !== false) {
         await this.controller.startQuestionVoiceInput();

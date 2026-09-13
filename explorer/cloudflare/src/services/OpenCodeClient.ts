@@ -197,7 +197,19 @@ export class OpenCodeClient {
   }
 
   async respondPermission(permissionID: string, response: 'grant' | 'deny' | 'always'): Promise<void> {
-    await this.request<void>('POST', `/permission/${permissionID}`, { response });
+    const replyMap: Record<'grant' | 'deny' | 'always', 'once' | 'reject' | 'always'> = {
+      grant: 'once',
+      deny: 'reject',
+      always: 'always',
+    };
+    const reply = replyMap[response];
+    try {
+      await this.request<void>('POST', `/permission/${permissionID}/reply`, { reply });
+      console.log('[Permission] POST success', { id: permissionID, response, reply });
+    } catch (e: unknown) {
+      console.error('[Permission] POST failed', { id: permissionID, response, reply, error: e instanceof Error ? e.message : e });
+      throw e;
+    }
   }
 
   async respondQuestion(questionID: string, answer: string | string[]): Promise<void> {
@@ -281,8 +293,19 @@ export class OpenCodeClient {
 
   async getPendingPermissions(): Promise<OpenCodePermissionRequest[]> {
     const data = await this.request<unknown>('GET', '/permission');
+    let result: OpenCodePermissionRequest[] = [];
     if (Array.isArray(data)) {
-      return data.map((item: Record<string, unknown>) => ({
+      result = data.map((item: Record<string, unknown>) => ({
+        id: (item.id as string) || '',
+        sessionID: (item.sessionID as string) || '',
+        permission: (item.permission as string) || '',
+        patterns: Array.isArray(item.patterns) ? item.patterns as string[] : [],
+        metadata: item.metadata as Record<string, unknown> | undefined,
+        always: Array.isArray(item.always) ? item.always as string[] : undefined,
+        tool: item.tool as { messageID?: string; callID?: string } | undefined,
+      }));
+    } else if (data && typeof data === 'object' && 'value' in data && Array.isArray((data as Record<string, unknown>).value)) {
+      result = ((data as { value: Array<Record<string, unknown>> }).value).map((item) => ({
         id: (item.id as string) || '',
         sessionID: (item.sessionID as string) || '',
         permission: (item.permission as string) || '',
@@ -292,18 +315,12 @@ export class OpenCodeClient {
         tool: item.tool as { messageID?: string; callID?: string } | undefined,
       }));
     }
-    if (data && typeof data === 'object' && 'value' in data && Array.isArray((data as Record<string, unknown>).value)) {
-      return ((data as { value: Array<Record<string, unknown>> }).value).map((item) => ({
-        id: (item.id as string) || '',
-        sessionID: (item.sessionID as string) || '',
-        permission: (item.permission as string) || '',
-        patterns: Array.isArray(item.patterns) ? item.patterns as string[] : [],
-        metadata: item.metadata as Record<string, unknown> | undefined,
-        always: Array.isArray(item.always) ? item.always as string[] : undefined,
-        tool: item.tool as { messageID?: string; callID?: string } | undefined,
-      }));
-    }
-    return [];
+    console.log('[Permission] GET result', {
+      count: result.length,
+      ids: result.map((p) => p.id),
+      permissions: result.map((p) => ({ id: p.id, sessionID: p.sessionID, permission: p.permission, patterns: p.patterns })),
+    });
+    return result;
   }
 
   async getPendingQuestions(): Promise<OpenCodeQuestionRequest[]> {

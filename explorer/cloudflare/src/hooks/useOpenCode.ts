@@ -260,8 +260,10 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       }));
       // Also check for any new pending permissions/questions while we're at it
       try {
+        console.log('[Permission] refreshMessages fetching pending permissions');
         const pendingPermissions = await client.getPendingPermissions();
         setState((prev) => ({ ...prev, pendingPermissions }));
+        console.log('[Permission] refreshMessages pending permissions updated', { count: pendingPermissions.length });
       } catch { /* non-critical */ }
       try {
         const pendingQuestions = await client.getPendingQuestions();
@@ -482,15 +484,20 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
   ) => {
     const client = clientRef.current;
     if (!client) return;
+    console.log('[Permission] respond start', { id: permissionID, response });
     try {
       await client.respondPermission(permissionID, response);
+      console.log('[Permission] pending removal', { id: permissionID });
       setState((prev) => ({
         ...prev,
         pendingPermissions: prev.pendingPermissions.filter((p) => p.id !== permissionID),
       }));
+      console.log('[Permission] refreshMessages start');
       await refreshMessages();
+      console.log('[Permission] refreshMessages complete');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to respond to permission';
+      console.error('[Permission] respond failed', { id: permissionID, response, error: msg });
       setState((prev) => ({ ...prev, error: msg }));
     }
   }, []);
@@ -684,8 +691,10 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     const client = clientRef.current;
     if (!client) return;
     try {
+      console.log('[Permission] refreshPendingPermissions start');
       const pendingPermissions = await client.getPendingPermissions();
       setState((prev) => ({ ...prev, pendingPermissions }));
+      console.log('[Permission] refreshPendingPermissions complete');
     } catch {
       // Silently ignore - pending permissions are non-critical
     }

@@ -348,12 +348,19 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
       : [];
     if (sessionPermissions.length === 0) return null;
     const perm = sessionPermissions[0];
+    console.log('[Permission] dialog show', {
+      id: perm.id,
+      sessionID: perm.sessionID,
+      permission: perm.permission,
+      patterns: perm.patterns,
+      always: perm.always,
+    });
     return (
       <div className="oc-dialog-overlay">
         <div className="oc-dialog">
           <div className="oc-dialog-header">
             <AlertCircle size={18} />
-            <span>Permission Required</span>
+            <span>権限の確認</span>
           </div>
           <div className="oc-dialog-body">
             <div className="oc-dialog-permission-type">{perm.permission}</div>
@@ -366,12 +373,15 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
             )}
             {perm.metadata && (
               <div className="oc-dialog-metadata">
-                {Object.entries(perm.metadata).map(([key, value]) => (
-                  <div key={key} className="oc-dialog-metadata-item">
-                    <span className="oc-dialog-metadata-key">{key}:</span>
-                    <span className="oc-dialog-metadata-value">{String(value)}</span>
-                  </div>
-                ))}
+                {Object.entries(perm.metadata).map(([key, value]) => {
+                  const metadataLabelMap: Record<string, string> = { filepath: 'ファイル', parentDir: '親フォルダ' };
+                  return (
+                    <div key={key} className="oc-dialog-metadata-item">
+                      <span className="oc-dialog-metadata-key">{metadataLabelMap[key] || key}:</span>
+                      <span className="oc-dialog-metadata-value">{String(value)}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -380,20 +390,20 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
               className="oc-btn oc-btn-deny"
               onClick={() => actions.respondPermission(perm.id, 'deny')}
             >
-              Deny
+              拒否
             </button>
             <button
               className="oc-btn oc-btn-grant"
               onClick={() => actions.respondPermission(perm.id, 'grant')}
             >
-              Allow
+              一度だけ許可
             </button>
             {perm.always && perm.always.length > 0 && (
               <button
                 className="oc-btn oc-btn-always"
                 onClick={() => actions.respondPermission(perm.id, 'always')}
               >
-                Always Allow
+                常に許可
               </button>
             )}
           </div>
@@ -453,7 +463,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           <div className="oc-dialog">
             <div className="oc-dialog-header">
               <AlertCircle size={18} />
-              <span>{q.header || 'Question'}</span>
+              <span>{q.header || '質問'}</span>
             </div>
             <div className="oc-dialog-body">
               {q.question && <div className="oc-dialog-question-text">{q.question}</div>}
@@ -494,7 +504,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
                 回答する
               </button>
               <button className="oc-btn oc-btn-deny" onClick={handleSkip}>
-                Skip
+                スキップ
               </button>
             </div>
           </div>
@@ -507,7 +517,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         <div className="oc-dialog">
           <div className="oc-dialog-header">
             <AlertCircle size={18} />
-            <span>{q.header || 'Question'}</span>
+              <span>{q.header || '質問'}</span>
           </div>
           <div className="oc-dialog-body">
             {q.question && <div className="oc-dialog-question-text">{q.question}</div>}
@@ -556,7 +566,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
               </button>
             )}
             <button className="oc-btn oc-btn-deny" onClick={handleSkip}>
-              Skip
+              スキップ
             </button>
           </div>
         </div>
