@@ -224,9 +224,9 @@ export class ExplorerPage extends BasePage {
       const restoreIndex = idx >= 0 ? idx : 0;
       await this.loadDirectory(parentPath, restoreIndex);
       await this.navigate(this);
-    } else if (this.onAgentSessionList) {
-      // Root: navigate to Agent Session List
-      await this.onAgentSessionList();
+    } else {
+      // Root: show system exit confirmation dialog
+      await this.bridge.shutDownPageContainer(1);
     }
   }
 

@@ -183,7 +183,8 @@ export class AgentSessionListPage extends BasePage {
   }
 
   public async onDoubleClick() {
-    await this.onReturnToExplorer();
+    // Show system exit confirmation dialog
+    await this.bridge.shutDownPageContainer(1);
   }
 
   public async onLongPress() {

@@ -142,7 +142,7 @@ export class HistoryPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
-          { id: "back", title: "Explorerに戻る" },
+          { id: "back", title: "エクスプローラ画面へ" },
           { id: "refresh", title: "更新" },
         ],
       },
