@@ -6,6 +6,7 @@ export const CONFIG = {
   ROOT_PATH: process.env.HOMEPILOT_ROOT || 'C:\\hp1',
   VIEWER_STATE_DIR: process.env.HOMEPILOT_VIEWER_STATE_DIR || '',
   VIEWER_STATE_FILE: '',  // initialized below
+  MAX_HISTORY_ENTRIES: Math.max(1, parseInt(process.env.HISTORY_MAX_ENTRIES || '30', 10) || 30),
   MAX_FILE_SIZE: 10 * 1024 * 1024,
   OPENCODE_HOST: '127.0.0.1',
   OPENCODE_PORT: 4096,

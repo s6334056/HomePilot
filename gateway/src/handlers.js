@@ -153,7 +153,6 @@ export async function handleFile(request, response, url) {
 // --- Viewer State ---
 
 const DEFAULT_VIEWER_STATE = { version: 1, positions: {}, history: [] };
-const MAX_HISTORY_ENTRIES = 10;
 
 async function ensureViewerStateDir() {
   const dir = dirname(CONFIG.VIEWER_STATE_FILE);
@@ -252,8 +251,8 @@ export async function handleViewerStatePatchHistory(request, response) {
   state.history.unshift({ path: filePath, lastViewedAt });
 
   // Enforce max entries
-  if (state.history.length > MAX_HISTORY_ENTRIES) {
-    state.history = state.history.slice(0, MAX_HISTORY_ENTRIES);
+  if (state.history.length > CONFIG.MAX_HISTORY_ENTRIES) {
+    state.history = state.history.slice(0, CONFIG.MAX_HISTORY_ENTRIES);
   }
 
   await writeViewerState(state);
