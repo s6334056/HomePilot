@@ -343,7 +343,16 @@ export class FileViewerPage extends BasePage {
     if (this.autoScrollIndicator) {
       pageIndicator += ` ${this.autoScrollIndicator}`;
     }
-    const headerContent = this.buildHeaderLine(this.file.path, pageIndicator, G2_VIEWER_MAX_WIDTH, "[Viewer]");
+
+    let headerContent: string;
+    if (this.autoScrollEnabled && this.autoScrollIndicator) {
+      // Auto Scroll中: [Viewer] YYYY/MM/DD(曜)hh:mm:ss | @{残り秒}s
+      const dateTime = this.getFormattedDate();
+      headerContent = `[Viewer] ${dateTime} | @${this.autoScrollIndicator}s`;
+    } else {
+      // 通常時: 従来のヘッダー表示
+      headerContent = this.buildHeaderLine(this.file.path, pageIndicator, G2_VIEWER_MAX_WIDTH, "[Viewer]");
+    }
 
     const end = Math.min(this.scrollPosition + G2_VIEWER_LINES, this.wrappedLines.length);
     const visibleLines = this.wrappedLines.slice(this.scrollPosition, end);
@@ -390,6 +399,26 @@ export class FileViewerPage extends BasePage {
         ],
       },
     };
+  }
+
+  // ── Date/Time formatting (for Auto Scroll header) ──
+
+  /**
+   * Format current date/time as YYYY/MM/DD(曜)hh:mm:ss.
+   * Uses Japanese day abbreviations and zero-padded month/day/hours.
+   * Called on each auto-scroll tick to display live time.
+   */
+  private getFormattedDate(): string {
+    const now = new Date();
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const y = now.getFullYear();
+    const m = now.getMonth() + 1;
+    const d = now.getDate();
+    const day = days[now.getDay()];
+    const hh = now.getHours();
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const ss = String(now.getSeconds()).padStart(2, "0");
+    return `${y}/${m}/${d}(${day})${hh}:${mm}:${ss}`;
   }
 
   // ── Auto Scroll (elapsed-time based, DocsReader4EH pattern) ──

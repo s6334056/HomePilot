@@ -544,7 +544,7 @@ export class G2RuntimeManager {
       fileService,
       undefined,
       undefined,
-      undefined,
+      () => this.navigateToAgentFromExplorer(),
       () => this.navigateFromHistoryToExplorer(),
     );
 
