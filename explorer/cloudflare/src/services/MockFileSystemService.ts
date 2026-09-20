@@ -38,7 +38,7 @@ export class MockFileSystemService implements FileSystemService {
     return null;
   }
 
-  public async getDirectory(path: string): Promise<FileSystemItem[]> {
+  public async getDirectory(path: string, sortMode?: 'default' | 'modified'): Promise<FileSystemItem[]> {
     await new Promise((resolve) => setTimeout(resolve, 30));
 
     const node = this.findNode(path);
@@ -54,14 +54,21 @@ export class MockFileSystemService implements FileSystemService {
       return [];
     }
 
-    return node.children
-      .map((c) => ({ ...c.item }))
-      .sort((a, b) => {
-        if (a.type !== b.type) {
-          return a.type === 'directory' ? -1 : 1;
-        }
+    const items = node.children.map((c) => ({ ...c.item }));
+    if (sortMode === 'modified') {
+      items.sort((a, b) => {
+        const aTime = a.modifiedAt ? new Date(a.modifiedAt).getTime() : 0;
+        const bTime = b.modifiedAt ? new Date(b.modifiedAt).getTime() : 0;
+        if (aTime !== bTime) return bTime - aTime;
         return a.name.localeCompare(b.name);
       });
+    } else {
+      items.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+    }
+    return items;
   }
 
   public async readFile(path: string): Promise<string> {

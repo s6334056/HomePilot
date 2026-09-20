@@ -51,9 +51,10 @@ export class GatewayFileSystemService implements FileSystemService {
     return normalized.substring(0, lastSep);
   }
 
-  async getDirectory(path: string): Promise<FileSystemItem[]> {
+  async getDirectory(path: string, sortMode?: 'default' | 'modified'): Promise<FileSystemItem[]> {
     const encoded = encodeURIComponent(path);
-    const res = await this.request(`/api/fs/directory?path=${encoded}`);
+    const sortParam = sortMode && sortMode !== 'default' ? `&sort=${encodeURIComponent(sortMode)}` : '';
+    const res = await this.request(`/api/fs/directory?path=${encoded}${sortParam}`);
     const data = await res.json();
 
     if (!res.ok) {

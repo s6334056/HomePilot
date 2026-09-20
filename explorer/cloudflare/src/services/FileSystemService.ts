@@ -15,7 +15,7 @@ export interface UploadResult {
  * Allows seamless switching between MockFileSystemService and GatewayFileSystemService.
  */
 export interface FileSystemService {
-  getDirectory(path: string): Promise<FileSystemItem[]>;
+  getDirectory(path: string, sortMode?: 'default' | 'modified'): Promise<FileSystemItem[]>;
   readFile(path: string): Promise<string>;
   getItem(path: string): Promise<FileSystemItem | null>;
   getParentPath(path: string): string;

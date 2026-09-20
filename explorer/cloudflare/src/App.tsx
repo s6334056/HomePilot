@@ -86,6 +86,9 @@ export function App() {
   // Toast state
   const [toast, setToast] = useState<{ message: string; detail?: string } | null>(null);
 
+  // Sort mode state
+  const [sortMode, setSortMode] = useState<'default' | 'modified'>('default');
+
   // Screen state
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('explorer');
 
@@ -185,7 +188,7 @@ export function App() {
       // Load root directory for Gateway service
       if (isGatewayService(fileService)) {
         try {
-          const loadedItems = await (fileService as GatewayFileSystemService).getDirectory(rootPath);
+          const loadedItems = await (fileService as GatewayFileSystemService).getDirectory(rootPath, sortMode);
           setItems(loadedItems);
           setIsExplorerReady(true);
         } catch {
@@ -246,7 +249,7 @@ export function App() {
 
     // Load directory for PWA display
     try {
-      const loadedItems = await newService.getDirectory(resolvedPath);
+      const loadedItems = await newService.getDirectory(resolvedPath, sortMode);
       setItems(loadedItems);
     } catch (e) {
       console.error('[App] Failed to load directory:', e);
@@ -339,6 +342,13 @@ export function App() {
   const hasSelectedFolders = selectedItems.some((i) => i.type === 'directory');
 
   const actionMenuItems: ContextActionMenuItem[] = [
+    {
+      label: '並び順切替',
+      disabled: !isExplorerReady,
+      onClick: () => {
+        handleToggleSortMode();
+      },
+    },
     {
       label: 'フォルダを作成',
       disabled: !isExplorerReady,
@@ -519,6 +529,23 @@ export function App() {
     }
   };
 
+  // Sort mode toggle
+  const handleToggleSortMode = useCallback(async () => {
+    setSortMode((prev) => {
+      const next = prev === 'default' ? 'modified' : 'default';
+      // Reload directory with new sort mode
+      (async () => {
+        try {
+          const loadedItems = await fileService.getDirectory(explorerPath, next);
+          setItems(loadedItems);
+        } catch (e) {
+          console.error('[App] Failed to reload directory after sort toggle:', e);
+        }
+      })();
+      return next;
+    });
+  }, [fileService, explorerPath]);
+
   const handleOpenExplorer = () => {
     if (!isDesktop) {
       setCurrentScreen(previousScreenRef.current);
@@ -616,7 +643,7 @@ export function App() {
 
     // Load initial directory for PWA display
     try {
-      const loadedItems = await newService.getDirectory(rootPath);
+      const loadedItems = await newService.getDirectory(rootPath, sortMode);
       setItems(loadedItems);
       setIsExplorerReady(isGatewayService(newService));
     } catch (e) {

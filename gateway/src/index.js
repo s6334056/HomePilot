@@ -216,6 +216,13 @@ const server = createServer(async (request, response) => {
   return errorResponse(response, 404, 'NOT_FOUND', 'Endpoint not found.');
 });
 
+// Extend server timeouts to support long-running proxied commands (e.g. batch files via OpenCode).
+// Default Node.js headersTimeout is 60s which causes timeouts for commands taking >60s.
+const SERVER_TIMEOUT = 3 * 60 * 60 * 1000; // 3 hours
+server.timeout = SERVER_TIMEOUT;
+server.headersTimeout = SERVER_TIMEOUT;
+server.requestTimeout = SERVER_TIMEOUT;
+
 server.listen(CONFIG.PORT, CONFIG.HOST, () => {
   console.log(`HomePilot Gateway listening on http://${CONFIG.HOST}:${CONFIG.PORT}`);
   console.log(`ROOT_PATH: ${CONFIG.ROOT_PATH}`);

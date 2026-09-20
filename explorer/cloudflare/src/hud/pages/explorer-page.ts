@@ -19,6 +19,7 @@ export class ExplorerPage extends BasePage {
   private onAgentSessionList?: () => Promise<void>;
   private onNavigateToHistory?: () => Promise<void>;
   private initialRestoreIndex?: number;
+  private sortMode: 'default' | 'modified' = 'default';
 
   constructor(
     currentPath: string,
@@ -65,7 +66,7 @@ export class ExplorerPage extends BasePage {
     try {
       this.notifyStatus(`Loading ${path}...`);
       this.currentPath = path;
-      this.items = await this.fileService.getDirectory(path);
+      this.items = await this.fileService.getDirectory(path, this.sortMode);
       this.selectedIndex = restoreIndex != null
         ? Math.max(0, Math.min(restoreIndex, this.items.length - 1))
         : 0;
@@ -155,6 +156,7 @@ export class ExplorerPage extends BasePage {
           { id: "history", title: "閲覧履歴画面へ" },
           { id: "agent", title: "エージェント画面へ" },
           { id: "refresh", title: "更新" },
+          { id: "toggleSort", title: "並び順切替" },
         ],
       },
     };
@@ -237,6 +239,11 @@ export class ExplorerPage extends BasePage {
   public async onMenuItemClick(menuId: string) {
     switch (menuId) {
       case "refresh":
+        await this.loadDirectory(this.currentPath);
+        await this.navigate(this);
+        break;
+      case "toggleSort":
+        this.sortMode = this.sortMode === 'default' ? 'modified' : 'default';
         await this.loadDirectory(this.currentPath);
         await this.navigate(this);
         break;

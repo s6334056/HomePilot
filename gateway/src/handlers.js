@@ -96,10 +96,20 @@ export async function handleDirectory(request, response, url) {
     }
   }
 
-  items.sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
+  const sortMode = url.searchParams.get('sort') || 'default';
+  if (sortMode === 'modified') {
+    items.sort((a, b) => {
+      const aTime = a.modifiedAt ? new Date(a.modifiedAt).getTime() : 0;
+      const bTime = b.modifiedAt ? new Date(b.modifiedAt).getTime() : 0;
+      if (aTime !== bTime) return bTime - aTime;
+      return a.name.localeCompare(b.name);
+    });
+  } else {
+    items.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
 
   json(response, 200, { path: dirPath, items });
 }
