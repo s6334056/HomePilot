@@ -403,6 +403,12 @@
   font-family: var(--font-mono);
 }
 
+/* Edit mode: the caret is the only focus indicator — keep the look unchanged */
+.file-content-body:focus,
+.file-content-body:focus-visible {
+  outline: none;
+}
+
 .auto-scroll-indicator {
   position: absolute;
   top: 8px;

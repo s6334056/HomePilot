@@ -30,5 +30,6 @@ export interface FileSystemService {
     files: UploadItem[],
     onProgress?: (loaded: number, total: number) => void,
     signal?: AbortSignal,
+    options?: { overwrite?: boolean },
   ): Promise<UploadResult>;
 }

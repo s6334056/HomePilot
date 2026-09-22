@@ -718,6 +718,9 @@ export async function handleUpload(request, response) {
   // from the Busboy instance. Store it when the field event arrives.
   let destPath = null;
   const relativePaths = [];
+  // overwrite=1 replaces an existing file instead of auto-renaming it
+  // (used by the File Viewer "上書き保存"). Default remains rename-on-conflict.
+  let overwrite = false;
 
   // Store uploaded files in a temporary directory first.
   // The final destination is validated only after all multipart fields
@@ -749,6 +752,8 @@ export async function handleUpload(request, response) {
       destPath = value;
     } else if (fieldname === 'relativePaths') {
       relativePaths.push(value);
+    } else if (fieldname === 'overwrite') {
+      overwrite = value === '1' || value === 'true';
     }
   });
 
@@ -916,8 +921,9 @@ export async function handleUpload(request, response) {
         const topLevelName = parts[0];
 
         if (!topLevelNameMap.has(topLevelName)) {
-          const uniqueTopLevelName =
-            await getUniqueTopLevelName(topLevelName);
+          const uniqueTopLevelName = overwrite
+            ? topLevelName
+            : await getUniqueTopLevelName(topLevelName);
 
           topLevelNameMap.set(
             topLevelName,
@@ -993,10 +999,14 @@ export async function handleUpload(request, response) {
 
           await mkdir(targetDir, { recursive: true });
 
-          const uniqueName = await getUniqueName(
-            targetDir,
-            finalName,
-          );
+          // Overwrite mode keeps the requested name. rename() replaces an
+          // existing file atomically on both Windows and POSIX.
+          const uniqueName = overwrite
+            ? finalName
+            : await getUniqueName(
+                targetDir,
+                finalName,
+              );
 
           const uniqueFinalPath = join(
             targetDir,

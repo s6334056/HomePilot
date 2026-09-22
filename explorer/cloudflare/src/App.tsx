@@ -6,7 +6,7 @@ import { resolveConfig } from './services/ConnectionConfig';
 import { FileSystemItem, ScreenType, AgentContext } from './domain/types';
 import { Navbar } from './components/Navbar';
 import { FileTable } from './components/FileTable';
-import { FileViewer } from './components/FileViewer';
+import { FileViewer, type FileViewerHandle } from './components/FileViewer';
 import { HistoryPage } from './components/HistoryPage';
 import { AgentScreen } from './components/AgentScreen';
 import { SettingsModal } from './components/SettingsModal';
@@ -54,6 +54,11 @@ export function App() {
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<FileSystemItem | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
+
+  // File Viewer edit mode
+  const [fileEditing, setFileEditing] = useState<boolean>(false);
+  const [fileEditDirty, setFileEditDirty] = useState<boolean>(false);
+  const fileViewerRef = useRef<FileViewerHandle>(null);
 
   // Return highlight (temporary highlight when navigating back)
   const [highlightPath, setHighlightPath] = useState<string | null>(null);
@@ -166,6 +171,28 @@ export function App() {
     return parentPath !== explorerPath;
   };
 
+  // Leaving the File Viewer discards edit mode / dirty flag.
+  useEffect(() => {
+    if (currentScreen !== 'file_viewer') {
+      setFileEditing(false);
+      setFileEditDirty(false);
+    }
+  }, [currentScreen]);
+
+  useEffect(() => {
+    if (!fileEditing) {
+      setFileEditDirty(false);
+    }
+  }, [fileEditing]);
+
+  // Guard: block navigation that would silently discard unsaved edits.
+  const confirmDiscardFileEdits = (message: string): boolean => {
+    if (currentScreen === 'file_viewer' && fileEditing && fileEditDirty) {
+      return window.confirm(message);
+    }
+    return true;
+  };
+
   // ── PWA Initialization ────────────────────────────────────
   // Probe for G2 bridge on startup (does NOT start G2 Runtime)
   useEffect(() => {
@@ -275,6 +302,9 @@ export function App() {
 
   // Back button: return to previous screen based on current absolute path
   const handleExplorerBack = async () => {
+    if (!confirmDiscardFileEdits('編集した内容が失われます。本当に戻りますか？')) {
+      return;
+    }
     if (currentScreen === 'file_viewer') {
       if (returnPage === 'history') {
         // FileViewer opened from History → go back to History
@@ -299,6 +329,9 @@ export function App() {
   };
 
   const handleExplorerReload = async () => {
+    if (!confirmDiscardFileEdits('編集した内容が失われます。本当に再読み込みしますか？')) {
+      return;
+    }
     setHighlightPath(null);
     await navigateToPath(explorerPath);
   };
@@ -342,28 +375,73 @@ export function App() {
   const hasSelectedFolders = selectedItems.some((i) => i.type === 'directory');
 
   const actionMenuItems: ContextActionMenuItem[] = currentScreen === 'file_viewer' && selectedFile
-    ? [
-        {
-          label: 'ダウンロード',
-          onClick: () => {
-            handleDownloadForPaths([selectedFile.path], selectedFile.name);
-          },
-        },
-        {
-          label: '名前を変更',
-          onClick: () => {
-            setRenameTarget(selectedFile);
-            setRenameError('');
-            setShowRenameDialog(true);
-          },
-        },
-        {
-          label: '削除',
-          onClick: () => {
-            setShowDeleteDialog(true);
-          },
-        },
-      ]
+    ? (fileEditing
+        ? [
+            {
+              label: 'ダウンロード',
+              onClick: () => {
+                handleDownloadForPaths([selectedFile.path], selectedFile.name);
+              },
+            },
+            {
+              // Rename during editing would desync the edit buffer and the file.
+              label: '名前を変更',
+              disabled: true,
+              onClick: () => {
+                setRenameTarget(selectedFile);
+                setRenameError('');
+                setShowRenameDialog(true);
+              },
+            },
+            {
+              // Delete during editing would discard unsaved edits.
+              label: '削除',
+              disabled: true,
+              onClick: () => {
+                setShowDeleteDialog(true);
+              },
+            },
+            {
+              label: '上書き保存',
+              onClick: () => {
+                handleFileEditSave();
+              },
+            },
+            {
+              label: '保存せずに再表示',
+              onClick: () => {
+                handleFileEditReload();
+              },
+            },
+          ]
+        : [
+            {
+              label: 'ダウンロード',
+              onClick: () => {
+                handleDownloadForPaths([selectedFile.path], selectedFile.name);
+              },
+            },
+            {
+              label: '名前を変更',
+              onClick: () => {
+                setRenameTarget(selectedFile);
+                setRenameError('');
+                setShowRenameDialog(true);
+              },
+            },
+            {
+              label: '削除',
+              onClick: () => {
+                setShowDeleteDialog(true);
+              },
+            },
+            {
+              label: '編集',
+              onClick: () => {
+                setFileEditing(true);
+              },
+            },
+          ])
     : [
         {
           label: '並び順切替',
@@ -582,6 +660,54 @@ export function App() {
     await handleDownloadForPaths(paths, singleName, hasDirectory);
   }, [selectedPaths, selectedItems, handleDownloadForPaths]);
 
+  // ── File Viewer Edit ───────────────────────────────────────
+
+  const handleFileEditSave = useCallback(async () => {
+    if (!selectedFile) return;
+    const edited = fileViewerRef.current?.getEditedText();
+    if (edited === null || edited === undefined) return;
+
+    try {
+      const parentPath = fileService.getParentPath(selectedFile.path);
+      const fileName = selectedFile.path.split(/[\/\\]/).pop() || selectedFile.name;
+      const file = new File([edited], fileName, { type: 'text/plain;charset=utf-8' });
+      // Reuse the existing upload pipeline with overwrite enabled.
+      const result = await fileService.uploadItems(
+        parentPath,
+        [{ file, relativePath: fileName }],
+        undefined,
+        undefined,
+        { overwrite: true },
+      );
+      if (result.errors && result.errors.length > 0) {
+        throw new Error(result.errors[0].error || '書き込みエラー');
+      }
+      if (result.uploaded < 1) {
+        throw new Error('ファイルが書き込まれませんでした');
+      }
+      // Reflect the saved content immediately, then leave edit mode.
+      setFileContent(edited);
+      setFileEditing(false);
+      setToast({ message: '保存完了', detail: fileName });
+    } catch (e: any) {
+      alert(`保存に失敗しました: ${e.message}`);
+    }
+  }, [selectedFile, fileService]);
+
+  const handleFileEditReload = useCallback(async () => {
+    if (!selectedFile) return;
+    if (fileEditDirty && !window.confirm('編集内容が失われます。保存せずに再表示しますか？')) {
+      return;
+    }
+    try {
+      const fresh = await fileService.readFile(selectedFile.path);
+      setFileContent(fresh);
+      setFileEditing(false);
+    } catch (e: any) {
+      alert(`再表示に失敗しました: ${e.message}`);
+    }
+  }, [selectedFile, fileService, fileEditDirty]);
+
   // Folder click from FileTable
   const handleOpenDirectory = async (path: string, _index: number) => {
     await navigateToPath(path);
@@ -590,6 +716,9 @@ export function App() {
   // Agent/Explorer switching
   const handleOpenAgent = () => {
     if (!isDesktop) {
+      if (!confirmDiscardFileEdits('編集した内容が失われます。本当にエージェントを表示しますか？')) {
+        return;
+      }
       previousScreenRef.current = currentScreen;
       setCurrentScreen('agent');
     }
@@ -736,6 +865,9 @@ export function App() {
   // Navigate to History, remembering the current screen/page as the return point.
   // Shared by Explorer path bar and Agent path bar taps.
   const handleNavigateToHistory = () => {
+    if (!confirmDiscardFileEdits('編集した内容が失われます。本当に履歴を表示しますか？')) {
+      return;
+    }
     historyReturnScreenRef.current = currentScreen;
     historyReturnPageRef.current = returnPage;
     setCurrentScreen('history');
@@ -788,9 +920,12 @@ export function App() {
 
           {currentScreen === 'file_viewer' && selectedFile && (
             <FileViewer
+              ref={fileViewerRef}
               content={fileContent}
               filePath={selectedFile.path}
               gatewayService={isGatewayService(fileService) ? fileService as GatewayFileSystemService : null}
+              editing={fileEditing}
+              onDirtyChange={setFileEditDirty}
             />
           )}
 

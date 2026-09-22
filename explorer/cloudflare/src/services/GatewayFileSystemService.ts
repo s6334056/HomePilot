@@ -214,6 +214,7 @@ export class GatewayFileSystemService implements FileSystemService {
     files: UploadItem[],
     onProgress?: (loaded: number, total: number) => void,
     signal?: AbortSignal,
+    options?: { overwrite?: boolean },
   ): Promise<UploadResult> {
     const formData = new FormData();
     formData.append('destPath', parentPath);
@@ -225,6 +226,10 @@ export class GatewayFileSystemService implements FileSystemService {
     for (const item of files) {
       formData.append('files', item.file, item.file.name);
       formData.append('relativePaths', item.relativePath);
+    }
+
+    if (options?.overwrite) {
+      formData.append('overwrite', '1');
     }
 
     return new Promise<UploadResult>((resolve, reject) => {
