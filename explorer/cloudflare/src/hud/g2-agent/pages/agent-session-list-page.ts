@@ -28,6 +28,7 @@ export class AgentSessionListPage extends BasePage {
   private onSelect: (sessionID: string) => Promise<void>;
   private onModelSelect: () => Promise<void>;
   private onReturnToExplorer: () => Promise<void>;
+  private onNavigateToHistory: () => Promise<void>;
   private currentPath: string;
   private sessions: OpenCodeSessionInfo[] = [];
   private selectedIndex: number = 0;
@@ -38,6 +39,7 @@ export class AgentSessionListPage extends BasePage {
     onSelect: (sessionID: string) => Promise<void>,
     onModelSelect: () => Promise<void>,
     onReturnToExplorer: () => Promise<void>,
+    onNavigateToHistory: () => Promise<void>,
     currentPath: string = "",
   ) {
     super();
@@ -46,6 +48,7 @@ export class AgentSessionListPage extends BasePage {
     this.onSelect = onSelect;
     this.onModelSelect = onModelSelect;
     this.onReturnToExplorer = onReturnToExplorer;
+    this.onNavigateToHistory = onNavigateToHistory;
     this.currentPath = currentPath;
   }
 
@@ -63,7 +66,9 @@ export class AgentSessionListPage extends BasePage {
         this.selectedIndex = foundIdx >= 0 ? foundIdx + 1 : 0;
         this.returnSessionID = null;
       } else {
-        this.selectedIndex = 0;
+        // Preserve highlight across re-activations (e.g. return from History);
+        // clamp in case the session list shrank while away.
+        this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, this.sessions.length));
       }
 
       await this.renderPage();
@@ -143,6 +148,7 @@ export class AgentSessionListPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
+          { id: "history", title: "閲覧履歴画面へ" },
           { id: "explorer", title: "エクスプローラ画面へ" },
           { id: "refresh", title: "更新" },
         ],
@@ -193,6 +199,9 @@ export class AgentSessionListPage extends BasePage {
 
   public async onMenuItemClick(menuId: string) {
     switch (menuId) {
+      case "history":
+        await this.onNavigateToHistory();
+        break;
       case "explorer":
         await this.onReturnToExplorer();
         break;

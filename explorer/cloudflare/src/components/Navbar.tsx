@@ -33,6 +33,7 @@ interface AgentNavbarProps extends NavbarBaseProps {
   onReload: () => void;
   onOpenSettings: () => void;
   onOpenExplorer: () => void;
+  onPathBarClick?: () => void;
   onOpenActionMenu?: (e: React.MouseEvent) => void;
 }
 
@@ -132,9 +133,9 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
           )}
           <span
             className="path-bar-text"
-            title="Click to view history"
-            onClick={props.mode === 'explorer' ? props.onPathBarClick : undefined}
-            style={props.mode === 'explorer' ? { cursor: 'pointer' } : undefined}
+            title={props.onPathBarClick ? "Click to view history" : props.currentPath}
+            onClick={props.onPathBarClick}
+            style={props.onPathBarClick ? { cursor: 'pointer' } : undefined}
           >
             {displayPath}
           </span>
@@ -199,7 +200,12 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
             {props.modelId}
           </span>
         )}
-        <span className="path-bar-text" title={props.currentPath}>
+        <span
+          className="path-bar-text"
+          title={props.onPathBarClick ? "Click to view history" : props.currentPath}
+          onClick={props.onPathBarClick}
+          style={props.onPathBarClick ? { cursor: 'pointer' } : undefined}
+        >
           {displayPath}
         </span>
         {props.onOpenActionMenu && (

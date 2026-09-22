@@ -667,6 +667,14 @@ export function App() {
     return explorerPath;
   };
 
+  // Navigate to History, remembering the current screen/page as the return point.
+  // Shared by Explorer path bar and Agent path bar taps.
+  const handleNavigateToHistory = () => {
+    historyReturnScreenRef.current = currentScreen;
+    historyReturnPageRef.current = returnPage;
+    setCurrentScreen('history');
+  };
+
   // Determine which pane is first/last for swap button placement
   const isFirstExplorer = paneOrder[0] === 'explorer';
 
@@ -686,11 +694,7 @@ export function App() {
         showSettingsButton={isDesktop && !isFirstExplorer}
         showSwapButton={isDesktop && !isFirstExplorer}
         onSwapPanes={handleSwapPanes}
-        onPathBarClick={() => {
-          historyReturnScreenRef.current = currentScreen;
-          historyReturnPageRef.current = returnPage;
-          setCurrentScreen('history');
-        }}
+        onPathBarClick={currentScreen === 'history' ? undefined : handleNavigateToHistory}
         onOpenActionMenu={currentScreen === 'explorer'
           ? handleOpenActionMenu
           : currentScreen === 'history'
@@ -754,6 +758,7 @@ export function App() {
         buildLiveContext={buildLiveContext}
         onOpenSettings={() => setShowSettings(true)}
         onOpenExplorer={handleOpenExplorer}
+        onPathBarClick={currentScreen === 'history' ? undefined : handleNavigateToHistory}
         showSettingsButton={isDesktop && isFirstExplorer}
         showSwapButton={isDesktop && isFirstExplorer}
         onSwapPanes={handleSwapPanes}

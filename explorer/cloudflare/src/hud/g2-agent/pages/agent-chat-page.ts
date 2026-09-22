@@ -54,6 +54,7 @@ export class AgentChatPage extends BasePage {
   private controller: G2AgentController;
   private onReturnToList: () => Promise<void>;
   private onReturnToExplorer: () => Promise<void>;
+  private onNavigateToHistory: () => Promise<void>;
   private currentPath: string;
   private returnPage: BasePage | null;
   private messages: OpenCodeMessageWithParts[] = [];
@@ -64,6 +65,7 @@ export class AgentChatPage extends BasePage {
   private stateUnsubscribe: (() => void) | null = null;
   private scrollInverted: boolean = false;
   private scrollToBottomAfterSend: boolean = false;
+  private hasRenderedOnce: boolean = false;
   private agentCreatedCache: Map<string, number> = new Map();
   private questionSelectedIndex: number = 0;
   private questionMultipleSelected: Set<string> = new Set();
@@ -74,6 +76,7 @@ export class AgentChatPage extends BasePage {
     controller: G2AgentController,
     onReturnToList: () => Promise<void>,
     onReturnToExplorer: () => Promise<void>,
+    onNavigateToHistory: () => Promise<void>,
     currentPath: string = "",
     returnPage: BasePage | null = null,
   ) {
@@ -82,6 +85,7 @@ export class AgentChatPage extends BasePage {
     this.controller = controller;
     this.onReturnToList = onReturnToList;
     this.onReturnToExplorer = onReturnToExplorer;
+    this.onNavigateToHistory = onNavigateToHistory;
     this.currentPath = currentPath;
     this.returnPage = returnPage;
   }
@@ -92,7 +96,14 @@ export class AgentChatPage extends BasePage {
     this.modelName = await this.resolveModelName();
     this.buildChatText();
     this.buildWrappedLines();
-    this.scrollLine = Math.max(0, this.wrappedLines.length - CHAT_MAX_LINES);
+    if (this.hasRenderedOnce) {
+      // Preserve scroll position across re-activations (e.g. return from History);
+      // clamp in case the transcript changed while away.
+      this.scrollLine = Math.min(this.scrollLine, Math.max(0, this.wrappedLines.length - CHAT_MAX_LINES));
+    } else {
+      this.scrollLine = Math.max(0, this.wrappedLines.length - CHAT_MAX_LINES);
+    }
+    this.hasRenderedOnce = true;
     this.questionSelectedIndex = 0;
 
     this.stateUnsubscribe = this.controller.subscribe((state) => {
@@ -547,6 +558,7 @@ export class AgentChatPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
+          { id: "history", title: "閲覧履歴画面へ" },
           { id: "explorer", title: "エクスプローラ画面へ" },
           { id: "refresh", title: "更新" },
           { id: "top", title: "先頭へ" },
@@ -927,6 +939,9 @@ export class AgentChatPage extends BasePage {
 
   public async onMenuItemClick(menuId: string) {
     switch (menuId) {
+      case "history":
+        await this.onNavigateToHistory();
+        break;
       case "explorer":
         await this.onReturnToExplorer();
         break;

@@ -13,6 +13,7 @@ interface AgentScreenProps {
   buildLiveContext: () => AgentContext;
   onOpenSettings: () => void;
   onOpenExplorer: () => void;
+  onPathBarClick?: () => void;
   onReload?: () => void;
   showSettingsButton?: boolean;
   showSwapButton?: boolean;
@@ -26,6 +27,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   buildLiveContext,
   onOpenSettings,
   onOpenExplorer,
+  onPathBarClick,
   onReload,
   showSettingsButton,
   showSwapButton,
@@ -738,6 +740,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           onReload={handleReload}
           onOpenSettings={onOpenSettings}
           onOpenExplorer={onOpenExplorer}
+          onPathBarClick={onPathBarClick}
           showSettingsButton={showSettingsButton}
           showSwapButton={showSwapButton}
           onSwapPanes={onSwapPanes}
@@ -983,6 +986,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         onReload={handleReload}
         onOpenSettings={onOpenSettings}
         onOpenExplorer={onOpenExplorer}
+        onPathBarClick={onPathBarClick}
         showSettingsButton={showSettingsButton}
         showSwapButton={showSwapButton}
         onSwapPanes={onSwapPanes}

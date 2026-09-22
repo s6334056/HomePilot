@@ -23,6 +23,8 @@ export class HistoryPage extends BasePage {
   private onFileViewerStateChange?: (file: any, content: string) => void;
   private onAgentSessionList?: () => Promise<void>;
   private onBackToExplorer?: () => Promise<void>;
+  private onNavigateToExplorer?: () => Promise<void>;
+  private onNavigateToAgentSessionList?: () => Promise<void>;
 
   constructor(
     gatewayService: GatewayFileSystemService,
@@ -31,6 +33,8 @@ export class HistoryPage extends BasePage {
     onFileViewerStateChange?: (file: any, content: string) => void,
     onAgentSessionList?: () => Promise<void>,
     onBackToExplorer?: () => Promise<void>,
+    onNavigateToExplorer?: () => Promise<void>,
+    onNavigateToAgentSessionList?: () => Promise<void>,
   ) {
     super();
     this.pageType = "HistoryPage";
@@ -40,6 +44,8 @@ export class HistoryPage extends BasePage {
     this.onFileViewerStateChange = onFileViewerStateChange;
     this.onAgentSessionList = onAgentSessionList;
     this.onBackToExplorer = onBackToExplorer;
+    this.onNavigateToExplorer = onNavigateToExplorer;
+    this.onNavigateToAgentSessionList = onNavigateToAgentSessionList;
   }
 
   public async afterRender(): Promise<void> {
@@ -142,7 +148,8 @@ export class HistoryPage extends BasePage {
       textObject: [headerProp, bodyProp],
       menuObject: {
         menuList: [
-          { id: "back", title: "エクスプローラ画面へ" },
+          { id: "explorer", title: "エクスプローラ画面へ" },
+          { id: "agent", title: "エージェント画面へ" },
           { id: "refresh", title: "更新" },
         ],
       },
@@ -209,9 +216,17 @@ export class HistoryPage extends BasePage {
       case "refresh":
         await this.loadHistory();
         break;
-      case "back":
-        if (this.onBackToExplorer) {
-          await this.onBackToExplorer();
+      case "explorer":
+        // Explicit navigation to root Explorer (not a return-to-origin op;
+        // double-tap on this page remains the "back to origin" action)
+        if (this.onNavigateToExplorer) {
+          await this.onNavigateToExplorer();
+        }
+        break;
+      case "agent":
+        // Explicit navigation to Agent Session List
+        if (this.onNavigateToAgentSessionList) {
+          await this.onNavigateToAgentSessionList();
         }
         break;
     }
