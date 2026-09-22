@@ -1,6 +1,6 @@
-import { readdir, stat, readFile, writeFile, mkdir, rename, unlink, rm } from 'node:fs/promises';
+import { readdir, stat, readFile, writeFile, mkdir, rename, unlink, rm, cp } from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { resolve, dirname, basename, join, normalize, relative, extname } from 'node:path';
+import { resolve, dirname, basename, join, normalize, relative, extname, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
@@ -517,6 +517,167 @@ export async function handleMkdir(request, response) {
   }
 
   json(response, 200, { ok: true, path: destResolved });
+}
+
+// --- Move / Copy ---
+
+async function isInsideDirectory(parentDir, targetPath) {
+  const rel = relative(parentDir, targetPath);
+  if (rel === '') return true; // targetPath === parentDir
+  return !rel.startsWith('..') && !isAbsolute(rel);
+}
+
+export async function handleMoveCopy(request, response, mode) {
+  // mode: 'move' | 'copy'
+  const body = await readBody(request);
+  if (!body) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Request body is required.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid JSON.');
+  }
+
+  const { paths, destDir } = parsed;
+
+  if (!Array.isArray(paths) || paths.length === 0) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'paths array is required.');
+  }
+  if (!destDir || typeof destDir !== 'string') {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'destDir is required.');
+  }
+
+  // Validate destination directory (same checks as other handlers)
+  const destValidation = validatePath(destDir, CONFIG.ROOT_PATH);
+  if (!destValidation.valid) {
+    if (destValidation.error === 'FORBIDDEN') {
+      return errorResponse(response, 403, 'FORBIDDEN', 'Destination is outside the allowed root.');
+    }
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid destination path.');
+  }
+  const destResolved = destValidation.resolvedPath;
+
+  try {
+    const destStat = await stat(destResolved);
+    if (!destStat.isDirectory()) {
+      return errorResponse(response, 400, 'INVALID_REQUEST', 'The destination path is not a directory.');
+    }
+  } catch {
+    return errorResponse(response, 404, 'NOT_FOUND', 'Destination directory not found.');
+  }
+
+  // Validate all source paths first (same as handleDelete)
+  const validatedPaths = [];
+  for (const p of paths) {
+    if (!p || typeof p !== 'string') {
+      return errorResponse(response, 400, 'INVALID_REQUEST', 'Each path must be a non-empty string.');
+    }
+    const validation = validatePath(p, CONFIG.ROOT_PATH);
+    if (!validation.valid) {
+      if (validation.error === 'FORBIDDEN') {
+        return errorResponse(response, 403, 'FORBIDDEN', `Path is outside the allowed root: ${p}`);
+      }
+      return errorResponse(response, 400, 'INVALID_REQUEST', `Invalid path: ${p}`);
+    }
+    validatedPaths.push(validation.resolvedPath);
+  }
+
+  const verb = mode === 'move' ? '移動' : '複製';
+  const results = [];
+  let processed = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (let i = 0; i < validatedPaths.length; i++) {
+    const srcResolved = validatedPaths[i];
+    const source = paths[i];
+
+    try {
+      let srcStat;
+      try {
+        srcStat = await stat(srcResolved);
+      } catch {
+        results.push({ source, status: 'failed', error: 'File or directory not found.' });
+        failed++;
+        continue;
+      }
+
+      // Folder must not be moved/copied into itself or its own subtree.
+      if (srcStat.isDirectory()) {
+        if (await isInsideDirectory(srcResolved, destResolved)) {
+          results.push({
+            source,
+            status: 'failed',
+            error: 'フォルダ自身またはその配下へは移動・複製できません。',
+          });
+          failed++;
+          continue;
+        }
+      }
+
+      // Move into the same directory is a no-op (meaningless operation).
+      if (mode === 'move' && relative(dirname(srcResolved), destResolved) === '') {
+        results.push({ source, status: 'skipped', error: '移動先が同じ場所です。' });
+        skipped++;
+        continue;
+      }
+
+      const destName = await getUniqueName(destResolved, basename(srcResolved));
+      const destPath = join(destResolved, destName);
+
+      // Validate final destination stays inside root.
+      const finalValidation = validatePath(destPath, CONFIG.ROOT_PATH);
+      if (!finalValidation.valid) {
+        results.push({ source, status: 'failed', error: 'Destination is outside the allowed root.' });
+        failed++;
+        continue;
+      }
+
+      if (mode === 'move') {
+        try {
+          await rename(srcResolved, destPath);
+        } catch (e) {
+          if (e.code === 'EXDEV') {
+            // Cross-device: copy recursively, then remove the source.
+            await cp(srcResolved, destPath, { recursive: true, errorOnExist: true, force: false });
+            await rm(srcResolved, { recursive: true, force: false });
+          } else {
+            throw e;
+          }
+        }
+        results.push({ source, dest: destPath, status: 'moved' });
+        processed++;
+      } else {
+        await cp(srcResolved, destPath, { recursive: true, errorOnExist: true, force: false });
+        results.push({ source, dest: destPath, status: 'copied' });
+        processed++;
+      }
+    } catch (e) {
+      console.error(`[${mode === 'move' ? 'Move' : 'Copy'}] Failed for ${source}: ${e.message}`);
+      results.push({ source, status: 'failed', error: e.message });
+      failed++;
+    }
+  }
+
+  json(response, 200, {
+    ok: true,
+    mode: verb,
+    processed,
+    skipped,
+    failed,
+    results,
+  });
+}
+
+export async function handleMove(request, response) {
+  return handleMoveCopy(request, response, 'move');
+}
+
+export async function handleCopy(request, response) {
+  return handleMoveCopy(request, response, 'copy');
 }
 
 // --- Download ---

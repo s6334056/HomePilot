@@ -1,5 +1,5 @@
 import { FileSystemItem } from '../domain/types';
-import { FileSystemService, UploadItem, UploadResult } from './FileSystemService';
+import { FileSystemService, MoveCopyItemResult, MoveCopyResult, UploadItem, UploadResult } from './FileSystemService';
 import { MOCK_FILE_SYSTEM_ROOT, MockFileSystemNode } from '../domain/mockData';
 
 export class MockFileSystemService implements FileSystemService {
@@ -142,6 +142,130 @@ export class MockFileSystemService implements FileSystemService {
     };
     parentNode.children.push(newNode);
     return newPath;
+  }
+
+  private joinPath(dir: string, name: string): string {
+    return dir === '/' ? `/${name}` : `${dir}/${name}`;
+  }
+
+  private isInsideDirectory(parentDir: string, targetPath: string): boolean {
+    const normParent = parentDir.replace(/\/+$/, '');
+    const normTarget = targetPath.replace(/\/+$/, '');
+    if (normParent === normTarget) return true;
+    return normTarget.startsWith(normParent + '/');
+  }
+
+  private rewritePaths(node: MockFileSystemNode, newPath: string): void {
+    node.item.path = newPath;
+    node.item.id = newPath;
+    if (node.children) {
+      for (const child of node.children) {
+        this.rewritePaths(child, this.joinPath(newPath, child.item.name));
+      }
+    }
+  }
+
+  private cloneNode(node: MockFileSystemNode, newPath: string): MockFileSystemNode {
+    const clone: MockFileSystemNode = {
+      item: { ...node.item, path: newPath, id: newPath },
+    };
+    if (node.children) {
+      clone.children = node.children.map((c) =>
+        this.cloneNode(c, this.joinPath(newPath, c.item.name)),
+      );
+    }
+    return clone;
+  }
+
+  public async moveItems(paths: string[], destDir: string): Promise<MoveCopyResult> {
+    return this.moveCopyItems(paths, destDir, 'move');
+  }
+
+  public async copyItems(paths: string[], destDir: string): Promise<MoveCopyResult> {
+    return this.moveCopyItems(paths, destDir, 'copy');
+  }
+
+  private async moveCopyItems(paths: string[], destDir: string, mode: 'move' | 'copy'): Promise<MoveCopyResult> {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const destNode = this.findNode(destDir);
+    if (!destNode) throw new Error(`Destination not found: ${destDir}`);
+    if (destNode.item.type !== 'directory') throw new Error(`Destination is not a directory: ${destDir}`);
+    if (!destNode.children) destNode.children = [];
+
+    const results: MoveCopyItemResult[] = [];
+    let processed = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const source of paths) {
+      try {
+        const node = this.findNode(source);
+        if (!node) {
+          results.push({ source, status: 'failed', error: 'File or directory not found.' });
+          failed++;
+          continue;
+        }
+        if (node === this.root) {
+          results.push({ source, status: 'failed', error: 'ルートフォルダは操作できません。' });
+          failed++;
+          continue;
+        }
+        if (node.item.type === 'directory' && this.isInsideDirectory(source, destDir)) {
+          results.push({
+            source,
+            status: 'failed',
+            error: 'フォルダ自身またはその配下へは移動・複製できません。',
+          });
+          failed++;
+          continue;
+        }
+
+        const parentPath = this.getParentPath(source);
+        if (mode === 'move' && parentPath === destDir) {
+          results.push({ source, status: 'skipped', error: '移動先が同じ場所です。' });
+          skipped++;
+          continue;
+        }
+
+        const parentNode = this.findNode(parentPath);
+        if (!parentNode || !parentNode.children) {
+          results.push({ source, status: 'failed', error: 'Parent not found.' });
+          failed++;
+          continue;
+        }
+
+        const uniqueName = this.getUniqueName(destNode.children, node.item.name);
+        const destPath = this.joinPath(destDir, uniqueName);
+
+        if (mode === 'move') {
+          const idx = parentNode.children.findIndex((c) => c.item.path === source);
+          if (idx < 0) {
+            results.push({ source, status: 'failed', error: 'Parent not found.' });
+            failed++;
+            continue;
+          }
+          parentNode.children.splice(idx, 1);
+          node.item.name = uniqueName;
+          this.rewritePaths(node, destPath);
+          destNode.children.push(node);
+          results.push({ source, dest: destPath, status: 'moved' });
+          processed++;
+        } else {
+          const clone = this.cloneNode(node, destPath);
+          clone.item.name = uniqueName;
+          this.rewritePaths(clone, destPath);
+          destNode.children.push(clone);
+          results.push({ source, dest: destPath, status: 'copied' });
+          processed++;
+        }
+      } catch (e: any) {
+        results.push({ source, status: 'failed', error: e.message || 'Operation failed' });
+        failed++;
+      }
+    }
+
+    return { processed, skipped, failed, results };
   }
 
   public getDownloadUrl(_path: string): string | null {

@@ -2842,3 +2842,71 @@
   white-space: nowrap;
   max-width: 300px;
 }
+
+/* ============================================================
+   Move / Copy destination bar
+   ============================================================ */
+
+.file-select-checkbox.picker-disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* Move/Copy picker: source folder (or inside it) — cannot be chosen as dest. */
+tr.file-row.picker-blocked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hp-movecopy-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 10px 14px;
+  background-color: var(--bg-card);
+  border-top: 1px solid var(--border);
+}
+
+.hp-movecopy-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.hp-movecopy-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hp-movecopy-sources,
+.hp-movecopy-dest {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hp-movecopy-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .hp-movecopy-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .hp-movecopy-actions {
+    justify-content: stretch;
+  }
+
+  .hp-movecopy-actions .hp-dialog-btn {
+    flex: 1;
+  }
+}

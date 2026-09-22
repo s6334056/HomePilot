@@ -5,6 +5,7 @@ import {
   json, noContent, errorResponse,
   handleHealth, handleRoot, handleDirectory, handleFile,
   handleRename, handleDelete, handleMkdir,
+  handleMove, handleCopy,
   handleDownloadGet, handleDownloadPost,
   handleUpload,
   handleOpenCodeProxy, handleOpenCodeProxyBody,
@@ -163,6 +164,26 @@ const server = createServer(async (request, response) => {
       return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed.');
     }
     return handleMkdir(request, response);
+  }
+
+  if (path === '/api/fs/move') {
+    if (!verifyToken(requestToken, token)) {
+      return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+    if (request.method !== 'POST') {
+      return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed.');
+    }
+    return handleMove(request, response);
+  }
+
+  if (path === '/api/fs/copy') {
+    if (!verifyToken(requestToken, token)) {
+      return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+    if (request.method !== 'POST') {
+      return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only POST is allowed.');
+    }
+    return handleCopy(request, response);
   }
 
   if (path === '/api/fs/download') {

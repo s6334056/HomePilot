@@ -10,6 +10,20 @@ export interface UploadResult {
   errors: Array<{ path: string; error: string }>;
 }
 
+export interface MoveCopyItemResult {
+  source: string;
+  dest?: string;
+  status: 'moved' | 'copied' | 'skipped' | 'failed';
+  error?: string;
+}
+
+export interface MoveCopyResult {
+  processed: number;
+  skipped: number;
+  failed: number;
+  results: MoveCopyItemResult[];
+}
+
 /**
  * Abstract interface for File System operations.
  * Allows seamless switching between MockFileSystemService and GatewayFileSystemService.
@@ -23,6 +37,8 @@ export interface FileSystemService {
   renameItem(path: string, newName: string): Promise<string>;
   deleteItems(paths: string[]): Promise<{ deleted: number }>;
   createFolder(parentPath: string, name: string): Promise<string>;
+  moveItems(paths: string[], destDir: string): Promise<MoveCopyResult>;
+  copyItems(paths: string[], destDir: string): Promise<MoveCopyResult>;
   getDownloadUrl(path: string): string | null;
   downloadItems(paths: string[], hasDirectory: boolean): Promise<{ blob?: Blob; url?: string }>;
   uploadItems(

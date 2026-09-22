@@ -15,6 +15,7 @@ import { CreateFolderDialog } from './components/CreateFolderDialog';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
 import { UploadDialog } from './components/UploadDialog';
 import { ContextActionMenu, ContextActionMenuItem } from './components/ContextActionMenu';
+import { MoveCopyBar, MoveCopyMode } from './components/MoveCopyBar';
 import { Toast } from './components/Toast';
 import { G2RuntimeManager, G2RuntimeState } from './hud/g2-runtime';
 import { addToHistory } from './services/ViewerHistoryStore';
@@ -41,9 +42,21 @@ function pickUniqueTextFileName(existingNames: Set<string>): string {
   const baseName = '新規テキストドキュメント.txt';
   if (!existingNames.has(baseName)) return baseName;
   for (let i = 2; ; i++) {
-    const candidate = `新規テキストドキュメント(${i}).txt`;
+    const candidate = `新規テキストドキュメント (${i}).txt`;
     if (!existingNames.has(candidate)) return candidate;
   }
+}
+
+// Path key for case/separator-insensitive comparison (Windows-style paths).
+function normalizePathKey(p: string): string {
+  return p.replace(/[\/\\]+$/, '').replace(/\\/g, '/').toLowerCase();
+}
+
+/** true when targetPath equals folderPath or lies anywhere inside it. */
+function isPathWithinFolder(folderPath: string, targetPath: string): boolean {
+  const folder = normalizePathKey(folderPath);
+  const target = normalizePathKey(targetPath);
+  return target === folder || target.startsWith(folder + '/');
 }
 
 export function App() {
@@ -93,6 +106,14 @@ export function App() {
 
   // Upload dialog state
   const [showUploadDialog, setShowUploadDialog] = useState<boolean>(false);
+
+  // Move/Copy picker state (sources are snapshotted when the mode starts)
+  const [moveCopySession, setMoveCopySession] = useState<{
+    mode: MoveCopyMode;
+    sources: FileSystemItem[];
+    originPath: string;
+  } | null>(null);
+  const [isMoveCopying, setIsMoveCopying] = useState<boolean>(false);
 
   // Explorer Ready state
   const [isExplorerReady, setIsExplorerReady] = useState<boolean>(false);
@@ -502,6 +523,20 @@ export function App() {
           },
         },
         {
+          label: '移動',
+          disabled: !isExplorerReady || selectedCount === 0 || !!moveCopySession,
+          onClick: () => {
+            handleStartMoveCopy('move');
+          },
+        },
+        {
+          label: '複製',
+          disabled: !isExplorerReady || selectedCount === 0 || !!moveCopySession,
+          onClick: () => {
+            handleStartMoveCopy('copy');
+          },
+        },
+        {
           label: '削除',
           disabled: !isExplorerReady || selectedCount === 0,
           onClick: () => {
@@ -717,6 +752,103 @@ export function App() {
     await handleDownloadForPaths(paths, singleName, hasDirectory);
   }, [selectedPaths, selectedItems, handleDownloadForPaths]);
 
+  // ── Move / Copy ─────────────────────────────────────────────
+
+  // Active source folders: themselves and their subtrees are invalid destinations.
+  const pickerBlockedFolderPaths = moveCopySession
+    ? moveCopySession.sources.filter((s) => s.type === 'directory').map((s) => s.path)
+    : [];
+
+  const isPickerPathBlocked = (path: string): boolean =>
+    pickerBlockedFolderPaths.some((folder) => isPathWithinFolder(folder, path));
+
+  const handleStartMoveCopy = (mode: MoveCopyMode) => {
+    if (selectedItems.length === 0) return;
+    setMoveCopySession({
+      mode,
+      sources: selectedItems,
+      originPath: explorerPath,
+    });
+    setSelectedPaths(new Set());
+    setHighlightPath(null);
+  };
+
+  const handleMoveCopyCancel = useCallback(async () => {
+    if (!moveCopySession) return;
+    const { originPath, sources } = moveCopySession;
+    setMoveCopySession(null);
+    await navigateToPath(originPath);
+    setSelectedPaths(new Set(sources.map((s) => s.path)));
+  }, [moveCopySession]);
+
+  const handleMoveCopyConfirm = useCallback(async () => {
+    if (!moveCopySession || isMoveCopying) return;
+    const { mode, sources } = moveCopySession;
+    const destDir = explorerPath;
+    const paths = sources.map((s) => s.path);
+
+    // Client-side safety: folder must not go into itself / its subtree.
+    if (
+      sources.some((s) => s.type === 'directory' && isPathWithinFolder(s.path, destDir))
+    ) {
+      alert('フォルダ自身またはその配下へは移動・複製できません。');
+      return;
+    }
+
+    // Client-side: same-directory move is a no-op.
+    if (mode === 'move') {
+      const firstParent = fileService.getParentPath(sources[0].path);
+      const norm = (p: string) => p.replace(/[\/\\]+$/, '').replace(/\\/g, '/').toLowerCase();
+      if (norm(firstParent) === norm(destDir)) {
+        setMoveCopySession(null);
+        await navigateToPath(destDir);
+        setSelectedPaths(new Set(paths));
+        setToast({ message: '移動先が同じ場所です' });
+        return;
+      }
+    }
+
+    setIsMoveCopying(true);
+    try {
+      const result = mode === 'move'
+        ? await fileService.moveItems(paths, destDir)
+        : await fileService.copyItems(paths, destDir);
+
+      setMoveCopySession(null);
+      setSelectedPaths(new Set());
+      setHighlightPath(null);
+      await navigateToPath(destDir);
+
+      // Highlight the first affected item at the destination.
+      const firstDest = result.results.find((r) => r.dest)?.dest;
+      if (firstDest) setHighlightPath(firstDest);
+
+      const failedItems = result.results.filter((r) => r.status === 'failed');
+      if (failedItems.length > 0) {
+        const lines = failedItems
+          .slice(0, 5)
+          .map((r) => {
+            const name = r.source.split(/[\/\\]/).pop() || r.source;
+            return `${name}: ${r.error || '失敗しました'}`;
+          })
+          .join('\n');
+        const more = failedItems.length > 5 ? `\n他${failedItems.length - 5}件` : '';
+        alert(
+          `${mode === 'move' ? '移動' : '複製'}: 成功 ${result.processed}件 / 失敗 ${failedItems.length}件\n${lines}${more}`,
+        );
+      } else {
+        setToast({
+          message: mode === 'move' ? '移動しました' : '複製しました',
+          detail: `${result.processed}件 → ${destDir}`,
+        });
+      }
+    } catch (e: any) {
+      alert(`${mode === 'move' ? '移動' : '複製'}に失敗しました: ${e.message}`);
+    } finally {
+      setIsMoveCopying(false);
+    }
+  }, [moveCopySession, isMoveCopying, explorerPath, fileService]);
+
   // ── File Viewer Edit ───────────────────────────────────────
 
   const handleFileEditSave = useCallback(async () => {
@@ -767,6 +899,9 @@ export function App() {
 
   // Folder click from FileTable
   const handleOpenDirectory = async (path: string, _index: number) => {
+    // Move/Copy picker: never navigate into a source folder or its subtree
+    // (those can never be a valid destination).
+    if (isPickerPathBlocked(path)) return;
     await navigateToPath(path);
   };
 
@@ -966,6 +1101,8 @@ export function App() {
               items={items}
               selectedPaths={selectedPaths}
               highlightPath={highlightPath}
+              pickerMode={!!moveCopySession}
+              isPickerPathBlocked={isPickerPathBlocked}
               onSelectItem={() => {
                 // No-op: selection is now via toggle; item click opens/navigates
               }}
@@ -1005,6 +1142,19 @@ export function App() {
           )}
         </main>
       </div>
+
+      {currentScreen === 'explorer' && moveCopySession && (
+        <MoveCopyBar
+          mode={moveCopySession.mode}
+          count={moveCopySession.sources.length}
+          sourceNames={moveCopySession.sources.map((s) => s.name)}
+          destPath={explorerPath}
+          destBlocked={isPickerPathBlocked(explorerPath)}
+          isBusy={isMoveCopying}
+          onCancel={handleMoveCopyCancel}
+          onConfirm={handleMoveCopyConfirm}
+        />
+      )}
     </div>
   );
 

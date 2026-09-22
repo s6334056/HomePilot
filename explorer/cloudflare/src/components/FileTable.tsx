@@ -10,6 +10,13 @@ interface FileTableProps {
   onOpenDirectory: (path: string, index: number) => void;
   onOpenFile: (item: FileSystemItem, index: number) => void;
   onToggleSelect: (path: string) => void;
+  /** Move/Copy picker mode: folder taps navigate, file taps and checkboxes are inert. */
+  pickerMode?: boolean;
+  /**
+   * Move/Copy picker: returns true when a folder must not be entered
+   * (it is a source folder or inside one → invalid destination).
+   */
+  isPickerPathBlocked?: (path: string) => boolean;
 }
 
 export const FileTable: React.FC<FileTableProps> = ({
@@ -20,6 +27,8 @@ export const FileTable: React.FC<FileTableProps> = ({
   onOpenDirectory,
   onOpenFile,
   onToggleSelect,
+  pickerMode,
+  isPickerPathBlocked,
 }) => {
   if (items.length === 0) {
     return (
@@ -47,20 +56,24 @@ export const FileTable: React.FC<FileTableProps> = ({
             const isSelected = selectedPaths.has(item.path);
             const isDir = item.type === 'directory';
             const isHighlighted = item.path === highlightPath && !isSelected;
+            const isBlockedFolder =
+              pickerMode === true && isDir && !!isPickerPathBlocked?.(item.path);
 
             return (
               <tr
                 key={item.id}
                 data-path={item.path}
-                className={`file-row ${isSelected ? 'selected' : ''} ${isHighlighted ? 'highlighted' : ''}`}
+                className={`file-row ${isSelected ? 'selected' : ''} ${isHighlighted ? 'highlighted' : ''} ${isBlockedFolder ? 'picker-blocked' : ''}`}
               >
                 <td
                   className="file-row-main"
                   onClick={() => {
-                    onSelectItem(idx);
+                    // Move/Copy picker: never enter a source folder / its subtree.
+                    if (isBlockedFolder) return;
+                    if (!pickerMode) onSelectItem(idx);
                     if (isDir) {
                       onOpenDirectory(item.path, idx);
-                    } else {
+                    } else if (!pickerMode) {
                       onOpenFile(item, idx);
                     }
                   }}
@@ -71,7 +84,12 @@ export const FileTable: React.FC<FileTableProps> = ({
                     ) : (
                       <FileText size={18} className="icon-file" />
                     )}
-                    <span className="file-name-text">{item.name}</span>
+                    <span
+                      className="file-name-text"
+                      title={isBlockedFolder ? '移動・複製先には選べません' : undefined}
+                    >
+                      {item.name}
+                    </span>
                   </div>
                 </td>
                 <td className="cell-muted col-size">
@@ -85,10 +103,11 @@ export const FileTable: React.FC<FileTableProps> = ({
                   className="file-row-select"
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (pickerMode) return;
                     onToggleSelect(item.path);
                   }}
                 >
-                  <div className={`file-select-checkbox ${isSelected ? 'checked' : ''}`}>
+                  <div className={`file-select-checkbox ${isSelected ? 'checked' : ''} ${pickerMode ? 'picker-disabled' : ''}`}>
                     {isSelected && <Check size={14} />}
                   </div>
                 </td>
