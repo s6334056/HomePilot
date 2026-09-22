@@ -152,13 +152,69 @@ export class MockFileSystemService implements FileSystemService {
     return {};
   }
 
+  private getUniqueName(children: MockFileSystemNode[], name: string): string {
+    const extIndex = name.lastIndexOf('.');
+    const hasExt = extIndex > 0;
+    const ext = hasExt ? name.slice(extIndex) : '';
+    const base = hasExt ? name.slice(0, extIndex) : name;
+
+    let candidate = name;
+    let i = 2;
+    while (children.some((c) => c.item.name === candidate)) {
+      candidate = `${base} (${i})${ext}`;
+      i++;
+    }
+    return candidate;
+  }
+
   public async uploadItems(
-    _parentPath: string,
+    parentPath: string,
     files: UploadItem[],
     _onProgress?: (loaded: number, total: number) => void,
     _signal?: AbortSignal,
+    options?: { overwrite?: boolean },
   ): Promise<UploadResult> {
     await new Promise((resolve) => setTimeout(resolve, 30));
-    return { uploaded: files.length, errors: [] };
+    const parentNode = this.findNode(parentPath);
+    if (!parentNode) throw new Error(`Parent not found: ${parentPath}`);
+    if (parentNode.item.type !== 'directory') throw new Error(`Parent is not a directory: ${parentPath}`);
+    if (!parentNode.children) parentNode.children = [];
+
+    let uploaded = 0;
+    const errors: Array<{ path: string; error: string }> = [];
+    for (const item of files) {
+      try {
+        const content = await item.file.text();
+        let finalName = item.file.name;
+        const existing = parentNode.children.find((c) => c.item.name === finalName);
+        if (existing) {
+          if (existing.item.type === 'file' && options?.overwrite) {
+            existing.item.content = content;
+            existing.item.size = content.length;
+            existing.item.modifiedAt = new Date().toISOString();
+            uploaded++;
+            continue;
+          }
+          finalName = this.getUniqueName(parentNode.children, finalName);
+        }
+        const newPath = parentPath === '/' ? `/${finalName}` : `${parentPath}/${finalName}`;
+        parentNode.children.push({
+          item: {
+            id: newPath,
+            name: finalName,
+            type: 'file',
+            path: newPath,
+            size: content.length,
+            mimeType: item.file.type || 'text/plain',
+            modifiedAt: new Date().toISOString(),
+            content,
+          },
+        });
+        uploaded++;
+      } catch (e: any) {
+        errors.push({ path: item.file.name, error: e.message || 'Upload failed' });
+      }
+    }
+    return { uploaded, errors };
   }
 }

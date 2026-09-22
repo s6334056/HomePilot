@@ -37,6 +37,15 @@ function isGatewayService(s: FileSystemService): s is GatewayFileSystemService {
   return s instanceof GatewayFileSystemService;
 }
 
+function pickUniqueTextFileName(existingNames: Set<string>): string {
+  const baseName = '新規テキストドキュメント.txt';
+  if (!existingNames.has(baseName)) return baseName;
+  for (let i = 2; ; i++) {
+    const candidate = `新規テキストドキュメント(${i}).txt`;
+    if (!existingNames.has(candidate)) return candidate;
+  }
+}
+
 export function App() {
   const [fileService, setFileService] = useState<FileSystemService>(() => createFileService());
 
@@ -394,14 +403,6 @@ export function App() {
               },
             },
             {
-              // Delete during editing would discard unsaved edits.
-              label: '削除',
-              disabled: true,
-              onClick: () => {
-                setShowDeleteDialog(true);
-              },
-            },
-            {
               label: '上書き保存',
               onClick: () => {
                 handleFileEditSave();
@@ -411,6 +412,14 @@ export function App() {
               label: '保存せずに再表示',
               onClick: () => {
                 handleFileEditReload();
+              },
+            },
+            {
+              // Delete during editing would discard unsaved edits.
+              label: '削除',
+              disabled: true,
+              onClick: () => {
+                setShowDeleteDialog(true);
               },
             },
           ]
@@ -430,15 +439,15 @@ export function App() {
               },
             },
             {
-              label: '削除',
-              onClick: () => {
-                setShowDeleteDialog(true);
-              },
-            },
-            {
               label: '編集',
               onClick: () => {
                 setFileEditing(true);
+              },
+            },
+            {
+              label: '削除',
+              onClick: () => {
+                setShowDeleteDialog(true);
               },
             },
           ])
@@ -448,6 +457,13 @@ export function App() {
           disabled: !isExplorerReady,
           onClick: () => {
             handleToggleSortMode();
+          },
+        },
+        {
+          label: 'ファイルを作成',
+          disabled: !isExplorerReady,
+          onClick: () => {
+            handleCreateTextFile();
           },
         },
         {
@@ -603,6 +619,47 @@ export function App() {
       setShowDeleteDialog(false);
     }
   }, [isDeleting]);
+
+  // ── Create Text File ─────────────────────────────────────
+
+  const handleCreateTextFile = useCallback(async () => {
+    try {
+      const beforePaths = new Set(items.map((i) => i.path));
+      const fileName = pickUniqueTextFileName(new Set(items.map((i) => i.name)));
+      const file = new File([''], fileName, { type: 'text/plain;charset=utf-8' });
+      const result = await fileService.uploadItems(explorerPath, [
+        { file, relativePath: fileName },
+      ]);
+      if (result.errors && result.errors.length > 0) {
+        throw new Error(result.errors[0].error || 'ファイル作成エラー');
+      }
+      if (result.uploaded < 1) {
+        throw new Error('ファイルが作成されませんでした');
+      }
+
+      let createdName = fileName;
+      try {
+        const loadedItems = await fileService.getDirectory(explorerPath, sortMode);
+        setItems(loadedItems);
+        const created =
+          loadedItems.find(
+            (i) =>
+              !beforePaths.has(i.path) &&
+              /^新規テキストドキュメント\s*(\(\d+\))?\.txt$/.test(i.name),
+          ) || loadedItems.find((i) => !beforePaths.has(i.path));
+        if (created) {
+          createdName = created.name;
+          setHighlightPath(created.path);
+        }
+      } catch (e) {
+        console.error('[App] Failed to refresh directory after file creation:', e);
+      }
+
+      setToast({ message: 'ファイルを作成しました', detail: createdName });
+    } catch (e: any) {
+      alert(`ファイルの作成に失敗しました: ${e.message}`);
+    }
+  }, [fileService, explorerPath, items, sortMode]);
 
   // ── Upload ───────────────────────────────────────────────
 
