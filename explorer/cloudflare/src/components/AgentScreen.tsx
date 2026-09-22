@@ -2,9 +2,11 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Plus, Mic, Send, AlertCircle, Loader2, Archive, Square, Copy, Check } from 'lucide-react';
 import { OpenCodeSessionInfo, OpenCodeProviderModel, AgentContext } from '../domain/types';
 import { useOpenCode, OpenCodeMessageWithParts } from '../hooks/useOpenCode';
+import { OpenCodeClient } from '../services/OpenCodeClient';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { Navbar } from './Navbar';
 import { ContextActionMenu, ContextActionMenuItem } from './ContextActionMenu';
+import { RenameDialog } from './RenameDialog';
 
 interface AgentScreenProps {
   currentPath: string;
@@ -43,6 +45,10 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   const [showSessionActionMenu, setShowSessionActionMenu] = useState<boolean>(false);
   const [sessionActionMenuTriggerRect, setSessionActionMenuTriggerRect] = useState<DOMRect | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
+  const [deleteConfirmScope, setDeleteConfirmScope] = useState<'list' | 'chat'>('list');
+  const [showSessionRenameDialog, setShowSessionRenameDialog] = useState<boolean>(false);
+  const [sessionRenameTarget, setSessionRenameTarget] = useState<{ id: string; title: string } | null>(null);
+  const [sessionRenameError, setSessionRenameError] = useState<string>('');
   const [showModelSelect, setShowModelSelect] = useState<boolean>(false);
   const [availableModels, setAvailableModels] = useState<OpenCodeProviderModel[]>([]);
   const [selectedModelIndex, setSelectedModelIndex] = useState<number>(0);
@@ -315,7 +321,9 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
   };
 
   const handleSelectedSessionDelete = async () => {
-    const sessionIDs = Array.from(selectedSessionIds);
+    const sessionIDs = deleteConfirmScope === 'chat' && selectedSessionID
+      ? [selectedSessionID]
+      : Array.from(selectedSessionIds);
     if (sessionIDs.length === 0 || operatingSessionId) return;
     setShowDeleteConfirm(false);
     setOperatingSessionId('batch');
@@ -324,6 +332,72 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         await actions.deleteSession(sessionID);
       }
       setSelectedSessionIds(new Set());
+      if (deleteConfirmScope === 'chat') {
+        setShowSessionList(true);
+      }
+    } finally {
+      setOperatingSessionId(null);
+    }
+  };
+
+  const handleOpenListDeleteConfirm = () => {
+    setDeleteConfirmScope('list');
+    setShowDeleteConfirm(true);
+  };
+
+  const handleOpenChatDeleteConfirm = () => {
+    setDeleteConfirmScope('chat');
+    setShowDeleteConfirm(true);
+  };
+
+  const handleOpenSessionRename = (sessionID: string, title: string) => {
+    setSessionRenameTarget({ id: sessionID, title });
+    setSessionRenameError('');
+    setShowSessionRenameDialog(true);
+  };
+
+  const handleSessionRenameConfirm = async (newTitle: string) => {
+    if (!sessionRenameTarget) return;
+    if (operatingSessionId) return;
+    setOperatingSessionId(sessionRenameTarget.id);
+    try {
+      const ok = await actions.renameSession(sessionRenameTarget.id, newTitle);
+      if (ok) {
+        setShowSessionRenameDialog(false);
+        setSessionRenameTarget(null);
+        setSessionRenameError('');
+      } else {
+        setSessionRenameError('名前の変更に失敗しました。');
+      }
+    } finally {
+      setOperatingSessionId(null);
+    }
+  };
+
+  const handleSessionRenameCancel = () => {
+    setShowSessionRenameDialog(false);
+    setSessionRenameTarget(null);
+    setSessionRenameError('');
+  };
+
+  const handleChatArchive = async () => {
+    if (!selectedSessionID || operatingSessionId) return;
+    setOperatingSessionId(selectedSessionID);
+    try {
+      const ok = await actions.archiveSession(selectedSessionID);
+      if (ok) {
+        setShowSessionList(true);
+      }
+    } finally {
+      setOperatingSessionId(null);
+    }
+  };
+
+  const handleChatRestore = async () => {
+    if (!selectedSessionID || operatingSessionId) return;
+    setOperatingSessionId(selectedSessionID);
+    try {
+      await actions.restoreSession(selectedSessionID);
     } finally {
       setOperatingSessionId(null);
     }
@@ -340,9 +414,22 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
     });
   };
 
+  const isChatView = !showSessionList && !!selectedSessionID;
   const selectedSessionCount = selectedSessionIds.size;
-  const sessionActionMenuItems: ContextActionMenuItem[] = showArchivedSessions
+  const sessionListMenuItems: ContextActionMenuItem[] = showArchivedSessions
     ? [
+        {
+          label: '名前を変更',
+          disabled: selectedSessionCount !== 1 || !!operatingSessionId,
+          onClick: () => {
+            const target = Array.from(selectedSessionIds)
+              .map((id) => archivedSessions.find((s) => s.id === id))
+              .find(Boolean);
+            if (target) {
+              handleOpenSessionRename(target.id, target.title || target.slug || '');
+            }
+          },
+        },
         {
           label: 'アーカイブから復帰',
           disabled: selectedSessionCount === 0 || !!operatingSessionId,
@@ -351,10 +438,22 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         {
           label: '削除',
           disabled: selectedSessionCount === 0 || !!operatingSessionId,
-          onClick: () => setShowDeleteConfirm(true),
+          onClick: handleOpenListDeleteConfirm,
         },
       ]
     : [
+        {
+          label: '名前を変更',
+          disabled: selectedSessionCount !== 1 || !!operatingSessionId,
+          onClick: () => {
+            const target = Array.from(selectedSessionIds)
+              .map((id) => sessions.find((s) => s.id === id))
+              .find(Boolean);
+            if (target) {
+              handleOpenSessionRename(target.id, target.title || target.slug || '');
+            }
+          },
+        },
         {
           label: 'アーカイブ',
           disabled: selectedSessionCount === 0 || !!operatingSessionId,
@@ -363,9 +462,39 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         {
           label: '削除',
           disabled: selectedSessionCount === 0 || !!operatingSessionId,
-          onClick: () => setShowDeleteConfirm(true),
+          onClick: handleOpenListDeleteConfirm,
         },
       ];
+
+  const chatActionMenuItems: ContextActionMenuItem[] = activeSession
+    ? [
+        {
+          label: '名前を変更',
+          disabled: !!operatingSessionId,
+          onClick: () => handleOpenSessionRename(activeSession.id, activeSession.title || activeSession.slug || ''),
+        },
+        OpenCodeClient.isSessionArchived(activeSession)
+          ? {
+              label: 'アーカイブから復帰',
+              disabled: !!operatingSessionId,
+              onClick: () => { void handleChatRestore(); },
+            }
+          : {
+              label: 'アーカイブ',
+              disabled: !!operatingSessionId,
+              onClick: () => { void handleChatArchive(); },
+            },
+        {
+          label: '削除',
+          disabled: !!operatingSessionId,
+          onClick: handleOpenChatDeleteConfirm,
+        },
+      ]
+    : [];
+
+  const sessionActionMenuItems: ContextActionMenuItem[] = isChatView
+    ? chatActionMenuItems
+    : sessionListMenuItems;
 
   const handleCopyMessage = useCallback(async (msgId: string, text: string) => {
     try {
@@ -879,6 +1008,13 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
           onClose={handleCloseSessionActionMenu}
           triggerRect={sessionActionMenuTriggerRect}
         />
+        <RenameDialog
+          isOpen={showSessionRenameDialog}
+          currentName={sessionRenameTarget?.title || ''}
+          onConfirm={handleSessionRenameConfirm}
+          onCancel={handleSessionRenameCancel}
+          error={sessionRenameError}
+        />
         {showModelSelect && (
           <div className="oc-dialog-overlay" onClick={handleModelSelectCancel}>
             <div className="oc-dialog oc-dialog-model-select" onClick={(e) => e.stopPropagation()}>
@@ -990,6 +1126,7 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
         showSettingsButton={showSettingsButton}
         showSwapButton={showSwapButton}
         onSwapPanes={onSwapPanes}
+        onOpenActionMenu={handleOpenSessionActionMenu}
       />
       {/* <div className="oc-session-header">
         <div className="oc-session-header-right">
@@ -1092,6 +1229,47 @@ export const AgentScreen: React.FC<AgentScreenProps> = ({
 
       {renderPermissionDialog()}
       {renderQuestionDialog()}
+
+      {showDeleteConfirm && (
+        <div className="oc-dialog-overlay" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="oc-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="oc-dialog-header">
+              <AlertCircle size={18} />
+              <span>Delete Session</span>
+            </div>
+            <div className="oc-dialog-body">
+              <p>Are you sure you want to delete this session? This action cannot be undone.</p>
+            </div>
+            <div className="oc-dialog-actions">
+              <button
+                className="oc-btn"
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="oc-btn oc-btn-deny"
+                onClick={handleSelectedSessionDelete}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <ContextActionMenu
+        isOpen={showSessionActionMenu}
+        items={sessionActionMenuItems}
+        onClose={handleCloseSessionActionMenu}
+        triggerRect={sessionActionMenuTriggerRect}
+      />
+      <RenameDialog
+        isOpen={showSessionRenameDialog}
+        currentName={sessionRenameTarget?.title || ''}
+        onConfirm={handleSessionRenameConfirm}
+        onCancel={handleSessionRenameCancel}
+        error={sessionRenameError}
+      />
 
       {(speech.state === 'recording' || speech.state === 'transcribing' || (speech.state === 'error' && speech.error)) && (
         <div className="oc-dialog-overlay">

@@ -341,73 +341,110 @@ export function App() {
   const selectedItems = items.filter((i) => selectedPaths.has(i.path));
   const hasSelectedFolders = selectedItems.some((i) => i.type === 'directory');
 
-  const actionMenuItems: ContextActionMenuItem[] = [
-    {
-      label: '並び順切替',
-      disabled: !isExplorerReady,
-      onClick: () => {
-        handleToggleSortMode();
-      },
-    },
-    {
-      label: 'フォルダを作成',
-      disabled: !isExplorerReady,
-      onClick: () => {
-        setCreateFolderError('');
-        setIsCreatingFolder(false);
-        setShowCreateFolderDialog(true);
-      },
-    },
-    {
-      label: 'アップロード',
-      disabled: !isExplorerReady,
-      onClick: () => {
-        setShowUploadDialog(true);
-      },
-    },
-    {
-      label: 'ダウンロード',
-      disabled: !isExplorerReady || selectedCount === 0,
-      onClick: () => {
-        handleDownload();
-      },
-    },
-    {
-      label: '名前を変更',
-      disabled: !isExplorerReady || selectedCount !== 1,
-      onClick: () => {
-        const target = selectedItems[0];
-        if (target) {
-          setRenameTarget(target);
-          setRenameError('');
-          setShowRenameDialog(true);
-        }
-      },
-    },
-    {
-      label: '削除',
-      disabled: !isExplorerReady || selectedCount === 0,
-      onClick: () => {
-        setShowDeleteDialog(true);
-      },
-    },
-  ];
+  const actionMenuItems: ContextActionMenuItem[] = currentScreen === 'file_viewer' && selectedFile
+    ? [
+        {
+          label: 'ダウンロード',
+          onClick: () => {
+            handleDownloadForPaths([selectedFile.path], selectedFile.name);
+          },
+        },
+        {
+          label: '名前を変更',
+          onClick: () => {
+            setRenameTarget(selectedFile);
+            setRenameError('');
+            setShowRenameDialog(true);
+          },
+        },
+        {
+          label: '削除',
+          onClick: () => {
+            setShowDeleteDialog(true);
+          },
+        },
+      ]
+    : [
+        {
+          label: '並び順切替',
+          disabled: !isExplorerReady,
+          onClick: () => {
+            handleToggleSortMode();
+          },
+        },
+        {
+          label: 'フォルダを作成',
+          disabled: !isExplorerReady,
+          onClick: () => {
+            setCreateFolderError('');
+            setIsCreatingFolder(false);
+            setShowCreateFolderDialog(true);
+          },
+        },
+        {
+          label: 'アップロード',
+          disabled: !isExplorerReady,
+          onClick: () => {
+            setShowUploadDialog(true);
+          },
+        },
+        {
+          label: 'ダウンロード',
+          disabled: !isExplorerReady || selectedCount === 0,
+          onClick: () => {
+            handleDownload();
+          },
+        },
+        {
+          label: '名前を変更',
+          disabled: !isExplorerReady || selectedCount !== 1,
+          onClick: () => {
+            const target = selectedItems[0];
+            if (target) {
+              setRenameTarget(target);
+              setRenameError('');
+              setShowRenameDialog(true);
+            }
+          },
+        },
+        {
+          label: '削除',
+          disabled: !isExplorerReady || selectedCount === 0,
+          onClick: () => {
+            setShowDeleteDialog(true);
+          },
+        },
+      ];
 
   // ── Rename ───────────────────────────────────────────────
 
   const handleRenameConfirm = useCallback(async (newName: string) => {
     if (!renameTarget) return;
     try {
-      await fileService.renameItem(renameTarget.path, newName);
+      const newPath = await fileService.renameItem(renameTarget.path, newName);
       setShowRenameDialog(false);
       setRenameTarget(null);
+      setRenameError('');
+
+      if (currentScreen === 'file_viewer') {
+        const fileName = newPath.split(/[\/\\]/).pop() || newName;
+        setSelectedFile((prev) => prev ? { ...prev, name: fileName, path: newPath, id: newPath } : prev);
+        try {
+          const content = await fileService.readFile(newPath);
+          setFileContent(content);
+        } catch {
+          // keep previous content on read failure
+        }
+        return;
+      }
+
       setSelectedPaths(new Set());
       setHighlightPath(null);
       await navigateToPath(explorerPath);
     } catch (e: any) {
       setRenameError(e.message || '名前の変更に失敗しました。');
     }
-  }, [renameTarget, fileService, explorerPath]);
+  }, [renameTarget, fileService, explorerPath, currentScreen]);
 
   const handleRenameCancel = useCallback(() => {
     setShowRenameDialog(false);
@@ -444,6 +481,29 @@ export function App() {
   // ── Delete ───────────────────────────────────────────────
 
   const handleDeleteConfirm = useCallback(async () => {
+    if (currentScreen === 'file_viewer' && selectedFile) {
+      setIsDeleting(true);
+      try {
+        await fileService.deleteItems([selectedFile.path]);
+        setShowDeleteDialog(false);
+        setSelectedFile(null);
+        setFileContent('');
+        setSelectedPaths(new Set());
+        setHighlightPath(null);
+        if (returnPage === 'history') {
+          setCurrentScreen('history');
+        } else {
+          const parentPath = fileService.getParentPath(selectedFile.path);
+          await navigateToPath(parentPath);
+        }
+      } catch (e: any) {
+        alert(`削除に失敗しました: ${e.message}`);
+      } finally {
+        setIsDeleting(false);
+      }
+      return;
+    }
+
     const paths = Array.from(selectedPaths);
     if (paths.length === 0) return;
     setIsDeleting(true);
@@ -458,7 +518,7 @@ export function App() {
     } finally {
       setIsDeleting(false);
     }
-  }, [selectedPaths, fileService, explorerPath]);
+  }, [selectedPaths, selectedFile, fileService, explorerPath, currentScreen, returnPage]);
 
   const handleDeleteCancel = useCallback(() => {
     if (!isDeleting) {
@@ -476,17 +536,14 @@ export function App() {
 
   // ── Download ──────────────────────────────────────────────
 
-  const handleDownload = useCallback(async () => {
-    const paths = Array.from(selectedPaths);
+  const handleDownloadForPaths = useCallback(async (paths: string[], filenameHint: string, hasDirectory: boolean = false) => {
     if (paths.length === 0) return;
-
-    const hasDirectory = selectedItems.some((i) => i.type === 'directory');
 
     let downloadFilename: string;
     if (paths.length === 1 && !hasDirectory) {
-      downloadFilename = selectedItems[0]?.name || 'file';
+      downloadFilename = filenameHint || 'file';
     } else if (paths.length === 1 && hasDirectory) {
-      downloadFilename = (selectedItems[0]?.name || 'folder') + '.zip';
+      downloadFilename = (filenameHint || 'folder') + '.zip';
     } else {
       downloadFilename = 'download.zip';
     }
@@ -514,7 +571,16 @@ export function App() {
     } catch (e: any) {
       alert(`ダウンロードに失敗しました: ${e.message}`);
     }
-  }, [selectedPaths, selectedItems, fileService]);
+  }, [fileService]);
+
+  const handleDownload = useCallback(async () => {
+    const paths = Array.from(selectedPaths);
+    if (paths.length === 0) return;
+
+    const hasDirectory = selectedItems.some((i) => i.type === 'directory');
+    const singleName = paths.length === 1 ? (selectedItems[0]?.name || 'file') : '';
+    await handleDownloadForPaths(paths, singleName, hasDirectory);
+  }, [selectedPaths, selectedItems, handleDownloadForPaths]);
 
   // Folder click from FileTable
   const handleOpenDirectory = async (path: string, _index: number) => {
@@ -695,11 +761,13 @@ export function App() {
         showSwapButton={isDesktop && !isFirstExplorer}
         onSwapPanes={handleSwapPanes}
         onPathBarClick={currentScreen === 'history' ? undefined : handleNavigateToHistory}
-        onOpenActionMenu={currentScreen === 'explorer'
-          ? handleOpenActionMenu
-          : currentScreen === 'history'
-            ? historyActionMenuHandler || undefined
-            : undefined}
+        onOpenActionMenu={
+          currentScreen === 'explorer' || currentScreen === 'file_viewer'
+            ? handleOpenActionMenu
+            : currentScreen === 'history'
+              ? historyActionMenuHandler || undefined
+              : undefined
+        }
       />
 
       <div className="main-content-container">
@@ -829,8 +897,8 @@ export function App() {
       {/* Delete Confirm Dialog */}
       <DeleteConfirmDialog
         isOpen={showDeleteDialog}
-        count={selectedCount}
-        hasFolders={hasSelectedFolders}
+        count={currentScreen === 'file_viewer' && selectedFile ? 1 : selectedCount}
+        hasFolders={currentScreen === 'file_viewer' ? false : hasSelectedFolders}
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
         isDeleting={isDeleting}

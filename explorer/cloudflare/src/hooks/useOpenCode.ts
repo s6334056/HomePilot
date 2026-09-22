@@ -129,6 +129,7 @@ export interface OpenCodeActions {
   archiveSession: (sessionID: string) => Promise<boolean>;
   restoreSession: (sessionID: string) => Promise<boolean>;
   deleteSession: (sessionID: string) => Promise<boolean>;
+  renameSession: (sessionID: string, title: string) => Promise<boolean>;
   syncSessionStates: (sessions: OpenCodeSessionInfo[]) => Promise<void>;
   refreshPendingPermissions: () => Promise<void>;
   refreshPendingQuestions: () => Promise<void>;
@@ -549,6 +550,22 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     if (!client) return false;
     try {
       await client.restoreSession(sessionID);
+      const currentSelectedID = stateRef.current.selectedSessionID;
+      if (currentSelectedID === sessionID) {
+        setState((prev) => ({
+          ...prev,
+          selectedSession: prev.selectedSession && prev.selectedSession.id === sessionID
+            ? {
+                ...prev.selectedSession,
+                time: {
+                  created: prev.selectedSession.time?.created ?? Date.now(),
+                  updated: prev.selectedSession.time?.updated ?? Date.now(),
+                  archived: 0,
+                },
+              }
+            : prev.selectedSession,
+        }));
+      }
       await refreshAllSessions();
       return true;
     } catch (e: unknown) {
@@ -579,6 +596,29 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
       return true;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to delete session';
+      setState((prev) => ({ ...prev, error: msg }));
+      return false;
+    }
+  }, [refreshAllSessions]);
+
+  const renameSession = useCallback(async (sessionID: string, title: string): Promise<boolean> => {
+    const client = clientRef.current;
+    if (!client) return false;
+    try {
+      await client.renameSession(sessionID, title);
+      const currentSelectedID = stateRef.current.selectedSessionID;
+      if (currentSelectedID === sessionID) {
+        setState((prev) => ({
+          ...prev,
+          selectedSession: prev.selectedSession && prev.selectedSession.id === sessionID
+            ? { ...prev.selectedSession, title }
+            : prev.selectedSession,
+        }));
+      }
+      await refreshAllSessions();
+      return true;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to rename session';
       setState((prev) => ({ ...prev, error: msg }));
       return false;
     }
@@ -746,6 +786,7 @@ export function useOpenCode(): [OpenCodeState, OpenCodeActions] {
     archiveSession,
     restoreSession,
     deleteSession,
+    renameSession,
     syncSessionStates,
     refreshPendingPermissions,
     refreshPendingQuestions,

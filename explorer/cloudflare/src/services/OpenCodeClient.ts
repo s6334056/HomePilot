@@ -185,6 +185,10 @@ export class OpenCodeClient {
     return result === true || result === 'true';
   }
 
+  async renameSession(sessionID: string, title: string): Promise<void> {
+    await this.request<unknown>('PATCH', `/session/${sessionID}`, { title });
+  }
+
   async sendMessage(sessionID: string, content: string): Promise<void> {
     await this.request<void>('POST', `/session/${sessionID}/message`, {
       parts: [
