@@ -14,6 +14,10 @@ import { OpenCodeClient } from '../services/OpenCodeClient';
 import { G2AgentController } from './g2-agent/g2-agent-controller';
 import { AgentStateStore } from './g2-agent/agent-state-store';
 import { resolveConfig } from '../services/ConnectionConfig';
+import {
+  loadG2StartupScreen,
+  resolveG2StartupPage,
+} from '../services/G2StartupScreenSettings';
 
 export type G2RuntimeState = 'inactive' | 'starting' | 'active' | 'stopping';
 
@@ -186,7 +190,8 @@ export class G2RuntimeManager {
    * 3. GatewayFileSystemService initialize()
    * 4. OpenCodeClient creation
    * 5. G2AgentController creation + initialize()
-   * 6. Navigate to G2 Explorer
+   * 6. Navigate to the configured startup screen
+   *    (エクスプローラー / エージェント / 履歴 — PWA setting, default エクスプローラー)
    */
   async startG2Runtime(): Promise<void> {
     // Prevent double-start
@@ -237,23 +242,43 @@ export class G2RuntimeManager {
         this.g2AgentController.setBridge(this.bridge);
       }
 
-      // 6. Create ExplorerPage and navigate to it on G2
+      // 6. Create the initial page according to the startup screen setting
       // Gateway is always initialized before this point (step 3)
-      this.updateStatus('Loading G2 Explorer...');
-      const rootPath = this.gatewayService
-        ? this.gatewayService.getRootPath()
-        : '/home';
-      const explorerPage = new ExplorerPage(
-        rootPath,
-        this.gatewayService!,
-        undefined,
-        undefined,
-        undefined,
-        () => this.navigateToAgentFromExplorer(),
-        this.gatewayService,
-        () => this.navigateToHistory(),
-      );
-      await this.pageManager.navigateTo(explorerPage);
+      const startupPage = resolveG2StartupPage(loadG2StartupScreen(), {
+        hasGateway: this.gatewayService !== null,
+        hasAgent: this.g2AgentController !== null,
+      });
+
+      if (startupPage === 'history') {
+        // Startup History has no "page entered from" origin, so clear the
+        // History return point: double-tap then always falls back to the
+        // root Explorer (G2起動 → History → Double Tap → Root Explorer).
+        // Normal History return paths (navigateToHistory from other pages)
+        // are unaffected.
+        this.updateStatus('Loading G2 History...');
+        this.historyReturnPage = null;
+        await this.navigateToHistory();
+      } else if (startupPage === 'agent') {
+        this.updateStatus('Loading G2 Agent...');
+        this.agentReturnPage = null;
+        await this.navigateToSessionList();
+      } else {
+        this.updateStatus('Loading G2 Explorer...');
+        const rootPath = this.gatewayService
+          ? this.gatewayService.getRootPath()
+          : '/home';
+        const explorerPage = new ExplorerPage(
+          rootPath,
+          this.gatewayService!,
+          undefined,
+          undefined,
+          undefined,
+          () => this.navigateToAgentFromExplorer(),
+          this.gatewayService,
+          () => this.navigateToHistory(),
+        );
+        await this.pageManager.navigateTo(explorerPage);
+      }
 
       this.setState('active');
       this.updateStatus('G2 Runtime active');

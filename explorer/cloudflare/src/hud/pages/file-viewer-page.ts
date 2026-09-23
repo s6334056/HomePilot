@@ -31,7 +31,7 @@ const VIEWER_SCROLL_STEP = 8;
  *    We add a bounded correction based on the wrapping ratio,
  *    capped to prevent runaway correction on very long files.
  */
-function computeG2RestorePosition(
+export function computeG2RestorePosition(
   savedProgress: number,
   wrappedLinesCount: number,
   viewerLines: number,
@@ -590,11 +590,16 @@ export class FileViewerPage extends BasePage {
         break;
       case "top":
         this.scrollPosition = 0;
+        // Recompute progress from the new scrollPosition before flushing.
+        // flushPositionSave() alone only sends a previously pending value
+        // (stale position, or nothing if the debounce already fired).
+        this.saveCurrentPosition();
         this.flushPositionSave();
         if (this.renderPage) await this.renderPage();
         break;
       case "bottom":
         this.scrollPosition = Math.max(0, this.wrappedLines.length - G2_VIEWER_LINES);
+        this.saveCurrentPosition();
         this.flushPositionSave();
         if (this.renderPage) await this.renderPage();
         break;

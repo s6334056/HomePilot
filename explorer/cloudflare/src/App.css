@@ -226,8 +226,8 @@
 }
 
 .btn:hover {
-  background-color: #30363d;
-  border-color: #8b949e;
+  background-color: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .btn-primary {
@@ -995,7 +995,7 @@
 }
 
 .qr-diag-entry:last-child .qr-diag-step {
-  color: #f85149;
+  color: var(--danger);
 }
 
 /* Agent Icon Button */
@@ -1053,7 +1053,7 @@
 }
 
 .agent-session-new:hover {
-  background-color: #30363d;
+  background-color: var(--bg-hover);
   border-color: var(--accent);
 }
 
@@ -1349,7 +1349,7 @@
 
 .settings-select-item:hover {
   background-color: var(--bg-sub);
-  border-color: #8b949e;
+  border-color: var(--border-strong);
 }
 
 .settings-select-item.selected {
@@ -1464,7 +1464,7 @@
 /* Settings Error */
 .settings-error {
   font-size: 11px;
-  color: #f85149;
+  color: var(--danger);
   margin: 0 0 8px 0;
   padding: 6px 8px;
   background-color: rgba(248, 81, 73, 0.1);
@@ -1523,20 +1523,20 @@
 }
 
 .oc-status-connected {
-  color: #3fb950;
+  color: var(--success);
 }
 
 .oc-status-connecting {
-  color: #d29922;
+  color: var(--warning);
   animation: oc-spin 1s linear infinite;
 }
 
 .oc-status-error {
-  color: #f85149;
+  color: var(--danger);
 }
 
 .oc-status-disconnected {
-  color: #8b949e;
+  color: var(--text-muted);
 }
 
 .oc-session-model {
@@ -1561,7 +1561,7 @@
 
 .oc-session-status--busy {
   background-color: rgba(210, 153, 34, 0.15);
-  color: #d29922;
+  color: var(--warning);
 }
 
 /* Connecting Screen */
@@ -1594,7 +1594,7 @@
   padding: 8px 16px;
   background-color: rgba(248, 81, 73, 0.1);
   border-bottom: 1px solid rgba(248, 81, 73, 0.3);
-  color: #f85149;
+  color: var(--danger);
   font-size: 12px;
 }
 
@@ -1668,22 +1668,22 @@
 
 .oc-tool-status--pending {
   background-color: rgba(139, 148, 158, 0.15);
-  color: #8b949e;
+  color: var(--text-muted);
 }
 
 .oc-tool-status--running {
   background-color: rgba(210, 153, 34, 0.15);
-  color: #d29922;
+  color: var(--warning);
 }
 
 .oc-tool-status--completed {
   background-color: rgba(63, 185, 80, 0.15);
-  color: #3fb950;
+  color: var(--success);
 }
 
 .oc-tool-status--error {
   background-color: rgba(248, 81, 73, 0.15);
-  color: #f85149;
+  color: var(--danger);
 }
 
 .oc-tool-input {
@@ -1764,7 +1764,7 @@
 }
 
 .oc-dialog-header svg {
-  color: #d29922;
+  color: var(--warning);
 }
 
 .oc-dialog-body {
@@ -1850,8 +1850,8 @@
 
 .oc-btn-deny:hover {
   background-color: rgba(248, 81, 73, 0.1);
-  border-color: #f85149;
-  color: #f85149;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .oc-btn-grant {
@@ -1860,8 +1860,8 @@
 
 .oc-btn-grant:hover {
   background-color: rgba(63, 185, 80, 0.1);
-  border-color: #3fb950;
-  color: #3fb950;
+  border-color: var(--success);
+  color: var(--success);
 }
 
 .oc-btn-always {
@@ -2017,7 +2017,7 @@
 .agent-session-archive-toggle:hover {
   background-color: var(--bg-sub);
   color: var(--text);
-  border-color: #8b949e;
+  border-color: var(--border-strong);
 }
 
 .agent-session-archive-toggle.active {
@@ -2117,7 +2117,7 @@
 
 .agent-session-action-btn--danger:hover:not(:disabled) {
   background-color: rgba(248, 81, 73, 0.1);
-  color: #f85149;
+  color: var(--danger);
 }
 
 /* Swap Pane Button (⇄) */
@@ -2434,7 +2434,7 @@
   border: 1px solid rgba(34, 197, 94, 0.3);
   border-radius: 8px;
   font-size: 12px;
-  color: #22c55e;
+  color: var(--success-strong);
   font-weight: 500;
 }
 
@@ -2447,7 +2447,7 @@
 }
 
 .status-dot.active {
-  background: #22c55e;
+  background: var(--success-strong);
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
@@ -2651,7 +2651,7 @@
 .hp-dialog-error {
   margin-top: 8px;
   font-size: 12px;
-  color: #f85149;
+  color: var(--danger);
   background-color: rgba(248, 81, 73, 0.1);
   border-radius: 4px;
   padding: 6px 8px;
@@ -2696,12 +2696,12 @@
 
 .hp-dialog-btn-danger {
   border-color: rgba(248, 81, 73, 0.3);
-  color: #f85149;
+  color: var(--danger);
 }
 
 .hp-dialog-btn-danger:hover:not(:disabled) {
   background-color: rgba(248, 81, 73, 0.1);
-  border-color: #f85149;
+  border-color: var(--danger);
 }
 
 /* Upload Dialog */
@@ -2764,7 +2764,7 @@
 }
 
 .upload-file-remove:hover {
-  color: #f85149;
+  color: var(--danger);
 }
 
 .upload-summary {

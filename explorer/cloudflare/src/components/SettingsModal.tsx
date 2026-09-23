@@ -26,6 +26,17 @@ import {
   AutoScrollInterval,
   AutoScrollAmount,
 } from '../services/AutoScrollSettings';
+import {
+  loadG2StartupScreen,
+  saveG2StartupScreen,
+  G2StartupScreen,
+} from '../services/G2StartupScreenSettings';
+import {
+  loadColorTheme,
+  saveColorTheme,
+  applyColorTheme,
+  ColorTheme,
+} from '../services/ColorThemeSettings';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -53,6 +64,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [copied, setCopied] = useState<boolean>(false);
   const [connected, setConnected] = useState<boolean>(false);
   const [autoScrollSettings, setAutoScrollSettings] = useState<AutoScrollSettings>(() => loadAutoScrollSettings());
+  const [g2StartupScreen, setG2StartupScreen] = useState<G2StartupScreen>(() => loadG2StartupScreen());
+  const [colorTheme, setColorTheme] = useState<ColorTheme>(() => loadColorTheme());
   const pasteInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -162,6 +175,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setAutoScrollSettings(newSettings);
     saveAutoScrollSettings(newSettings);
   }, [autoScrollSettings]);
+
+  const handleG2StartupScreenChange = useCallback((screen: G2StartupScreen) => {
+    setG2StartupScreen(screen);
+    saveG2StartupScreen(screen);
+  }, []);
+
+  const handleColorThemeChange = useCallback((theme: ColorTheme) => {
+    setColorTheme(theme);
+    saveColorTheme(theme);
+    applyColorTheme(theme);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -302,6 +326,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
+          {/* G2 Startup Screen */}
+          <section className="settings-section">
+            <h3>グラス起動時の画面</h3>
+
+            <div className="settings-field">
+              <label className="settings-label">起動時に表示する画面</label>
+              <div className="settings-radio-group">
+                {([
+                  { value: 'explorer' as const, label: 'エクスプローラー' },
+                  { value: 'agent' as const, label: 'エージェント' },
+                  { value: 'history' as const, label: '履歴' },
+                ]).map((opt) => (
+                  <label key={opt.value} className="settings-radio">
+                    <input
+                      type="radio"
+                      name="g2StartupScreen"
+                      value={opt.value}
+                      checked={g2StartupScreen === opt.value}
+                      onChange={() => handleG2StartupScreenChange(opt.value)}
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </section>
+
           {/* G2 Glass Control */}
           {isBridgeAvailable && (
             <section className="settings-section">
@@ -383,6 +434,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       value={opt.value}
                       checked={autoScrollSettings.amount === opt.value}
                       onChange={() => handleAutoScrollAmountChange(opt.value)}
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Color Theme */}
+          <section className="settings-section">
+            <h3>カラーテーマ</h3>
+
+            <div className="settings-field">
+              <label className="settings-label">表示テーマ</label>
+              <div className="settings-radio-group">
+                {([
+                  { value: 'system' as const, label: 'システム' },
+                  { value: 'light' as const, label: 'ライト' },
+                  { value: 'dark' as const, label: 'ダーク' },
+                ]).map((opt) => (
+                  <label key={opt.value} className="settings-radio">
+                    <input
+                      type="radio"
+                      name="colorTheme"
+                      value={opt.value}
+                      checked={colorTheme === opt.value}
+                      onChange={() => handleColorThemeChange(opt.value)}
                     />
                     <span>{opt.label}</span>
                   </label>
