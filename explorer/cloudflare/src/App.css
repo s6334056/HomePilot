@@ -2368,7 +2368,7 @@
 }
 
 .g2-active-modal {
-  background: var(--bg);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 32px;
