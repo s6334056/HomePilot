@@ -11,6 +11,27 @@ export const G2_VIEWER_LINES = 9;
 export const G2_VIEWER_MAX_WIDTH = 56;
 const VIEWER_SCROLL_STEP = 8;
 
+// Header geometry shared by the normal and auto-scroll headers.
+const HEADER_X = 4;
+const HEADER_Y = 2;
+const HEADER_WIDTH = 572;
+const HEADER_HEIGHT = 28;
+const CONTENT_RIGHT_EDGE = HEADER_X + HEADER_WIDTH; // 576
+
+// TextContainerProperty has no right-anchored positioning, so the remaining
+// time "@Ns" is placed by computing xPosition from the left edge:
+//   xPosition = REMAINING_TEXT_RIGHT_EDGE - measuredTextWidth
+// This keeps the right edge of the text stable while the digits change
+// (@30s -> @9s) and leaves a margin so text never touches the screen edge.
+const REMAINING_TEXT_RIGHT_EDGE = 568;
+
+// Minimum gap between the datetime text and the remaining-time text.
+const HEADER_SPLIT_GAP = 8;
+
+// G2 font width units (used by getStringWidth/getCharWidth and the 56-unit
+// wrap limit) mapped onto the 572px header container width.
+const PX_PER_WIDTH_UNIT = HEADER_WIDTH / G2_VIEWER_MAX_WIDTH;
+
 /**
  * Compute G2 scroll position from a shared progress value,
  * correcting for the viewport size difference between PWA and G2.
@@ -93,6 +114,9 @@ export class FileViewerPage extends BasePage {
   private autoScrollLastTickTime: number = 0;
   private autoScrollIndicator: string | null = null;
   private autoScrollIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ── [G2-VIEWER-DEBUG] temporary instrumentation (remove after device investigation) ──
+  private debugLastRenderKey: string | null = null;
 
   /**
    * PageManager checks this on navigateTo() and on each onAutoTickChanged
@@ -337,46 +361,28 @@ export class FileViewerPage extends BasePage {
   }
 
   public render(): PageRenderResult {
-    const range = this.getVisibleLogicalRange();
-    const scrollMode = this.scrollInverted ? 's' : 'k';
-    let pageIndicator = `[${range.min}-${range.max}/${range.total}]${scrollMode}`;
-    if (this.autoScrollIndicator) {
-      pageIndicator += ` ${this.autoScrollIndicator}`;
-    }
-
-    let headerContent: string;
-    if (this.autoScrollEnabled && this.autoScrollIndicator) {
-      // Auto Scroll中: [Viewer] YYYY/MM/DD(曜)hh:mm:ss | @{残り秒}s
-      const dateTime = this.getFormattedDate();
-      headerContent = `[Viewer] ${dateTime} | @${this.autoScrollIndicator}s`;
-    } else {
-      // 通常時: 従来のヘッダー表示
-      headerContent = this.buildHeaderLine(this.file.path, pageIndicator, G2_VIEWER_MAX_WIDTH, "[Viewer]");
-    }
+    const menuObject = {
+      menuList: [
+        { id: "history", title: "閲覧履歴画面へ" },
+        { id: "agent", title: "エージェント画面へ" },
+        { id: "refresh", title: "更新" },
+        { id: "top", title: "先頭へ" },
+        { id: "bottom", title: "末尾へ" },
+        { id: "scrollInvert", title: "スクロール操作反転" },
+      ],
+    };
 
     const end = Math.min(this.scrollPosition + G2_VIEWER_LINES, this.wrappedLines.length);
     const visibleLines = this.wrappedLines.slice(this.scrollPosition, end);
     const bodyText = visibleLines.map((wl) => wl.text).join("\n");
 
-    const headerProp = new TextContainerProperty({
-      containerID: 1,
-      containerName: "viewer_header",
-      content: headerContent,
-      xPosition: 4,
-      yPosition: 2,
-      width: 572,
-      height: 28,
-      borderWidth: 0,
-      isEventCapture: 0,
-    });
-
     const bodyProp = new TextContainerProperty({
       containerID: 2,
       containerName: "viewer_body",
       content: bodyText,
-      xPosition: 4,
+      xPosition: HEADER_X,
       yPosition: 30,
-      width: 572,
+      width: HEADER_WIDTH,
       height: 256,
       borderWidth: 1,
       borderColor: 0xFFFFFFFF,
@@ -385,20 +391,117 @@ export class FileViewerPage extends BasePage {
       isEventCapture: 1,
     });
 
+    // Auto Scroll中: ヘッダーを「日時」と「残り秒」の別 TextContainer に分割。
+    // containerTotalNum を 2 → 3 に変えて rebuildPageContainer する。
+    if (this.autoScrollEnabled && this.autoScrollIndicator !== null) {
+      const dateTime = this.getFormattedDate();
+      const remainingText = `@${this.autoScrollIndicator}s`;
+      const remainingTextWidth = this.getStringWidth(remainingText) * PX_PER_WIDTH_UNIT;
+      const dateTimeWidth = Math.ceil(this.getStringWidth(dateTime) * PX_PER_WIDTH_UNIT);
+
+      // 右端揃えにするため左端 xPosition を算出する。
+      // 日時に食い込まない下限も同時に担保する。
+      const remainingX = Math.max(
+        HEADER_X + dateTimeWidth + HEADER_SPLIT_GAP,
+        Math.round(REMAINING_TEXT_RIGHT_EDGE - remainingTextWidth),
+      );
+
+      const dateTimeProp = new TextContainerProperty({
+        containerID: 1,
+        containerName: "viewer_header_datetime",
+        content: dateTime,
+        xPosition: HEADER_X,
+        yPosition: HEADER_Y,
+        width: HEADER_WIDTH,
+        height: HEADER_HEIGHT,
+        borderWidth: 0,
+        isEventCapture: 0,
+      });
+
+      const remainingProp = new TextContainerProperty({
+        containerID: 3,
+        containerName: "viewer_header_remaining",
+        content: remainingText,
+        xPosition: remainingX,
+        yPosition: HEADER_Y,
+        width: CONTENT_RIGHT_EDGE - remainingX,
+        height: HEADER_HEIGHT,
+        borderWidth: 0,
+        isEventCapture: 0,
+      });
+
+      const textObject = [dateTimeProp, remainingProp, bodyProp];
+      this.debugLogRender("AUTO_SCROLL", textObject);
+      return {
+        containerTotalNum: 3,
+        textObject,
+        menuObject,
+      };
+    }
+    // 通常時: 従来通り 1 つのヘッダー (containerTotalNum = 2)
+    const range = this.getVisibleLogicalRange();
+    const scrollMode = this.scrollInverted ? 's' : 'k';
+    const pageIndicator = `[${range.min}-${range.max}/${range.total}]${scrollMode}`;
+
+    const headerProp = new TextContainerProperty({
+      containerID: 1,
+      containerName: "viewer_header",
+      content: this.buildHeaderLine(this.file.path, pageIndicator, G2_VIEWER_MAX_WIDTH, "[Viewer]"),
+      xPosition: HEADER_X,
+      yPosition: HEADER_Y,
+      width: HEADER_WIDTH,
+      height: HEADER_HEIGHT,
+      borderWidth: 0,
+      isEventCapture: 0,
+    });
+
+    const textObject = [headerProp, bodyProp];
+    this.debugLogRender("NORMAL", textObject);
     return {
       containerTotalNum: 2,
-      textObject: [headerProp, bodyProp],
-      menuObject: {
-        menuList: [
-          { id: "history", title: "閲覧履歴画面へ" },
-          { id: "agent", title: "エージェント画面へ" },
-          { id: "refresh", title: "更新" },
-          { id: "top", title: "先頭へ" },
-          { id: "bottom", title: "末尾へ" },
-          { id: "scrollInvert", title: "スクロール操作反転" },
-        ],
-      },
+      textObject,
+      menuObject,
     };
+  }
+
+  /**
+   * [G2-VIEWER-DEBUG] Temporary instrumentation.
+   * Logs the render mode + container layout only when the structure changes
+   * (mode / container IDs / geometry), so the 400ms auto-scroll tick does not
+   * flood ConsoleJS. Content is included in the payload but excluded from the
+   * change-detection key.
+   */
+  private debugLogRender(mode: "NORMAL" | "AUTO_SCROLL", containers: TextContainerProperty[]): void {
+    const key = JSON.stringify({
+      mode,
+      containers: containers.map((c) => ({
+        id: c.containerID,
+        name: c.containerName,
+        x: c.xPosition,
+        y: c.yPosition,
+        w: c.width,
+        h: c.height,
+        cap: c.isEventCapture,
+      })),
+    });
+    if (key === this.debugLastRenderKey) return;
+    this.debugLastRenderKey = key;
+    console.log(`[G2-VIEWER-DEBUG] render mode: ${mode}`);
+    console.log(
+      "[G2-VIEWER-DEBUG] render containers:",
+      JSON.stringify(
+        containers.map((c) => ({
+          containerID: c.containerID,
+          containerName: c.containerName,
+          xPosition: c.xPosition,
+          yPosition: c.yPosition,
+          width: c.width,
+          height: c.height,
+          isEventCapture: c.isEventCapture,
+          content: c.content,
+        })),
+      ),
+    );
   }
 
   // ── Date/Time formatting (for Auto Scroll header) ──
@@ -472,6 +575,15 @@ export class FileViewerPage extends BasePage {
   }
 
   private stopAutoScroll(): void {
+    console.log(
+      "[G2-VIEWER-DEBUG] stopAutoScroll:",
+      JSON.stringify({
+        prevIndicator: this.autoScrollIndicator,
+        prevRemainingMs: Math.round(this.autoScrollRemainingMs),
+        scrollPosition: this.scrollPosition,
+        atEnd: this.isAtEnd(),
+      }),
+    );
     this.autoScrollEnabled = false;
     this.autoScrollRemainingMs = 0;
     this.autoScrollLastTickTime = 0;
@@ -482,6 +594,14 @@ export class FileViewerPage extends BasePage {
   }
 
   private toggleAutoScroll(): void {
+    console.log(
+      "[G2-VIEWER-DEBUG] toggleAutoScroll BEFORE:",
+      JSON.stringify({
+        autoScrollEnabled: this.autoScrollEnabled,
+        autoScrollIndicator: this.autoScrollIndicator,
+        autoScrollRemainingMs: Math.round(this.autoScrollRemainingMs),
+      }),
+    );
     if (this.autoScrollEnabled) {
       this.stopAutoScroll();
     } else {
@@ -491,9 +611,20 @@ export class FileViewerPage extends BasePage {
       this.autoScrollLastTickTime = Date.now();
       this.autoScrollIndicator = String(settings.interval);
       this.onAutoTickChanged?.();
-      if (this.renderPage) this.renderPage();
+      if (this.renderPage) {
+        console.log("[G2-VIEWER-DEBUG] renderPage call (toggleAutoScroll -> AUTO)");
+        this.renderPage();
+      }
       console.log(`[G2 AutoScroll] STARTED interval=${settings.interval}s`);
     }
+    console.log(
+      "[G2-VIEWER-DEBUG] toggleAutoScroll AFTER:",
+      JSON.stringify({
+        autoScrollEnabled: this.autoScrollEnabled,
+        autoScrollIndicator: this.autoScrollIndicator,
+        autoScrollRemainingMs: Math.round(this.autoScrollRemainingMs),
+      }),
+    );
   }
 
   private resetAutoScrollTimer(): void {
@@ -556,7 +687,24 @@ export class FileViewerPage extends BasePage {
   }
 
   public async onClick() {
+    console.log(
+      "[G2-VIEWER-DEBUG] onClick START:",
+      JSON.stringify({
+        autoScrollEnabled: this.autoScrollEnabled,
+        autoScrollIndicator: this.autoScrollIndicator,
+        autoScrollRemainingMs: Math.round(this.autoScrollRemainingMs),
+        scrollPosition: this.scrollPosition,
+        totalLines: this.wrappedLines.length,
+      }),
+    );
     this.toggleAutoScroll();
+    console.log(
+      "[G2-VIEWER-DEBUG] onClick END:",
+      JSON.stringify({
+        autoScrollEnabled: this.autoScrollEnabled,
+        autoScrollIndicator: this.autoScrollIndicator,
+      }),
+    );
   }
 
   public onDeactivate() {

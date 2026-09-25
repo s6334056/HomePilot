@@ -1,14 +1,29 @@
 import {
   CreateStartUpPageContainer,
   type EvenAppBridge,
+  formatEvenHubPageContainerValidationError,
   MenuContainerProperty,
   MenuItemProperty,
   OsEventTypeList,
   StartUpPageCreateResult,
   RebuildPageContainer,
   TextContainerProperty,
+  validateEvenHubPageContainer,
   waitForEvenAppBridge,
 } from "@evenrealities/even_hub_sdk";
+
+// ── [G2-VIEWER-DEBUG] temporary instrumentation (remove after device investigation) ──
+// ConsoleJS requires objects to be stringified; never log raw Error objects.
+function describeError(error: unknown): string {
+  if (error instanceof Error) {
+    return JSON.stringify({ name: error.name, message: error.message, stack: error.stack });
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
 
 export interface PageRenderResult {
   containerTotalNum: number;
@@ -177,6 +192,12 @@ export class PageManager {
   // Shared auto-scroll tick (~400ms interval, DocsReader4EH pattern)
   private autoScrollTickTimer: ReturnType<typeof setInterval> | null = null;
 
+  // ── [G2-VIEWER-DEBUG] temporary instrumentation ──
+  // Set while the shared ~400ms interval is running so per-tick renders are
+  // not logged (keeps ConsoleJS output bounded to taps / navigations).
+  private inAutoTick: boolean = false;
+  private debugLastRenderKey: string | null = null;
+
   constructor(onStatusUpdate?: (status: string) => void) {
     this.onStatusUpdate = onStatusUpdate;
   }
@@ -248,7 +269,64 @@ export class PageManager {
       .join('\n');
     this.lastRenderedText = plainText;
 
-    if (!this.isBridgeReady || !this.bridge) return;
+    // ── [G2-VIEWER-DEBUG] structure-change gated trace ──
+    // Logged only when NOT inside the shared ~400ms auto-scroll tick and only
+    // when the container structure changed, so ConsoleJS output stays bounded
+    // (no per-tick / per-scroll spam). Content is excluded from the change key.
+    const debugContainers = textContainers.map((t) => {
+      const c = t as unknown as {
+        containerID?: unknown;
+        containerName?: unknown;
+        xPosition?: unknown;
+        yPosition?: unknown;
+        width?: unknown;
+        height?: unknown;
+        isEventCapture?: unknown;
+        content?: unknown;
+      };
+      return {
+        containerID: c.containerID ?? null,
+        containerName: c.containerName ?? null,
+        xPosition: c.xPosition ?? null,
+        yPosition: c.yPosition ?? null,
+        width: c.width ?? null,
+        height: c.height ?? null,
+        isEventCapture: c.isEventCapture ?? null,
+        content: typeof c.content === "string" ? c.content.slice(0, 80) : c.content ?? null,
+      };
+    });
+    const debugKey = JSON.stringify({
+      pageType: this.currentPage.pageType,
+      containerTotalNum: renderResult.containerTotalNum,
+      menuCount: renderResult.menuObject?.menuList?.length ?? 0,
+      containers: debugContainers.map(({ containerID, containerName, xPosition, yPosition, width, height, isEventCapture }) => ({
+        containerID, containerName, xPosition, yPosition, width, height, isEventCapture,
+      })),
+    });
+    const trace = !this.inAutoTick && debugKey !== this.debugLastRenderKey;
+    if (trace) {
+      this.debugLastRenderKey = debugKey;
+      console.log(
+        "[G2-VIEWER-DEBUG] renderPage START:",
+        JSON.stringify({
+          pageType: this.currentPage.pageType,
+          containerTotalNum: renderResult.containerTotalNum,
+          menuCount: renderResult.menuObject?.menuList?.length ?? 0,
+          bridgeReady: this.isBridgeReady,
+          isStartupCreated: this.isStartupCreated,
+          containers: debugContainers,
+        }),
+      );
+    }
+
+    if (!this.isBridgeReady || !this.bridge) {
+      if (trace) {
+        console.log(
+          "[G2-VIEWER-DEBUG] renderPage SKIP: bridge not ready (browser/simulator path - rebuildPageContainer is never called)",
+        );
+      }
+      return;
+    }
 
     // Build MenuContainerProperty from page's menuList
     let menuContainer: MenuContainerProperty | undefined;
@@ -267,6 +345,29 @@ export class PageManager {
     try {
       const containerTotalNum = renderResult.containerTotalNum || 1;
 
+      if (trace) {
+        // SDK-side pre-flight: rebuildPageContainer() runs this same
+        // validation internally and returns false (without throwing) when it
+        // fails, so mirror the result here before the native call.
+        const validation = validateEvenHubPageContainer({
+          containerTotalNum,
+          textObject: textContainers as any,
+          listObject: renderResult.listObject as any,
+          imageObject: renderResult.imageObject as any,
+          menuObject: menuContainer,
+        } as any);
+        console.log(
+          "[G2-VIEWER-DEBUG] SDK validation:",
+          validation.valid ? "VALID" : JSON.stringify({ code: validation.code, message: validation.message }),
+        );
+        if (!validation.valid) {
+          console.log(
+            "[G2-VIEWER-DEBUG] SDK validation message:",
+            formatEvenHubPageContainerValidationError(validation),
+          );
+        }
+      }
+
       if (!this.isStartupCreated) {
         const startupConfig = new CreateStartUpPageContainer({
           containerTotalNum,
@@ -275,9 +376,20 @@ export class PageManager {
           imageObject: renderResult.imageObject as any,
           menuObject: menuContainer,
         });
-        const result: StartUpPageCreateResult = await this.bridge.createStartUpPageContainer(startupConfig);
-        if (result === StartUpPageCreateResult.success) {
-          this.isStartupCreated = true;
+        if (trace) console.log("[G2-VIEWER-DEBUG] createStartUpPageContainer START");
+        try {
+          const result: StartUpPageCreateResult = await this.bridge.createStartUpPageContainer(startupConfig);
+          if (trace) {
+            console.log(`[G2-VIEWER-DEBUG] createStartUpPageContainer RESULT: type=${typeof result} value=${String(result)}`);
+          }
+          if (result === StartUpPageCreateResult.success) {
+            this.isStartupCreated = true;
+          }
+        } catch (error) {
+          if (trace) {
+            console.log("[G2-VIEWER-DEBUG] createStartUpPageContainer ERROR:", describeError(error));
+          }
+          throw error;
         }
       } else {
         const rebuildConfig = new RebuildPageContainer({
@@ -287,11 +399,31 @@ export class PageManager {
           imageObject: renderResult.imageObject as any,
           menuObject: menuContainer,
         });
-        await this.bridge.rebuildPageContainer(rebuildConfig);
+        if (trace) {
+          console.log(
+            "[G2-VIEWER-DEBUG] rebuildPageContainer START:",
+            JSON.stringify({ containerTotalNum, textCount: textContainers.length }),
+          );
+        }
+        try {
+          const result = await this.bridge.rebuildPageContainer(rebuildConfig);
+          if (trace) {
+            console.log(`[G2-VIEWER-DEBUG] rebuildPageContainer RESULT: type=${typeof result} value=${String(result)}`);
+          }
+        } catch (error) {
+          if (trace) {
+            console.log("[G2-VIEWER-DEBUG] rebuildPageContainer ERROR:", describeError(error));
+          }
+          throw error;
+        }
       }
     } catch (err) {
+      if (trace) {
+        console.log("[G2-VIEWER-DEBUG] render ERROR:", describeError(err));
+      }
       console.error("[PageManager] Failed to render on G2 glasses:", err);
     }
+    if (trace) console.log("[G2-VIEWER-DEBUG] renderPage END");
   }
 
   public getLastRenderedText(): string {
@@ -308,6 +440,30 @@ export class PageManager {
     if (!this.bridge) return;
 
     this.bridge.onEvenHubEvent((event) => {
+      // ── [G2-VIEWER-DEBUG] log every event while the File Viewer is active ──
+      // Logged before the isActive guard so a dropped/inactive dispatch is visible.
+      const currentPageType = this.currentPage?.pageType ?? null;
+      if (currentPageType === "FileViewerPage") {
+        console.log(
+          "[G2-VIEWER-DEBUG] EVENT:",
+          JSON.stringify({
+            pageType: currentPageType,
+            isActive: this.currentPage?.isActive ?? false,
+            hasMenuClick: !!event.menuItemClickEvent,
+            hasTextEvent: !!event.textEvent,
+            hasListEvent: !!event.listEvent,
+            hasSysEvent: !!event.sysEvent,
+            textEventType: event.textEvent?.eventType ?? null,
+            listEventType: event.listEvent?.eventType ?? null,
+            sysEventType: event.sysEvent?.eventType ?? null,
+            textContainerID: event.textEvent?.containerID ?? null,
+            textContainerName: event.textEvent?.containerName ?? null,
+            listContainerID: event.listEvent?.containerID ?? null,
+            eventSource: event.sysEvent?.eventSource ?? null,
+          }),
+        );
+      }
+
       if (!this.currentPage?.isActive) return;
 
       // Menu item click (context menu on G2)
@@ -401,7 +557,13 @@ export class PageManager {
     console.log("[PageManager] Starting shared auto-scroll tick");
     this.autoScrollTickTimer = setInterval(() => {
       if (!this.currentPage?.isActive) return;
-      this.currentPage.onAutoTick();
+      // ── [G2-VIEWER-DEBUG] suppresses render traces while ticking ──
+      this.inAutoTick = true;
+      try {
+        this.currentPage.onAutoTick();
+      } finally {
+        this.inAutoTick = false;
+      }
     }, 400);
   }
 
