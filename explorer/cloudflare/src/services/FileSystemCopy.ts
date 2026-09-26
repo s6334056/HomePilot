@@ -1,7 +1,9 @@
 import { FileSystemService } from './FileSystemService';
 
 /**
- * Cross-file-system copy (currently home PC → this device).
+ * Cross-file system copy in either direction — home PC → this device and
+ * this device → home PC. The two services are passed in explicitly, so the
+ * same code plans and runs both directions.
  *
  * `copyItems()` in `FileSystemService` is a *same* file system operation
  * (copy into a directory of the same service), so it is deliberately not
@@ -13,13 +15,16 @@ import { FileSystemService } from './FileSystemService';
  * The source layout is never carried over — only the selected item's own name
  * decides where it lands, so everything goes straight into the target root:
  *
- *     PC /some/deep/test.txt        →  Local /test.txt
- *     PC /some/deep/MyNotes/        →  Local /MyNotes/   (structure kept)
+ *     /some/deep/test.txt        →  <target root>/test.txt
+ *     /some/deep/MyNotes/        →  <target root>/MyNotes/   (structure kept)
  *
  * The source side is read through `getDirectory()` / `readFile()`, the target
  * side is written through `createFolder()` / `writeFile()`, so the copied
  * result is an ordinary target file system object (target metadata, target
  * storage) rather than a translated record from the source.
+ *
+ * Only the wording of the conflict errors follows the direction, via
+ * `CopyOptions.targetLabel`.
  */
 
 /** What already occupies the target path. */
@@ -57,6 +62,17 @@ export interface CopyFileResult {
   sourcePath: string;
   targetPath: string;
 }
+
+export interface CopyOptions {
+  /**
+   * What the destination file system is called in error messages.
+   * Defaults to `アプリ`, which keeps the home PC → this device wording
+   * exactly as it was before the direction became configurable.
+   */
+  targetLabel?: string;
+}
+
+const DEFAULT_TARGET_LABEL = 'アプリ';
 
 function normalizeSeparators(path: string): string {
   return path.replace(/\\/g, '/');
@@ -175,7 +191,9 @@ export async function planItemsCopy(
   source: FileSystemService,
   target: FileSystemService,
   sourcePaths: string[],
+  options: CopyOptions = {},
 ): Promise<CopyPlanItem[]> {
+  const label = options.targetLabel ?? DEFAULT_TARGET_LABEL;
   const sourceRoot = source.getRootPath();
   const targetRoot = target.getRootPath();
 
@@ -229,7 +247,7 @@ export async function planItemsCopy(
     if (entry.type === 'directory') {
       if (existingItem) {
         const kind = existingItem.type === 'directory' ? 'フォルダ' : 'ファイル';
-        throw new Error(`この端末に同名の${kind}があるためコピーできません: ${name}`);
+        throw new Error(`${label}に同名の${kind}があるためコピーできません: ${name}`);
       }
       claim(targetPath, entry.sourcePath, name, 'directory');
 
@@ -237,13 +255,13 @@ export async function planItemsCopy(
       for (const planned of contents.folders.slice(1)) {
         claim(planned.targetPath, planned.sourcePath, basename(planned.sourcePath), 'directory');
         if (await target.getItem(planned.targetPath)) {
-          throw new Error(`この端末にコピー先が既に存在します: ${planned.targetPath}`);
+          throw new Error(`${label}にコピー先が既に存在します: ${planned.targetPath}`);
         }
       }
       for (const planned of contents.files) {
         claim(planned.targetPath, planned.sourcePath, basename(planned.sourcePath), 'file');
         if (await target.getItem(planned.targetPath)) {
-          throw new Error(`この端末にコピー先が既に存在します: ${planned.targetPath}`);
+          throw new Error(`${label}にコピー先が既に存在します: ${planned.targetPath}`);
         }
       }
 
@@ -283,7 +301,9 @@ export async function copyFiles(
   source: FileSystemService,
   target: FileSystemService,
   items: CopyPlanItem[],
+  options: CopyOptions = {},
 ): Promise<CopyFileResult[]> {
+  const label = options.targetLabel ?? DEFAULT_TARGET_LABEL;
   const results: CopyFileResult[] = [];
 
   for (const item of items) {
@@ -299,10 +319,10 @@ export async function copyFiles(
         if (existing) {
           if (existing.type === 'directory') {
             throw new Error(
-              `この端末に同名のフォルダがあるためコピーできません: ${basename(folder.targetPath)}`,
+              `${label}に同名のフォルダがあるためコピーできません: ${basename(folder.targetPath)}`,
             );
           }
-          throw new Error(`この端末にコピー先が既に存在します: ${folder.targetPath}`);
+          throw new Error(`${label}にコピー先が既に存在します: ${folder.targetPath}`);
         }
         await target.createFolder(
           target.getParentPath(folder.targetPath),
@@ -312,7 +332,7 @@ export async function copyFiles(
 
       for (const file of contents.files) {
         if (await target.getItem(file.targetPath)) {
-          throw new Error(`この端末にコピー先が既に存在します: ${file.targetPath}`);
+          throw new Error(`${label}にコピー先が既に存在します: ${file.targetPath}`);
         }
         const content = await source.readFile(file.sourcePath);
         await target.writeFile(file.targetPath, content);
@@ -320,6 +340,9 @@ export async function copyFiles(
 
       results.push({ sourcePath: item.sourcePath, targetPath: item.targetPath });
     } else {
+      if (item.existing !== 'none') {
+        throw new Error(`${label}に同名のファイルがあるためコピーできません: ${item.name}`);
+      }
       const content = await source.readFile(item.sourcePath);
       await ensureDirectories(target, target.getParentPath(item.targetPath));
       await target.writeFile(item.targetPath, content);

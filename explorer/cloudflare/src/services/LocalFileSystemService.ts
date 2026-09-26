@@ -132,7 +132,7 @@ function isInsideDirectory(parentDir: string, targetPath: string): boolean {
 /**
  * File system backed by `window.localStorage` only.
  *
- * This is the "この端末" (this device) side of the FileSystemService
+ * This is the "アプリ" (this device) side of the FileSystemService
  * abstraction: no Gateway, no IndexedDB, no File System Access API.
  *
  * Every mutation builds a new entries record, persists it, and only then

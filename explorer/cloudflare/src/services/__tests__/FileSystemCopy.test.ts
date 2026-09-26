@@ -411,7 +411,7 @@ describe('planItemsCopy: folders', () => {
     await local.writeFile('/project/keep.txt', 'keep me');
 
     await expect(planItemsCopy(gateway, local, [PC_PROJECT])).rejects.toThrow(
-      'この端末に同名のフォルダがあるためコピーできません: project',
+      'アプリに同名のフォルダがあるためコピーできません: project',
     );
     expect(await local.readFile('/project/keep.txt')).toBe('keep me');
   });
@@ -422,7 +422,7 @@ describe('planItemsCopy: folders', () => {
     await local.writeFile('/project', 'i am a file');
 
     await expect(planItemsCopy(gateway, local, [PC_PROJECT])).rejects.toThrow(
-      'この端末に同名のファイルがあるためコピーできません: project',
+      'アプリに同名のファイルがあるためコピーできません: project',
     );
   });
 
@@ -506,7 +506,7 @@ describe('copyFiles: file → this device', () => {
     expect(await local.getItem('/docs')).toBeNull();
   });
 
-  it('case 2 - a second copy of the same name asks before overwriting', async () => {
+  it('case 2 - a second copy of the same name is reported via existing field and rejected by copyFiles', async () => {
     const gateway = await createGateway();
     const local = new LocalFileSystemService();
 
@@ -524,7 +524,11 @@ describe('copyFiles: file → this device', () => {
       },
     ]);
 
-    // Nothing was written yet: the overwrite confirmation happens first.
+    // copyFiles rejects existing-file items: the original file must be unchanged.
+    const message = await captureError(async () => {
+      await copyFiles(gateway, local, second);
+    });
+    expect(message).toContain('アプリに同名のファイルがあるためコピーできません: test.txt');
     expect(await local.readFile('/test.txt')).toBe(PC_FILES[PC_SAME_NAME_A]);
   });
 
@@ -650,7 +654,7 @@ describe('copyFiles: folder → this device', () => {
       await copyFiles(gateway, local, await planItemsCopy(gateway, local, [PC_PROJECT]));
     });
 
-    expect(message).toContain('この端末に同名のフォルダがあるためコピーできません: project');
+    expect(message).toContain('アプリに同名のフォルダがあるためコピーできません: project');
     expect(await localNames(local, '/project')).toEqual(['keep.txt']);
     expect(await local.readFile('/project/keep.txt')).toBe('keep me');
     expect(await local.getItem('/project/a.txt')).toBeNull();

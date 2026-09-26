@@ -18,12 +18,12 @@ describe('Home / file system selection', () => {
   });
 
   it('labels every mode', () => {
-    expect(FILE_SYSTEM_LABELS.local).toBe('この端末');
+    expect(FILE_SYSTEM_LABELS.local).toBe('アプリ');
     expect(FILE_SYSTEM_LABELS.gateway).toBe('自宅PC');
     expect(FILE_SYSTEM_LABELS.mock).toBe('モック（開発用）');
   });
 
-  it('creates LocalFileSystemService for "この端末"', () => {
+  it('creates LocalFileSystemService for "アプリ"', () => {
     const service = createFileSystemService('local');
     expect(service).toBeInstanceOf(LocalFileSystemService);
     expect(service.getRootPath()).toBe('/');

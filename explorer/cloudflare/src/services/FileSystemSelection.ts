@@ -8,7 +8,7 @@ import { ScreenType } from '../domain/types';
 /**
  * Which file system the Explorer is currently browsing.
  *
- * - 'local'   この端末 (LocalFileSystemService, localStorage backed)
+ * - 'local'   アプリ (LocalFileSystemService, localStorage backed)
  * - 'gateway' 自宅PC (GatewayFileSystemService, Home Pilot Gateway)
  * - 'mock'    開発用モック (MockFileSystemService)
  *
@@ -20,7 +20,7 @@ export type FileSystemMode = 'local' | 'gateway' | 'mock';
 export const HOME_SCREEN: ScreenType = 'home';
 
 export const FILE_SYSTEM_LABELS: Record<FileSystemMode, string> = {
-  local: 'この端末',
+  local: 'アプリ',
   gateway: '自宅PC',
   mock: 'モック（開発用）',
 };
@@ -44,6 +44,25 @@ export function createFileSystemService(mode: FileSystemMode): FileSystemService
     return new GatewayFileSystemService(config.gatewayUrl, config.gatewayToken);
   }
   return new MockFileSystemService();
+}
+
+/**
+ * A gateway connection that is ready to be used as a copy destination.
+ *
+ * `initialize()` has to finish first: until it does `getRootPath()` reports an
+ * empty string, and every planned path would be built against no root at all.
+ * The caller must not start planning or copying before this resolves.
+ */
+export async function createInitializedGatewayService(): Promise<GatewayFileSystemService> {
+  const service = createFileSystemService('gateway');
+  if (!(service instanceof GatewayFileSystemService)) {
+    throw new Error('自宅PC（Gateway）を作成できませんでした。');
+  }
+  await service.initialize();
+  if (!service.isAvailable || !service.getRootPath()) {
+    throw new Error('自宅PC（Gateway）に接続できませんでした。');
+  }
+  return service;
 }
 
 /**

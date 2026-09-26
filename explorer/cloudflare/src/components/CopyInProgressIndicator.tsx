@@ -3,14 +3,19 @@ import { COPY_IN_PROGRESS_MESSAGE } from '../services/CopyToDeviceUi';
 
 interface CopyInProgressIndicatorProps {
   isVisible: boolean;
+  /** Direction specific wording; defaults to the "to this device" message. */
+  message?: string;
 }
 
 /**
- * Bottom pill shown while "この端末へコピー" is running — planning, reading
- * the home PC, or writing to this device. Unlike `Toast` it never auto
+ * Bottom pill shown while a cross file system copy is running — planning,
+ * reading the source, or writing the destination. Unlike `Toast` it never auto
  * dismisses: it disappears as soon as `isVisible` goes back to false.
  */
-export const CopyInProgressIndicator: React.FC<CopyInProgressIndicatorProps> = ({ isVisible }) => {
+export const CopyInProgressIndicator: React.FC<CopyInProgressIndicatorProps> = ({
+  isVisible,
+  message = COPY_IN_PROGRESS_MESSAGE,
+}) => {
   if (!isVisible) return null;
 
   return (
@@ -28,7 +33,8 @@ export const CopyInProgressIndicator: React.FC<CopyInProgressIndicatorProps> = (
       >
         <path d="M21 12a9 9 0 11-6.219-8.56" />
       </svg>
-      <div className="hp-toast-message">{COPY_IN_PROGRESS_MESSAGE}</div>
+      <div className="hp-toast-message">{message}</div>
     </div>
   );
 };
+

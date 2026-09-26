@@ -1,17 +1,22 @@
 import { useEffect, useState, useRef, useCallback, type MouseEvent as ReactMouseEvent } from 'react';
 import { GatewayFileSystemService } from './services/GatewayFileSystemService';
+import { LocalFileSystemService } from './services/LocalFileSystemService';
 import { FileSystemService } from './services/FileSystemService';
 import { resolveConfig } from './services/ConnectionConfig';
 import {
   FileSystemMode,
   HOME_SCREEN,
   createFileSystemService,
+  createInitializedGatewayService,
   defaultConfiguredMode,
   resolveExplorerBackTarget,
 } from './services/FileSystemSelection';
 import { CopyPlanItem, copyFiles, planItemsCopy } from './services/FileSystemCopy';
 import {
   COPY_TO_DEVICE_LABEL,
+  COPY_TO_PC_LABEL,
+  CopyDirection,
+  DIRECTION_UI,
   isCopyToDeviceDisabled,
   withCopyIndicator,
 } from './services/CopyToDeviceUi';
@@ -118,13 +123,9 @@ export function App() {
   // Upload dialog state
   const [showUploadDialog, setShowUploadDialog] = useState<boolean>(false);
 
-  // Copy to this device (PC → Local) state: present while the overwrite
-  // confirmation is open, null otherwise.
-  const [copySession, setCopySession] = useState<{
-    source: FileSystemService;
-    target: FileSystemService;
-    plan: CopyPlanItem[];
-  } | null>(null);
+  // Cross file system copy state: `copyDirection` tracks which wording the
+  // in-progress indicator shows. `isCopying` is true while a copy is running.
+  const [copyDirection, setCopyDirection] = useState<CopyDirection>('to-device');
   const [isCopying, setIsCopying] = useState<boolean>(false);
 
   // Move/Copy picker state (sources are snapshotted when the mode starts)
@@ -247,7 +248,6 @@ export function App() {
       return;
     }
     setMoveCopySession(null);
-    setCopySession(null);
     setSelectedPaths(new Set());
     setSelectedFile(null);
     setHighlightPath(null);
@@ -463,8 +463,13 @@ export function App() {
   const selectedItems = items.filter((i) => selectedPaths.has(i.path));
   const hasSelectedFolders = selectedItems.some((i) => i.type === 'directory');
 
-  // 「この端末へコピー」(PC → this device) is only offered while browsing the home PC.
+  // 「アプリへコピー」(PC → this device) is only offered while browsing the home PC.
   const canCopyToThisDevice = isGatewayService(fileService);
+
+  // 「自宅PCへコピー」(this device → PC) is the mirror image: only while
+  // browsing this device, and only when a gateway connection is configured.
+  const canCopyToPc =
+    fileService instanceof LocalFileSystemService && resolveConfig().mode === 'gateway';
 
   const actionMenuItems: ContextActionMenuItem[] = currentScreen === 'file_viewer' && selectedFile
     ? (fileEditing
@@ -579,6 +584,17 @@ export function App() {
                 disabled: isCopyToDeviceDisabled({ isExplorerReady, selectedCount, isCopying }),
                 onClick: () => {
                   handleCopyToThisDevice();
+                },
+              },
+            ]
+          : []),
+        ...(canCopyToPc
+          ? [
+              {
+                label: COPY_TO_PC_LABEL,
+                disabled: isCopyToDeviceDisabled({ isExplorerReady, selectedCount, isCopying }),
+                onClick: () => {
+                  handleCopyToPc();
                 },
               },
             ]
@@ -825,35 +841,42 @@ export function App() {
     await handleDownloadForPaths(paths, singleName, hasDirectory);
   }, [selectedPaths, selectedItems, handleDownloadForPaths]);
 
-  // ── Copy to this device (PC → Local, cross file system) ─────
+  // ── Cross file system copy (PC ⇄ this device) ────────────────
 
-  const runCopyToThisDevice = useCallback(async (
+  const runCopy = useCallback(async (
     source: FileSystemService,
     target: FileSystemService,
     plan: CopyPlanItem[],
+    direction: CopyDirection,
   ) => {
     if (plan.length === 0) return;
+    const ui = DIRECTION_UI[direction];
     try {
-      const results = await copyFiles(source, target, plan);
+      const results = await copyFiles(source, target, plan, { targetLabel: ui.target });
       setToast({
-        message: 'この端末へコピーしました',
+        message: ui.done,
         detail: results.length === 1 ? results[0].targetPath : `${results.length}件`,
       });
     } catch (e: any) {
-      alert(`この端末へコピーできませんでした: ${e?.message || e}`);
-    } finally {
-      setCopySession(null);
+      alert(`${ui.failed}: ${e?.message || e}`);
     }
+  }, []);
+
+  // Raises the indicator with the wording of `direction` before the first
+  // await of the copy, so the user sees the copy start right away.
+  const startCopyIndicator = useCallback((direction: CopyDirection) => {
+    setCopyDirection(direction);
+    setIsCopying(true);
   }, []);
 
   const handleCopyToThisDevice = useCallback(async () => {
     const paths = Array.from(selectedPaths);
     if (paths.length === 0) return;
 
-    // The indicator goes up before anything is planned, so the user sees the
-    // copy start right away instead of a silent wait.
+    const ui = DIRECTION_UI['to-device'];
+
     await withCopyIndicator(
-      () => setIsCopying(true),
+      () => startCopyIndicator('to-device'),
       () => setIsCopying(false),
       async () => {
         const source = fileService;
@@ -861,41 +884,67 @@ export function App() {
 
         let plan: CopyPlanItem[];
         try {
-          plan = await planItemsCopy(source, target, paths);
+          plan = await planItemsCopy(source, target, paths, { targetLabel: ui.target });
         } catch (e: any) {
-          alert(`この端末へコピーできませんでした: ${e?.message || e}`);
+          alert(`${ui.failed}: ${e?.message || e}`);
           return;
         }
 
-        const folderConflict = plan.find((p) => p.existing === 'directory');
-        if (folderConflict) {
-          alert(`この端末に同名のフォルダがあるためコピーできません: ${folderConflict.name}`);
+        const conflict = plan.find((p) => p.existing !== 'none');
+        if (conflict) {
+          const kind = conflict.existing === 'directory' ? 'フォルダ' : 'ファイル';
+          alert(`${ui.target}に同名の${kind}があるためコピーできません: ${conflict.name}`);
           return;
         }
 
-        if (plan.some((p) => p.existing === 'file')) {
-          setCopySession({ source, target, plan });
-          return;
-        }
-
-        await runCopyToThisDevice(source, target, plan);
+        await runCopy(source, target, plan, 'to-device');
       },
     );
-  }, [selectedPaths, fileService, runCopyToThisDevice]);
+  }, [selectedPaths, fileService, runCopy, startCopyIndicator]);
 
-  const handleCopyConfirm = useCallback(async () => {
-    if (!copySession) return;
+  const handleCopyToPc = useCallback(async () => {
+    const paths = Array.from(selectedPaths);
+    if (paths.length === 0) return;
+
+    const ui = DIRECTION_UI['to-pc'];
+
     await withCopyIndicator(
-      () => setIsCopying(true),
+      () => startCopyIndicator('to-pc'),
       () => setIsCopying(false),
-      () => runCopyToThisDevice(copySession.source, copySession.target, copySession.plan),
-    );
-  }, [copySession, runCopyToThisDevice]);
+      async () => {
+        const source = fileService;
 
-  const handleCopyCancel = useCallback(() => {
-    if (isCopying) return;
-    setCopySession(null);
-  }, [isCopying]);
+        // The gateway reports an empty root path until `initialize()` has
+        // finished, so the connection is opened before anything is planned.
+        let target: FileSystemService;
+        try {
+          target = await createInitializedGatewayService();
+        } catch (e: any) {
+          alert(`${ui.failed}: ${e?.message || e}`);
+          return;
+        }
+
+        let plan: CopyPlanItem[];
+        try {
+          plan = await planItemsCopy(source, target, paths, { targetLabel: ui.target });
+        } catch (e: any) {
+          alert(`${ui.failed}: ${e?.message || e}`);
+          return;
+        }
+
+        const conflict = plan.find((p) => p.existing !== 'none');
+        if (conflict) {
+          const kind = conflict.existing === 'directory' ? 'フォルダ' : 'ファイル';
+          alert(`${ui.target}に同名の${kind}があるためコピーできません: ${conflict.name}`);
+          return;
+        }
+
+        await runCopy(source, target, plan, 'to-pc');
+      },
+    );
+  }, [selectedPaths, fileService, runCopy, startCopyIndicator]);
+
+
 
   // ── Move / Copy ─────────────────────────────────────────────
 
@@ -1178,7 +1227,7 @@ export function App() {
   // Determine which pane is first/last for swap button placement
   const isFirstExplorer = paneOrder[0] === 'explorer';
 
-  // The Agent talks to the home PC (OpenCode), so it is not offered for "この端末".
+  // The Agent talks to the home PC (OpenCode), so it is not offered for "アプリ".
   const showAgentPane = fileSystemMode !== 'local';
   // History is a gateway-backed feature.
   const canNavigateToHistory = isGatewayService(fileService) && currentScreen !== 'history';
@@ -1243,17 +1292,12 @@ export function App() {
         onCancel={() => setShowUploadDialog(false)}
       />
 
-      {/* Copy to this device — overwrite confirmation */}
+      {/* Cross file system copy — overwrite confirmation (not used: conflicts are rejected at planning stage) */}
       <CopyToDeviceDialog
-        isOpen={copySession !== null}
-        conflictingNames={
-          copySession
-            ? copySession.plan.filter((p) => p.existing === 'file').map((p) => p.name)
-            : []
-        }
-        onConfirm={handleCopyConfirm}
-        onCancel={handleCopyCancel}
-        isCopying={isCopying}
+        isOpen={false}
+        conflictingNames={[]}
+        onConfirm={() => undefined}
+        onCancel={() => undefined}
       />
 
       {/* G2 Runtime Active Modal */}
@@ -1316,8 +1360,11 @@ export function App() {
         </div>
       )}
 
-      {/* Copy to this device — in progress */}
-      <CopyInProgressIndicator isVisible={isCopying} />
+      {/* Cross file system copy — in progress */}
+      <CopyInProgressIndicator
+        isVisible={isCopying}
+        message={DIRECTION_UI[copyDirection].inProgress}
+      />
 
       {/* Toast */}
       {toast && (

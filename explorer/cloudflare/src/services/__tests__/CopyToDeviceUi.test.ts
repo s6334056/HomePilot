@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CopyInProgressIndicator } from '../../components/CopyInProgressIndicator';
 import { ContextActionMenu } from '../../components/ContextActionMenu';
+import { CopyToDeviceDialog } from '../../components/CopyToDeviceDialog';
 import { FileSystemService } from '../FileSystemService';
 import { FileSystemItem } from '../../domain/types';
 import { LocalFileSystemService } from '../LocalFileSystemService';
@@ -174,7 +175,7 @@ describe('isCopyToDeviceDisabled', () => {
   });
 });
 
-// ── 表示: 「この端末へコピーしています…」 ──────────────────────
+// ── 表示: 「アプリへコピーしています…」 ──────────────────────
 
 describe('CopyInProgressIndicator', () => {
   it('shows the copying message with a spinner while a copy runs', () => {
@@ -182,7 +183,7 @@ describe('CopyInProgressIndicator', () => {
       createElement(CopyInProgressIndicator, { isVisible: true }),
     );
 
-    expect(COPY_IN_PROGRESS_MESSAGE).toBe('この端末へコピーしています…');
+    expect(COPY_IN_PROGRESS_MESSAGE).toBe('アプリへコピーしています…');
     expect(html).toContain(COPY_IN_PROGRESS_MESSAGE);
     expect(html).toContain('hp-toast--processing');
     expect(html).toContain('spin');
@@ -287,5 +288,71 @@ describe('withCopyIndicator', () => {
     expect((await target.getItem('/project/src'))!.type).toBe('directory');
     expect(await target.readFile('/project/a.txt')).toBe('project a');
     expect(await target.readFile('/project/src/main.ts')).toBe('export const main = 1;');
+  });
+});
+
+// ── PC→Local 同名ファイル時の挙動統一テスト ─────────────────────
+//
+// 仕様変更: 「PC→Localのファイルだけ上書き確認をする」という特例をなくし、
+// 「コピー先に同名のファイル/フォルダが存在する場合は、方向・対象を問わずコピー不可」に統一。
+// CopyToDeviceDialog による上書き確認は使用しない。
+
+describe('PC→Local 同名ファイル: CopyToDeviceDialog は表示されない', () => {
+  it('CopyToDeviceDialog is not shown when a same-name file exists at the target', () => {
+    // The dialog is always rendered with isOpen={false} in the new spec.
+    // Rendering with isOpen={false} must produce no HTML.
+    const html = renderToStaticMarkup(
+      createElement(CopyToDeviceDialog, {
+        isOpen: false,
+        conflictingNames: ['test.txt'],
+        onConfirm: () => undefined,
+        onCancel: () => undefined,
+      }),
+    );
+    expect(html).toBe('');
+  });
+
+  it('PC→Local / ファイル / 同名あり → planItemsCopy は existing:file を返し、copyFiles はエラーを投げる', async () => {
+    const source = createSourceService();
+    const target = new LocalFileSystemService();
+
+    // First copy succeeds.
+    await copyFiles(source, target, await planItemsCopy(source, target, ['/readme.txt']));
+    expect(await target.readFile('/readme.txt')).toBe('root readme');
+
+    // Second plan with the same file: planItemsCopy returns existing:'file'.
+    const plan = await planItemsCopy(source, target, ['/readme.txt']);
+    expect(plan[0].existing).toBe('file');
+
+    // copyFiles rejects the plan without overwriting.
+    await expect(copyFiles(source, target, plan)).rejects.toThrow(
+      'アプリに同名のファイルがあるためコピーできません: readme.txt',
+    );
+    // The original content is preserved.
+    expect(await target.readFile('/readme.txt')).toBe('root readme');
+  });
+
+  it('PC→Local / ファイル / 同名なし → 通常どおりコピーできる', async () => {
+    const source = createSourceService();
+    const target = new LocalFileSystemService();
+
+    const plan = await planItemsCopy(source, target, ['/readme.txt']);
+    expect(plan[0].existing).toBe('none');
+
+    const results = await copyFiles(source, target, plan);
+    expect(results).toHaveLength(1);
+    expect(await target.readFile('/readme.txt')).toBe('root readme');
+  });
+
+  it('PC→Local / フォルダ / 同名あり → planItemsCopy がエラーを投げる（従来どおり拒否）', async () => {
+    const source = createSourceService();
+    const target = new LocalFileSystemService();
+    await target.createFolder('/', 'project');
+    await target.writeFile('/project/keep.txt', 'keep me');
+
+    await expect(planItemsCopy(source, target, ['/project'])).rejects.toThrow(
+      'アプリに同名のフォルダがあるためコピーできません: project',
+    );
+    expect(await target.readFile('/project/keep.txt')).toBe('keep me');
   });
 });
