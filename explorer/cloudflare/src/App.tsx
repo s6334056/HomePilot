@@ -1,8 +1,20 @@
 import { useEffect, useState, useRef, useCallback, type MouseEvent as ReactMouseEvent } from 'react';
-import { MockFileSystemService } from './services/MockFileSystemService';
 import { GatewayFileSystemService } from './services/GatewayFileSystemService';
 import { FileSystemService } from './services/FileSystemService';
 import { resolveConfig } from './services/ConnectionConfig';
+import {
+  FileSystemMode,
+  HOME_SCREEN,
+  createFileSystemService,
+  defaultConfiguredMode,
+  resolveExplorerBackTarget,
+} from './services/FileSystemSelection';
+import { CopyPlanItem, copyFiles, planItemsCopy } from './services/FileSystemCopy';
+import {
+  COPY_TO_DEVICE_LABEL,
+  isCopyToDeviceDisabled,
+  withCopyIndicator,
+} from './services/CopyToDeviceUi';
 import { FileSystemItem, ScreenType, AgentContext } from './domain/types';
 import { Navbar } from './components/Navbar';
 import { FileTable } from './components/FileTable';
@@ -10,9 +22,12 @@ import { FileViewer, type FileViewerHandle } from './components/FileViewer';
 import { HistoryPage } from './components/HistoryPage';
 import { AgentScreen } from './components/AgentScreen';
 import { SettingsModal } from './components/SettingsModal';
+import { HomeScreen } from './components/HomeScreen';
 import { RenameDialog } from './components/RenameDialog';
 import { CreateFolderDialog } from './components/CreateFolderDialog';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
+import { CopyToDeviceDialog } from './components/CopyToDeviceDialog';
+import { CopyInProgressIndicator } from './components/CopyInProgressIndicator';
 import { UploadDialog } from './components/UploadDialog';
 import { ContextActionMenu, ContextActionMenuItem } from './components/ContextActionMenu';
 import { MoveCopyBar, MoveCopyMode } from './components/MoveCopyBar';
@@ -25,14 +40,6 @@ type PaneType = 'explorer' | 'agent';
 type PaneOrder = [PaneType, PaneType];
 
 
-
-function createFileService(): FileSystemService {
-  const config = resolveConfig();
-  if (config.mode === 'gateway' && config.gatewayToken) {
-    return new GatewayFileSystemService(config.gatewayUrl, config.gatewayToken);
-  }
-  return new MockFileSystemService();
-}
 
 function isGatewayService(s: FileSystemService): s is GatewayFileSystemService {
   return s instanceof GatewayFileSystemService;
@@ -60,7 +67,13 @@ function isPathWithinFolder(folderPath: string, targetPath: string): boolean {
 }
 
 export function App() {
-  const [fileService, setFileService] = useState<FileSystemService>(() => createFileService());
+  // Placeholder service while the Home screen is shown (never used there).
+  const [fileService, setFileService] = useState<FileSystemService>(() => createFileSystemService('mock'));
+
+  // Selected file system: null while the Home screen is showing.
+  const [fileSystemMode, setFileSystemMode] = useState<FileSystemMode | null>(null);
+  const [homeError, setHomeError] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
 
   // G2 Runtime Manager (created once, manages lifecycle of all G2 resources)
   const [g2Runtime] = useState(() => new G2RuntimeManager(
@@ -69,9 +82,7 @@ export function App() {
   ));
 
   // Explorer state
-  const [explorerPath, setExplorerPath] = useState<string>(() =>
-    isGatewayService(fileService) ? '' : '/home'
-  );
+  const [explorerPath, setExplorerPath] = useState<string>('');
   const [items, setItems] = useState<FileSystemItem[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<FileSystemItem | null>(null);
@@ -107,6 +118,15 @@ export function App() {
   // Upload dialog state
   const [showUploadDialog, setShowUploadDialog] = useState<boolean>(false);
 
+  // Copy to this device (PC → Local) state: present while the overwrite
+  // confirmation is open, null otherwise.
+  const [copySession, setCopySession] = useState<{
+    source: FileSystemService;
+    target: FileSystemService;
+    plan: CopyPlanItem[];
+  } | null>(null);
+  const [isCopying, setIsCopying] = useState<boolean>(false);
+
   // Move/Copy picker state (sources are snapshotted when the mode starts)
   const [moveCopySession, setMoveCopySession] = useState<{
     mode: MoveCopyMode;
@@ -125,7 +145,7 @@ export function App() {
   const [sortMode, setSortMode] = useState<'default' | 'modified'>('default');
 
   // Screen state
-  const [currentScreen, setCurrentScreen] = useState<ScreenType>('explorer');
+  const [currentScreen, setCurrentScreen] = useState<ScreenType>(HOME_SCREEN);
 
   // UI state
   const [_g2Status, setG2Status] = useState<string>('Ready');
@@ -161,12 +181,7 @@ export function App() {
   const prevIsDesktopRef = useRef<boolean>(window.innerWidth >= 1100);
   const [returnPage, setReturnPage] = useState<ScreenType>('explorer');
 
-  const getRootPath = () => {
-    if (isGatewayService(fileService)) {
-      return (fileService as GatewayFileSystemService).getRootPath();
-    }
-    return '/home';
-  };
+  const getRootPath = () => fileService.getRootPath();
 
   // Compute agent display path from live Explorer state (not from agentContext snapshot)
   const getAgentDisplayPath = (): string => {
@@ -196,9 +211,11 @@ export function App() {
     if (currentScreen === 'history') {
       return true;
     }
-    // Explorer: can go back if not at root
-    const parentPath = fileService.getParentPath(explorerPath);
-    return parentPath !== explorerPath;
+    // Home has no back target; Explorer goes to parent or, at root, to Home.
+    if (currentScreen === HOME_SCREEN) {
+      return false;
+    }
+    return true;
   };
 
   // Leaving the File Viewer discards edit mode / dirty flag.
@@ -223,8 +240,70 @@ export function App() {
     return true;
   };
 
+  // ── Home / File system selection ───────────────────────────
+
+  const handleGoHome = () => {
+    if (!confirmDiscardFileEdits('編集した内容が失われます。本当にホームへ戻りますか？')) {
+      return;
+    }
+    setMoveCopySession(null);
+    setCopySession(null);
+    setSelectedPaths(new Set());
+    setSelectedFile(null);
+    setHighlightPath(null);
+    setHomeError(null);
+    setCurrentScreen(HOME_SCREEN);
+  };
+
+  const enterFileSystem = useCallback(
+    async (mode: FileSystemMode) => {
+      if (isConnecting) return;
+      const wasOnHome = currentScreen === HOME_SCREEN;
+      setIsConnecting(true);
+      setHomeError(null);
+
+      const service = createFileSystemService(mode);
+      try {
+        if (service instanceof GatewayFileSystemService) {
+          await service.initialize();
+          if (!service.isAvailable) {
+            throw new Error('自宅PC（Gateway）に接続できませんでした。');
+          }
+        }
+
+        const rootPath = service.getRootPath();
+        if (!rootPath) {
+          throw new Error('ルートパスを取得できませんでした。');
+        }
+        const loadedItems = await service.getDirectory(rootPath, sortMode);
+
+        setFileService(service);
+        setFileSystemMode(mode);
+        setExplorerPath(rootPath);
+        setItems(loadedItems);
+        setSelectedFile(null);
+        setSelectedPaths(new Set());
+        setHighlightPath(null);
+        setMoveCopySession(null);
+        setIsExplorerReady(true);
+        setCurrentScreen('explorer');
+      } catch (e: any) {
+        const message = e?.message || 'ファイルシステムを開けませんでした。';
+        if (wasOnHome) {
+          setHomeError(message);
+        } else {
+          alert(message);
+        }
+      } finally {
+        setIsConnecting(false);
+      }
+    },
+    [currentScreen, isConnecting, sortMode],
+  );
+
   // ── PWA Initialization ────────────────────────────────────
-  // Probe for G2 bridge on startup (does NOT start G2 Runtime)
+  // Probe for G2 bridge on startup (does NOT start G2 Runtime).
+  // The file system itself is selected on the Home screen.
   useEffect(() => {
     if (isInitializedRef.current) return;
     isInitializedRef.current = true;
@@ -233,30 +312,10 @@ export function App() {
       // Probe for bridge availability (G2-capable environment detection)
       const hasBridge = await g2Runtime.probeBridge();
       setIsBridgeAvailable(hasBridge);
-
-      // Initialize PWA file service (independent of G2)
-      if (isGatewayService(fileService)) {
-        await (fileService as GatewayFileSystemService).initialize();
-      }
-
-      const rootPath = getRootPath();
-      setExplorerPath(rootPath);
-
-      // Load root directory for Gateway service
-      if (isGatewayService(fileService)) {
-        try {
-          const loadedItems = await (fileService as GatewayFileSystemService).getDirectory(rootPath, sortMode);
-          setItems(loadedItems);
-          setIsExplorerReady(true);
-        } catch {
-          setItems([]);
-          setIsExplorerReady(false);
-        }
-      }
     };
 
     init();
-  }, [fileService, g2Runtime]);
+  }, [g2Runtime]);
 
   // ── Return Highlight Scroll ─────────────────────────────
   useEffect(() => {
@@ -294,9 +353,7 @@ export function App() {
   // Internal navigate (no history management)
   const navigateToPath = async (path: string) => {
     const newService = fileService;
-    const rootPath = isGatewayService(newService)
-      ? (newService as GatewayFileSystemService).getRootPath()
-      : '/home';
+    const rootPath = newService.getRootPath();
     const resolvedPath = path || rootPath;
 
     setExplorerPath(resolvedPath);
@@ -349,9 +406,11 @@ export function App() {
       setReturnPage(historyReturnPageRef.current);
       setCurrentScreen(historyReturnScreenRef.current);
     } else {
-      // Explorer: navigate to parent
-      const parentPath = fileService.getParentPath(explorerPath);
-      if (parentPath !== explorerPath) {
+      // Explorer: at the file system root go back to Home, otherwise to the parent.
+      if (resolveExplorerBackTarget(fileService, explorerPath) === 'home') {
+        handleGoHome();
+      } else {
+        const parentPath = fileService.getParentPath(explorerPath);
         setHighlightPath(explorerPath);
         await navigateToPath(parentPath);
       }
@@ -403,6 +462,9 @@ export function App() {
   const selectedCount = selectedPaths.size;
   const selectedItems = items.filter((i) => selectedPaths.has(i.path));
   const hasSelectedFolders = selectedItems.some((i) => i.type === 'directory');
+
+  // 「この端末へコピー」(PC → this device) is only offered while browsing the home PC.
+  const canCopyToThisDevice = isGatewayService(fileService);
 
   const actionMenuItems: ContextActionMenuItem[] = currentScreen === 'file_viewer' && selectedFile
     ? (fileEditing
@@ -510,6 +572,17 @@ export function App() {
             handleDownload();
           },
         },
+        ...(canCopyToThisDevice
+          ? [
+              {
+                label: COPY_TO_DEVICE_LABEL,
+                disabled: isCopyToDeviceDisabled({ isExplorerReady, selectedCount, isCopying }),
+                onClick: () => {
+                  handleCopyToThisDevice();
+                },
+              },
+            ]
+          : []),
         {
           label: '名前を変更',
           disabled: !isExplorerReady || selectedCount !== 1,
@@ -752,6 +825,78 @@ export function App() {
     await handleDownloadForPaths(paths, singleName, hasDirectory);
   }, [selectedPaths, selectedItems, handleDownloadForPaths]);
 
+  // ── Copy to this device (PC → Local, cross file system) ─────
+
+  const runCopyToThisDevice = useCallback(async (
+    source: FileSystemService,
+    target: FileSystemService,
+    plan: CopyPlanItem[],
+  ) => {
+    if (plan.length === 0) return;
+    try {
+      const results = await copyFiles(source, target, plan);
+      setToast({
+        message: 'この端末へコピーしました',
+        detail: results.length === 1 ? results[0].targetPath : `${results.length}件`,
+      });
+    } catch (e: any) {
+      alert(`この端末へコピーできませんでした: ${e?.message || e}`);
+    } finally {
+      setCopySession(null);
+    }
+  }, []);
+
+  const handleCopyToThisDevice = useCallback(async () => {
+    const paths = Array.from(selectedPaths);
+    if (paths.length === 0) return;
+
+    // The indicator goes up before anything is planned, so the user sees the
+    // copy start right away instead of a silent wait.
+    await withCopyIndicator(
+      () => setIsCopying(true),
+      () => setIsCopying(false),
+      async () => {
+        const source = fileService;
+        const target = createFileSystemService('local');
+
+        let plan: CopyPlanItem[];
+        try {
+          plan = await planItemsCopy(source, target, paths);
+        } catch (e: any) {
+          alert(`この端末へコピーできませんでした: ${e?.message || e}`);
+          return;
+        }
+
+        const folderConflict = plan.find((p) => p.existing === 'directory');
+        if (folderConflict) {
+          alert(`この端末に同名のフォルダがあるためコピーできません: ${folderConflict.name}`);
+          return;
+        }
+
+        if (plan.some((p) => p.existing === 'file')) {
+          setCopySession({ source, target, plan });
+          return;
+        }
+
+        await runCopyToThisDevice(source, target, plan);
+      },
+    );
+  }, [selectedPaths, fileService, runCopyToThisDevice]);
+
+  const handleCopyConfirm = useCallback(async () => {
+    if (!copySession) return;
+    await withCopyIndicator(
+      () => setIsCopying(true),
+      () => setIsCopying(false),
+      () => runCopyToThisDevice(copySession.source, copySession.target, copySession.plan),
+    );
+  }, [copySession, runCopyToThisDevice]);
+
+  const handleCopyCancel = useCallback(() => {
+    if (isCopying) return;
+    setCopySession(null);
+  }, [isCopying]);
+
   // ── Move / Copy ─────────────────────────────────────────────
 
   // Active source folders: themselves and their subtrees are invalid destinations.
@@ -965,15 +1110,17 @@ export function App() {
         return Math.max(MIN_PANE_WIDTH, Math.min(maxExplorer, prev));
       });
 
-      // Wide → Narrow: preserve Left Pane as currentScreen
+      // Wide → Narrow: preserve Left Pane as currentScreen (Home stays Home)
       if (wasDesktop && !nowDesktop) {
         setPaneOrder((order) => {
           const leftPane = order[0];
-          if (leftPane === 'explorer') {
-            setCurrentScreen((prev) => prev === 'file_viewer' ? 'file_viewer' : 'explorer');
-          } else {
-            setCurrentScreen('agent');
-          }
+          setCurrentScreen((prev) => {
+            if (prev === 'home') return 'home';
+            if (leftPane === 'explorer') {
+              return prev === 'file_viewer' ? 'file_viewer' : 'explorer';
+            }
+            return 'agent';
+          });
           return order;
         });
       }
@@ -981,6 +1128,7 @@ export function App() {
       // Narrow → Wide: set Left Pane to the screen user was viewing
       if (!wasDesktop && nowDesktop) {
         setCurrentScreen((prevScreen) => {
+          if (prevScreen === 'home') return prevScreen;
           setPaneOrder((order) => {
             const currentLeft = order[0];
             const effectiveScreen = prevScreen === 'file_viewer' ? 'explorer' : prevScreen;
@@ -997,33 +1145,10 @@ export function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Connection settings changed (QR/paste/clear) → re-enter using the configuration.
   const handleReconnect = useCallback(async () => {
-    const newService = createFileService();
-    setFileService(newService);
-
-    if (isGatewayService(newService)) {
-      await (newService as GatewayFileSystemService).initialize();
-    }
-
-    const rootPath = isGatewayService(newService)
-      ? (newService as GatewayFileSystemService).getRootPath()
-      : '/home';
-    setExplorerPath(rootPath);
-    setCurrentScreen('explorer');
-    setSelectedFile(null);
-    setSelectedPaths(new Set());
-
-    // Load initial directory for PWA display
-    try {
-      const loadedItems = await newService.getDirectory(rootPath, sortMode);
-      setItems(loadedItems);
-      setIsExplorerReady(isGatewayService(newService));
-    } catch (e) {
-      console.error('[App] Failed to load directory after reconnect:', e);
-      setItems([]);
-      setIsExplorerReady(false);
-    }
-  }, []);
+    await enterFileSystem(defaultConfiguredMode());
+  }, [enterFileSystem]);
 
   // Determine the path to display in navbar
   const getNavbarPath = (): string => {
@@ -1053,23 +1178,190 @@ export function App() {
   // Determine which pane is first/last for swap button placement
   const isFirstExplorer = paneOrder[0] === 'explorer';
 
+  // The Agent talks to the home PC (OpenCode), so it is not offered for "この端末".
+  const showAgentPane = fileSystemMode !== 'local';
+  // History is a gateway-backed feature.
+  const canNavigateToHistory = isGatewayService(fileService) && currentScreen !== 'history';
+
+  // Overlays shared by every screen, including Home.
+  const overlayLayer = (
+    <>
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        onReconnect={handleReconnect}
+        isBridgeAvailable={isBridgeAvailable}
+        g2RuntimeState={g2RuntimeState}
+        onStartG2Runtime={handleStartG2Runtime}
+        onStopG2Runtime={handleStopG2Runtime}
+      />
+
+      {/* Context Action Menu */}
+      <ContextActionMenu
+        isOpen={showActionMenu}
+        items={actionMenuItems}
+        onClose={handleCloseActionMenu}
+        triggerRect={actionMenuTriggerRect}
+      />
+
+      {/* Rename Dialog */}
+      <RenameDialog
+        isOpen={showRenameDialog}
+        currentName={renameTarget?.name || ''}
+        onConfirm={handleRenameConfirm}
+        onCancel={handleRenameCancel}
+        error={renameError}
+      />
+
+      {/* Create Folder Dialog */}
+      <CreateFolderDialog
+        isOpen={showCreateFolderDialog}
+        currentPath={explorerPath}
+        onConfirm={handleCreateFolderConfirm}
+        onCancel={handleCreateFolderCancel}
+        error={createFolderError}
+        isCreating={isCreatingFolder}
+      />
+
+      {/* Delete Confirm Dialog */}
+      <DeleteConfirmDialog
+        isOpen={showDeleteDialog}
+        count={currentScreen === 'file_viewer' && selectedFile ? 1 : selectedCount}
+        hasFolders={currentScreen === 'file_viewer' ? false : hasSelectedFolders}
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+        isDeleting={isDeleting}
+      />
+
+      {/* Upload Dialog */}
+      <UploadDialog
+        isOpen={showUploadDialog}
+        fileService={fileService}
+        currentPath={explorerPath}
+        onComplete={handleUploadComplete}
+        onCancel={() => setShowUploadDialog(false)}
+      />
+
+      {/* Copy to this device — overwrite confirmation */}
+      <CopyToDeviceDialog
+        isOpen={copySession !== null}
+        conflictingNames={
+          copySession
+            ? copySession.plan.filter((p) => p.existing === 'file').map((p) => p.name)
+            : []
+        }
+        onConfirm={handleCopyConfirm}
+        onCancel={handleCopyCancel}
+        isCopying={isCopying}
+      />
+
+      {/* G2 Runtime Active Modal */}
+      {g2RuntimeState === 'active' && (
+        <div className="g2-active-overlay" onClick={(e) => e.stopPropagation()}>
+          <div className="g2-active-modal">
+            <div className="g2-active-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </div>
+            <h3>G2 グラス起動中</h3>
+            <p className="g2-active-description">
+              G2 Runtime が動作中です。<br/>
+              グラス側でアプリが表示されています。
+            </p>
+            <button
+              style={{display: 'flex',justifyContent: 'center'}}
+              className="btn btn-danger g2-close-btn"
+              onClick={handleStopG2Runtime}
+            >
+              グラスを閉じる
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* G2 Starting Overlay */}
+      {g2RuntimeState === 'starting' && (
+        <div className="g2-active-overlay" onClick={(e) => e.stopPropagation()}>
+          <div className="g2-active-modal">
+            <div className="g2-active-icon g2-starting">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="spin">
+                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+              </svg>
+            </div>
+            <h3>G2 Runtime 起動中...</h3>
+            <p className="g2-active-description">
+              {_g2Status}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* G2 Stopping Overlay */}
+      {g2RuntimeState === 'stopping' && (
+        <div className="g2-active-overlay" onClick={(e) => e.stopPropagation()}>
+          <div className="g2-active-modal">
+            <div className="g2-active-icon g2-stopping">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="spin">
+                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+              </svg>
+            </div>
+            <h3>G2 Runtime 終了中...</h3>
+            <p className="g2-active-description">
+              リソースを解放しています...
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Copy to this device — in progress */}
+      <CopyInProgressIndicator isVisible={isCopying} />
+
+      {/* Toast */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          detail={toast.detail}
+          onDone={() => setToast(null)}
+        />
+      )}
+    </>
+  );
+
+  // Home: choose the file system before any Explorer state exists.
+  if (currentScreen === HOME_SCREEN) {
+    return (
+      <div className="app-layout home-layout">
+        <HomeScreen
+          onSelect={enterFileSystem}
+          onOpenSettings={() => setShowSettings(true)}
+          error={homeError}
+          isConnecting={isConnecting}
+        />
+        {overlayLayer}
+      </div>
+    );
+  }
+
   // Build Explorer pane content
   const explorerPane = (
     <div className={`explorer-pane ${isDesktop || currentScreen === 'explorer' || currentScreen === 'file_viewer' || currentScreen === 'history' ? '' : 'pane-hidden'}`} key="explorer-pane">
       <Navbar
         currentPath={getNavbarPath()}
         mode="explorer"
-        rootPath={isGatewayService(fileService) ? getRootPath() : undefined}
+        rootPath={getRootPath()}
         title={currentScreen === 'file_viewer' && selectedFile ? selectedFile.name : undefined}
         onBack={handleExplorerBack}
         canGoBack={canExplorerGoBack()}
         onReload={handleExplorerReload}
         onOpenSettings={() => setShowSettings(true)}
-        onOpenAgent={handleOpenAgent}
-        showSettingsButton={isDesktop && !isFirstExplorer}
-        showSwapButton={isDesktop && !isFirstExplorer}
+        onOpenAgent={showAgentPane ? handleOpenAgent : undefined}
+        showSettingsButton={isDesktop && (!isFirstExplorer || !showAgentPane)}
+        showSwapButton={isDesktop && !isFirstExplorer && showAgentPane}
         onSwapPanes={handleSwapPanes}
-        onPathBarClick={currentScreen === 'history' ? undefined : handleNavigateToHistory}
+        onPathBarClick={canNavigateToHistory ? handleNavigateToHistory : undefined}
         onOpenActionMenu={
           currentScreen === 'explorer' || currentScreen === 'file_viewer'
             ? handleOpenActionMenu
@@ -1153,7 +1445,7 @@ export function App() {
         buildLiveContext={buildLiveContext}
         onOpenSettings={() => setShowSettings(true)}
         onOpenExplorer={handleOpenExplorer}
-        onPathBarClick={currentScreen === 'history' ? undefined : handleNavigateToHistory}
+        onPathBarClick={canNavigateToHistory ? handleNavigateToHistory : undefined}
         showSettingsButton={isDesktop && isFirstExplorer}
         showSwapButton={isDesktop && isFirstExplorer}
         onSwapPanes={handleSwapPanes}
@@ -1162,7 +1454,7 @@ export function App() {
   );
 
   // Build divider (only in desktop 2-pane mode)
-  const divider = isDesktop ? (
+  const divider = isDesktop && showAgentPane ? (
     <div
       key="pane-divider"
       className={`pane-divider ${isDragging ? 'dragging' : ''}`}
@@ -1175,139 +1467,23 @@ export function App() {
   return (
     <div
       className="app-layout"
-      style={isDesktop ? { gridTemplateColumns: `${explorerPaneWidth}px 4px 1fr` } : undefined}
+      style={
+        !isDesktop
+          ? undefined
+          : showAgentPane
+            ? { gridTemplateColumns: `${explorerPaneWidth}px 4px 1fr` }
+            : { gridTemplateColumns: '1fr', gridTemplateRows: '1fr' }
+      }
     >
-      {isFirstExplorer ? (
+      {!showAgentPane ? (
+        explorerPane
+      ) : isFirstExplorer ? (
         <>{explorerPane}{divider}{agentPane}</>
       ) : (
         <>{agentPane}{divider}{explorerPane}</>
       )}
 
-      {/* Settings Modal */}
-      <SettingsModal
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
-        onReconnect={handleReconnect}
-        isBridgeAvailable={isBridgeAvailable}
-        g2RuntimeState={g2RuntimeState}
-        onStartG2Runtime={handleStartG2Runtime}
-        onStopG2Runtime={handleStopG2Runtime}
-      />
-
-      {/* Context Action Menu */}
-      <ContextActionMenu
-        isOpen={showActionMenu}
-        items={actionMenuItems}
-        onClose={handleCloseActionMenu}
-        triggerRect={actionMenuTriggerRect}
-      />
-
-      {/* Rename Dialog */}
-      <RenameDialog
-        isOpen={showRenameDialog}
-        currentName={renameTarget?.name || ''}
-        onConfirm={handleRenameConfirm}
-        onCancel={handleRenameCancel}
-        error={renameError}
-      />
-
-      {/* Create Folder Dialog */}
-      <CreateFolderDialog
-        isOpen={showCreateFolderDialog}
-        currentPath={explorerPath}
-        onConfirm={handleCreateFolderConfirm}
-        onCancel={handleCreateFolderCancel}
-        error={createFolderError}
-        isCreating={isCreatingFolder}
-      />
-
-      {/* Delete Confirm Dialog */}
-      <DeleteConfirmDialog
-        isOpen={showDeleteDialog}
-        count={currentScreen === 'file_viewer' && selectedFile ? 1 : selectedCount}
-        hasFolders={currentScreen === 'file_viewer' ? false : hasSelectedFolders}
-        onConfirm={handleDeleteConfirm}
-        onCancel={handleDeleteCancel}
-        isDeleting={isDeleting}
-      />
-
-      {/* Upload Dialog */}
-      <UploadDialog
-        isOpen={showUploadDialog}
-        fileService={fileService}
-        currentPath={explorerPath}
-        onComplete={handleUploadComplete}
-        onCancel={() => setShowUploadDialog(false)}
-      />
-
-      {/* G2 Runtime Active Modal */}
-      {g2RuntimeState === 'active' && (
-        <div className="g2-active-overlay" onClick={(e) => e.stopPropagation()}>
-          <div className="g2-active-modal">
-            <div className="g2-active-icon">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </div>
-            <h3>G2 グラス起動中</h3>
-            <p className="g2-active-description">
-              G2 Runtime が動作中です。<br/>
-              グラス側でアプリが表示されています。
-            </p>
-            <button
-              style={{display: 'flex',justifyContent: 'center'}}
-              className="btn btn-danger g2-close-btn"
-              onClick={handleStopG2Runtime}
-            >
-              グラスを閉じる
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* G2 Starting Overlay */}
-      {g2RuntimeState === 'starting' && (
-        <div className="g2-active-overlay" onClick={(e) => e.stopPropagation()}>
-          <div className="g2-active-modal">
-            <div className="g2-active-icon g2-starting">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="spin">
-                <path d="M21 12a9 9 0 11-6.219-8.56"/>
-              </svg>
-            </div>
-            <h3>G2 Runtime 起動中...</h3>
-            <p className="g2-active-description">
-              {_g2Status}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* G2 Stopping Overlay */}
-      {g2RuntimeState === 'stopping' && (
-        <div className="g2-active-overlay" onClick={(e) => e.stopPropagation()}>
-          <div className="g2-active-modal">
-            <div className="g2-active-icon g2-stopping">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="spin">
-                <path d="M21 12a9 9 0 11-6.219-8.56"/>
-              </svg>
-            </div>
-            <h3>G2 Runtime 終了中...</h3>
-            <p className="g2-active-description">
-              リソースを解放しています...
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Toast */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          detail={toast.detail}
-          onDone={() => setToast(null)}
-        />
-      )}
+      {overlayLayer}
     </div>
   );
 }

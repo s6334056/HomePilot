@@ -12,7 +12,7 @@ export interface FileSystemItem {
   childrenCount?: number;
 }
 
-export type ScreenType = 'explorer' | 'file_viewer' | 'agent' | 'history';
+export type ScreenType = 'home' | 'explorer' | 'file_viewer' | 'agent' | 'history';
 
 export interface AgentContext {
   currentPath: string;

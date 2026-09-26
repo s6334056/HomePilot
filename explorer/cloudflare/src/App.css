@@ -2843,6 +2843,22 @@
   max-width: 300px;
 }
 
+/* In-progress variant of the pill: same look as a toast, but it stays put
+   until the operation finishes instead of auto dismissing. */
+.hp-toast--processing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hp-toast-spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+
 /* ============================================================
    Move / Copy destination bar
    ============================================================ */
@@ -2909,4 +2925,133 @@ tr.file-row.picker-blocked {
   .hp-movecopy-actions .hp-dialog-btn {
     flex: 1;
   }
+}
+
+
+/* ── Home screen (file system selection) ────────────────────── */
+.app-layout.home-layout {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+.home-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--bg-main);
+  grid-column: 1 / -1;
+}
+
+.home-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  min-height: 44px;
+  background-color: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.home-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 32px 16px;
+}
+
+.home-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  margin: 0;
+}
+
+.home-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 280px));
+  gap: 16px;
+  justify-content: center;
+  width: 100%;
+  max-width: 600px;
+}
+
+.home-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 20px 16px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.home-option:hover:not(:disabled) {
+  background-color: var(--bg-sub);
+  border-color: var(--accent);
+}
+
+.home-option:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.home-option-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.home-option-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.home-option-description {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.home-error {
+  width: 100%;
+  max-width: 600px;
+  padding: 10px 12px;
+  background-color: var(--bg-sub);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+
+/* ── Copy to this device (overwrite confirmation) ───────────── */
+.hp-dialog-file-list {
+  margin: 0 0 8px 0;
+  padding: 4px 8px 4px 24px;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background-color: var(--bg-main);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.hp-dialog-file-list li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -21,7 +21,8 @@ interface ExplorerNavbarProps extends NavbarBaseProps {
   canGoBack: boolean;
   onReload: () => void;
   onOpenSettings: () => void;
-  onOpenAgent: () => void;
+  /** Omitted when the Agent is not available for the current file system. */
+  onOpenAgent?: () => void;
   onPathBarClick?: () => void;
   onOpenActionMenu?: (e: React.MouseEvent) => void;
 }
@@ -110,9 +111,11 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
             <button className="btn-icon navbar-btn-mobile-only" onClick={props.onOpenSettings} title="Settings">
               <Settings size={18} />
             </button>
-            <button className="btn-icon btn-icon--agent navbar-btn-mobile-only" onClick={props.onOpenAgent} title="Agent">
-              <Bot size={18} />
-            </button>
+            {props.onOpenAgent && (
+              <button className="btn-icon btn-icon--agent navbar-btn-mobile-only" onClick={props.onOpenAgent} title="Agent">
+                <Bot size={18} />
+              </button>
+            )}
             {props.showSettingsButton && (
               <button className="btn-icon navbar-btn-desktop-only" onClick={props.onOpenSettings} title="Settings">
                 <Settings size={18} />

@@ -169,3 +169,75 @@ describe('LocalFileSystemService Explorer operations', () => {
     expect((await service.getDirectory('/docs')).map((i) => i.path)).toEqual(['/docs/a.txt']);
   });
 });
+
+describe('LocalFileSystemService path normalization', () => {
+  it('stores every path as an absolute path rooted at /', async () => {
+    await service.writeFile('memo.txt', 'relative');
+
+    expect(await service.readFile('/memo.txt')).toBe('relative');
+    expect(await service.getItem('memo.txt')).not.toBeNull();
+
+    const stored = JSON.parse(store.get(STORAGE_KEY)!);
+    expect(Object.keys(stored)).toContain('/memo.txt');
+    expect(Object.keys(stored).every((key) => key.startsWith('/'))).toBe(true);
+  });
+
+  it('maps equivalent path spellings onto the same file', async () => {
+    await service.createFolder('/', 'docs');
+    await service.writeFile('docs/test.txt', 'x');
+
+    expect(await service.readFile('/docs/test.txt')).toBe('x');
+    expect(await service.readFile('/docs//test.txt')).toBe('x');
+    expect(await service.readFile('docs\\test.txt')).toBe('x');
+
+    await service.writeFile('/docs/test.txt/', 'y');
+    expect(await service.readFile('docs/test.txt')).toBe('y');
+
+    const stored = JSON.parse(store.get(STORAGE_KEY)!);
+    expect(Object.keys(stored).filter((key) => key.includes('test.txt'))).toEqual(['/docs/test.txt']);
+  });
+
+  it('treats relative and empty directory paths as their /-rooted form', async () => {
+    await service.createFolder('/', 'docs');
+
+    expect(service.getParentPath('docs')).toBe('/');
+    expect(service.getParentPath('')).toBe('/');
+    expect((await service.getDirectory('')).map((i) => i.name)).toEqual(['docs']);
+    expect(await service.getDirectory('docs')).toEqual([]);
+    expect((await service.getDirectory('/docs/')).map((i) => i.name)).toEqual([]);
+  });
+});
+
+describe('LocalFileSystemService mimeType', () => {
+  it('guesses the MIME type from the file extension', async () => {
+    const cases: Array<[string, string]> = [
+      ['/a.txt', 'text/plain'],
+      ['/a.html', 'text/html'],
+      ['/a.css', 'text/css'],
+      ['/a.js', 'text/javascript'],
+      ['/a.json', 'application/json'],
+      ['/a.md', 'text/markdown'],
+      ['/a.csv', 'text/csv'],
+      ['/a.xml', 'application/xml'],
+    ];
+
+    for (const [path, mimeType] of cases) {
+      await service.writeFile(path, 'x');
+      expect((await service.getItem(path))?.mimeType).toBe(mimeType);
+    }
+  });
+
+  it('leaves unknown extensions without a MIME type', async () => {
+    await service.writeFile('/a.unknown-ext', 'x');
+
+    expect((await service.getItem('/a.unknown-ext'))?.mimeType).toBeUndefined();
+  });
+
+  it('keeps a MIME type when the file is overwritten', async () => {
+    await service.writeFile('/note.md', 'v1');
+    await service.writeFile('/note.md', 'v2');
+
+    expect(await service.readFile('/note.md')).toBe('v2');
+    expect((await service.getItem('/note.md'))?.mimeType).toBe('text/markdown');
+  });
+});

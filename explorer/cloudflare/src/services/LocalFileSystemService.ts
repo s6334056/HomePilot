@@ -62,10 +62,16 @@ function loadEntries(): LocalEntries {
   }
 }
 
+/**
+ * Local paths are always absolute virtual paths rooted at '/'.
+ * `memo.txt` → `/memo.txt`, `docs/test.txt` → `/docs/test.txt`,
+ * `/docs//test.txt/` → `/docs/test.txt`.
+ */
 function normalizePath(path: string): string {
   const collapsed = path.replace(/\\/g, '/').replace(/\/{2,}/g, '/');
   const trimmed = collapsed.replace(/\/+$/, '');
-  return trimmed === '' ? ROOT_PATH : trimmed;
+  if (trimmed === '') return ROOT_PATH;
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 }
 
 function joinPath(dir: string, name: string): string {
@@ -84,6 +90,24 @@ function isValidName(name: string): boolean {
 
 function byteLength(text: string): number {
   return new TextEncoder().encode(text).length;
+}
+
+const MIME_TYPES: Record<string, string> = {
+  '.txt': 'text/plain',
+  '.html': 'text/html',
+  '.css': 'text/css',
+  '.js': 'text/javascript',
+  '.json': 'application/json',
+  '.md': 'text/markdown',
+  '.csv': 'text/csv',
+  '.xml': 'application/xml',
+};
+
+/** Very small extension-based MIME guess for files created on this device. */
+function guessMimeType(name: string): string | undefined {
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0) return undefined;
+  return MIME_TYPES[name.slice(dot).toLowerCase()];
 }
 
 function toItem(path: string, entry: LocalEntry): FileSystemItem {
@@ -204,6 +228,7 @@ export class LocalFileSystemService implements FileSystemService {
         ...existing,
         content,
         size: byteLength(content),
+        mimeType: guessMimeType(existing.name) ?? existing.mimeType,
         modifiedAt: new Date().toISOString(),
       };
     } else {
@@ -225,6 +250,7 @@ export class LocalFileSystemService implements FileSystemService {
         parent,
         content,
         size: byteLength(content),
+        mimeType: guessMimeType(name),
         modifiedAt: new Date().toISOString(),
       };
     }
