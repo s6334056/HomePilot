@@ -81,11 +81,11 @@ describe('FileViewerPage header (自動スクロール中)', () => {
 
     expect(result.containerTotalNum).toBe(3);
     expect(result.textObject?.map((c) => c.containerName)).toEqual([
-      'viewer_header_datetime',
-      'viewer_header_remaining',
+      'viewer_hdr_dt',
+      'viewer_hdr_rem',
       'viewer_body',
     ]);
-    expect(contentOf(result, 'viewer_header_remaining')).toBe('@17s');
+    expect(contentOf(result, 'viewer_hdr_rem')).toBe('@17s');
   });
 
   it('[Viewer] を表示せず、日時は YYYY/M/D(Day)HH:mm:ss 形式', () => {
@@ -97,7 +97,7 @@ describe('FileViewerPage header (自動スクロール中)', () => {
     expect(allText).not.toContain('[Viewer]');
     expect(allText).not.toContain('|');
 
-    const dateTime = contentOf(result, 'viewer_header_datetime');
+    const dateTime = contentOf(result, 'viewer_hdr_dt');
     expect(dateTime).toMatch(/^\d{4}\/\d{1,2}\/\d{1,2}\([A-Za-z]{3}\)\d{1,2}:\d{2}:\d{2}$/);
     expect(dateTime).not.toContain('[Viewer]');
   });
@@ -106,7 +106,7 @@ describe('FileViewerPage header (自動スクロール中)', () => {
     const { page, internal } = makePage();
     enableAutoScroll(internal, '17');
     const result = page.render();
-    const dateTime = byName(result, 'viewer_header_datetime')!;
+    const dateTime = byName(result, 'viewer_hdr_dt')!;
 
     expect(dateTime.xPosition).toBe(HEADER_X);
     expect(dateTime.yPosition).toBe(2);
@@ -117,7 +117,7 @@ describe('FileViewerPage header (自動スクロール中)', () => {
     const { page, internal } = makePage();
     enableAutoScroll(internal, '17');
     const result = page.render();
-    const remaining = byName(result, 'viewer_header_remaining')!;
+    const remaining = byName(result, 'viewer_hdr_rem')!;
     const textWidth = page.getStringWidth(remaining.content!) * PX_PER_UNIT;
     const textRight = remaining.xPosition! + textWidth;
 
@@ -127,21 +127,40 @@ describe('FileViewerPage header (自動スクロール中)', () => {
     // コンテナ自体もキャンバス外にはみ出さない
     expect(remaining.xPosition! + remaining.width!).toBeLessThanOrEqual(CONTENT_RIGHT_EDGE);
     // 日時に食い込まない
-    const dateTime = byName(result, 'viewer_header_datetime')!;
+    const dateTime = byName(result, 'viewer_hdr_dt')!;
     const dateTimeRight =
       dateTime.xPosition! + page.getStringWidth(dateTime.content!) * PX_PER_UNIT;
     expect(remaining.xPosition!).toBeGreaterThan(dateTimeRight);
+  });
+
+  it('datetime と remaining のコンテナ矩形が重複しない (gap 8px)', () => {
+    const { page, internal } = makePage();
+
+    for (const seconds of ['30', '17', '9', '1']) {
+      enableAutoScroll(internal, seconds);
+      const result = page.render();
+      const dateTime = byName(result, 'viewer_hdr_dt')!;
+      const remaining = byName(result, 'viewer_hdr_rem')!;
+
+      const dateTimeRight = dateTime.xPosition! + dateTime.width!;
+      expect(dateTimeRight).toBeLessThanOrEqual(remaining.xPosition!);
+      expect(remaining.xPosition! - dateTimeRight).toBe(8);
+      // datetime のテキストはコンテナ内に収まる
+      const textRight = dateTime.xPosition! + page.getStringWidth(dateTime.content!) * PX_PER_UNIT;
+      expect(textRight).toBeLessThanOrEqual(dateTimeRight);
+      expect(remaining.xPosition! + remaining.width!).toBeLessThanOrEqual(CONTENT_RIGHT_EDGE);
+    }
   });
 
   it('秒数が変わっても右端位置がガタつかない (@30s -> @9s)', () => {
     const { page, internal } = makePage();
 
     enableAutoScroll(internal, '30');
-    const at30 = byName(page.render(), 'viewer_header_remaining')!;
+    const at30 = byName(page.render(), 'viewer_hdr_rem')!;
     enableAutoScroll(internal, '29');
-    const at29 = byName(page.render(), 'viewer_header_remaining')!;
+    const at29 = byName(page.render(), 'viewer_hdr_rem')!;
     enableAutoScroll(internal, '9');
-    const at9 = byName(page.render(), 'viewer_header_remaining')!;
+    const at9 = byName(page.render(), 'viewer_hdr_rem')!;
 
     const rightEdge = (c: TextContainerProperty) =>
       c.xPosition! + page.getStringWidth(c.content!) * PX_PER_UNIT;
@@ -181,8 +200,8 @@ describe('タップによる状態切替', () => {
     expect(internal.autoScrollEnabled).toBe(true);
     let result = page.render();
     expect(result.containerTotalNum).toBe(3);
-    expect(contentOf(result, 'viewer_header_datetime')).toBeTruthy();
-    expect(contentOf(result, 'viewer_header_remaining')).toMatch(/^@\d+s$/);
+    expect(contentOf(result, 'viewer_hdr_dt')).toBeTruthy();
+    expect(contentOf(result, 'viewer_hdr_rem')).toMatch(/^@\d+s$/);
 
     await page.onClick();
     expect(internal.autoScrollEnabled).toBe(false);

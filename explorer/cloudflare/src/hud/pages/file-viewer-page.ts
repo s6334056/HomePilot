@@ -408,11 +408,11 @@ export class FileViewerPage extends BasePage {
 
       const dateTimeProp = new TextContainerProperty({
         containerID: 1,
-        containerName: "viewer_header_datetime",
+        containerName: "viewer_hdr_dt",
         content: dateTime,
         xPosition: HEADER_X,
         yPosition: HEADER_Y,
-        width: HEADER_WIDTH,
+        width: remainingX - HEADER_X - HEADER_SPLIT_GAP,
         height: HEADER_HEIGHT,
         borderWidth: 0,
         isEventCapture: 0,
@@ -420,7 +420,7 @@ export class FileViewerPage extends BasePage {
 
       const remainingProp = new TextContainerProperty({
         containerID: 3,
-        containerName: "viewer_header_remaining",
+        containerName: "viewer_hdr_rem",
         content: remainingText,
         xPosition: remainingX,
         yPosition: HEADER_Y,
