@@ -857,23 +857,8 @@ export function App() {
     if (edited === null || edited === undefined) return;
 
     try {
-      const parentPath = fileService.getParentPath(selectedFile.path);
       const fileName = selectedFile.path.split(/[\/\\]/).pop() || selectedFile.name;
-      const file = new File([edited], fileName, { type: 'text/plain;charset=utf-8' });
-      // Reuse the existing upload pipeline with overwrite enabled.
-      const result = await fileService.uploadItems(
-        parentPath,
-        [{ file, relativePath: fileName }],
-        undefined,
-        undefined,
-        { overwrite: true },
-      );
-      if (result.errors && result.errors.length > 0) {
-        throw new Error(result.errors[0].error || '書き込みエラー');
-      }
-      if (result.uploaded < 1) {
-        throw new Error('ファイルが書き込まれませんでした');
-      }
+      await fileService.writeFile(selectedFile.path, edited);
       // Reflect the saved content immediately, then leave edit mode.
       setFileContent(edited);
       setFileEditing(false);

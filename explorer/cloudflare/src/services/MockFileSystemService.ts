@@ -86,6 +86,44 @@ export class MockFileSystemService implements FileSystemService {
     return node.item.content ?? '(Empty file)';
   }
 
+  public async writeFile(path: string, content: string): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const target = path.replace(/\/+$/, '');
+    const node = this.findNode(target);
+    if (node) {
+      if (node.item.type !== 'file') {
+        throw new Error(`Path is not a file: ${path}`);
+      }
+      node.item.content = content;
+      node.item.size = content.length;
+      node.item.modifiedAt = new Date().toISOString();
+      return;
+    }
+
+    const parentPath = this.getParentPath(target);
+    const parentNode = this.findNode(parentPath);
+    if (!parentNode) throw new Error(`Parent not found: ${parentPath}`);
+    if (parentNode.item.type !== 'directory') throw new Error(`Parent is not a directory: ${parentPath}`);
+    if (!parentNode.children) parentNode.children = [];
+
+    const name = target.substring(target.lastIndexOf('/') + 1);
+    if (!name) throw new Error(`Invalid file path: ${path}`);
+
+    const newPath = this.joinPath(parentPath, name);
+    parentNode.children.push({
+      item: {
+        id: newPath,
+        name,
+        type: 'file',
+        path: newPath,
+        size: content.length,
+        modifiedAt: new Date().toISOString(),
+        content,
+      },
+    });
+  }
+
   public async getItem(path: string): Promise<FileSystemItem | null> {
     const node = this.findNode(path);
     return node ? { ...node.item } : null;

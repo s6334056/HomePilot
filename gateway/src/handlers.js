@@ -160,6 +160,80 @@ export async function handleFile(request, response, url) {
   json(response, 200, { path: filePath, content });
 }
 
+export async function handleFileWrite(request, response) {
+  const body = await readBody(request);
+  if (!body) {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Request body is required.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid JSON.');
+  }
+
+  const { path: filePath, content } = parsed;
+
+  if (!filePath || typeof filePath !== 'string') {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'path is required.');
+  }
+  if (typeof content !== 'string') {
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'content must be a string.');
+  }
+
+  // Validate target path (same checks as handleFile)
+  const validation = validatePath(filePath, CONFIG.ROOT_PATH);
+  if (!validation.valid) {
+    if (validation.error === 'FORBIDDEN') {
+      return errorResponse(response, 403, 'FORBIDDEN', 'Path is outside the allowed root.');
+    }
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid path.');
+  }
+
+  const resolved = validation.resolvedPath;
+
+  // Validate parent directory as well: the target itself may not exist yet,
+  // so its parent is the path that must be proven to stay inside the root.
+  const parentValidation = validatePath(dirname(resolved), CONFIG.ROOT_PATH);
+  if (!parentValidation.valid) {
+    if (parentValidation.error === 'FORBIDDEN') {
+      return errorResponse(response, 403, 'FORBIDDEN', 'Path is outside the allowed root.');
+    }
+    return errorResponse(response, 400, 'INVALID_REQUEST', 'Invalid path.');
+  }
+
+  const parentResolved = parentValidation.resolvedPath;
+
+  try {
+    const parentStat = await stat(parentResolved);
+    if (!parentStat.isDirectory()) {
+      return errorResponse(response, 400, 'INVALID_REQUEST', 'The specified parent path is not a directory.');
+    }
+  } catch {
+    return errorResponse(response, 404, 'NOT_FOUND', 'Parent directory not found.');
+  }
+
+  if (Buffer.byteLength(content, 'utf-8') > CONFIG.MAX_FILE_SIZE) {
+    return errorResponse(response, 413, 'FILE_TOO_LARGE', 'The content is too large.');
+  }
+
+  try {
+    await writeFile(resolved, content, 'utf-8');
+  } catch (e) {
+    console.error(`[FileWrite] Failed: ${e.message}`);
+    if (e.code === 'EISDIR') {
+      return errorResponse(response, 400, 'INVALID_REQUEST', 'The specified path is not a file.');
+    }
+    if (e.code === 'ENOENT') {
+      return errorResponse(response, 404, 'NOT_FOUND', 'Parent directory not found.');
+    }
+    return errorResponse(response, 500, 'INTERNAL_ERROR', 'Failed to write file.');
+  }
+
+  json(response, 200, { ok: true, path: resolved });
+}
+
 // --- Viewer State ---
 
 const DEFAULT_VIEWER_STATE = { version: 1, positions: {}, history: [] };

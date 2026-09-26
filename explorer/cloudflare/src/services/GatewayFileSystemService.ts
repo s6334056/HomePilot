@@ -83,6 +83,15 @@ export class GatewayFileSystemService implements FileSystemService {
     return data.content || '';
   }
 
+  async writeFile(path: string, content: string): Promise<void> {
+    const res = await this.requestWithBody('POST', '/api/fs/file', { path, content });
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error?.message || `Failed to write file: ${res.status}`);
+    }
+  }
+
   async getItem(path: string): Promise<FileSystemItem | null> {
     try {
       const encoded = encodeURIComponent(path);

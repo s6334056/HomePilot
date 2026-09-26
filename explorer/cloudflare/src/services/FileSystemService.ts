@@ -31,6 +31,8 @@ export interface MoveCopyResult {
 export interface FileSystemService {
   getDirectory(path: string, sortMode?: 'default' | 'modified'): Promise<FileSystemItem[]>;
   readFile(path: string): Promise<string>;
+  /** Creates the file when it does not exist, overwrites it when it does. */
+  writeFile(path: string, content: string): Promise<void>;
   getItem(path: string): Promise<FileSystemItem | null>;
   getParentPath(path: string): string;
   getRootPath(): string;

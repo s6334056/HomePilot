@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import { generateToken, verifyToken } from './token.js';
 import {
   json, noContent, errorResponse,
-  handleHealth, handleRoot, handleDirectory, handleFile,
+  handleHealth, handleRoot, handleDirectory, handleFile, handleFileWrite,
   handleRename, handleDelete, handleMkdir,
   handleMove, handleCopy,
   handleDownloadGet, handleDownloadPost,
@@ -87,7 +87,13 @@ const server = createServer(async (request, response) => {
     if (!verifyToken(requestToken, token)) {
       return errorResponse(response, 401, 'UNAUTHORIZED', 'Authentication required.');
     }
-    return handleFile(request, response, url);
+    if (request.method === 'GET') {
+      return handleFile(request, response, url);
+    }
+    if (request.method === 'POST') {
+      return handleFileWrite(request, response);
+    }
+    return errorResponse(response, 405, 'METHOD_NOT_ALLOWED', 'Only GET and POST are allowed on /api/fs/file.');
   }
 
   // --- Speech ---
