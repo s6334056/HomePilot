@@ -9,6 +9,7 @@ import Busboy from 'busboy';
 import archiver from 'archiver';
 import { CONFIG } from './config.js';
 import { validatePath, isTextFile } from './pathValidator.js';
+import { getHiddenEntryPaths } from './hiddenFiles.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -72,6 +73,14 @@ export async function handleDirectory(request, response, url) {
     return errorResponse(response, 400, 'INVALID_REQUEST', 'The specified path is not a directory.');
   }
 
+  // Hidden entries are filtered out of the listing. This runs only after the
+  // directory has been proven to exist and listed, so that the 400/403/404
+  // handling above is untouched. The probe is started before readdir so the
+  // PowerShell startup and the directory read overlap instead of adding up;
+  // it resolves to an empty set on failure (fail-open), and the catch keeps a
+  // rejection from ever escaping as an unhandled rejection.
+  const hiddenPathsPromise = getHiddenEntryPaths(resolved).catch(() => new Set());
+
   let entries;
   try {
     entries = await readdir(resolved, { withFileTypes: true });
@@ -79,9 +88,14 @@ export async function handleDirectory(request, response, url) {
     return errorResponse(response, 404, 'NOT_FOUND', 'Directory not found.');
   }
 
+  const hiddenPaths = await hiddenPathsPromise;
+
   const items = [];
   for (const entry of entries) {
     const entryPath = resolve(resolved, entry.name);
+    if (hiddenPaths.has(entryPath.toLowerCase())) {
+      continue;
+    }
     try {
       const entryStat = await stat(entryPath);
       items.push({
