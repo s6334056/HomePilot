@@ -43,7 +43,7 @@ function setCorsHeaders(response) {
   response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
 }
 
-const server = createServer(async (request, response) => {
+async function handleRequest(request, response) {
   setCorsHeaders(response);
 
   if (request.method === 'OPTIONS') {
@@ -241,6 +241,26 @@ const server = createServer(async (request, response) => {
   }
 
   return errorResponse(response, 404, 'NOT_FOUND', 'Endpoint not found.');
+}
+
+// The callback is deliberately not async. An unexpected exception thrown by a
+// handler used to reject the promise the server callback returned, which Node 24
+// reports as an unhandled rejection and terminates the process on, taking down
+// every connection including the proxied cloudflared ones. Attaching the
+// handler here keeps a single bad request from stopping the Gateway.
+const server = createServer((request, response) => {
+  handleRequest(request, response).catch((error) => {
+    console.error(`[Gateway] Unhandled error during ${request.method} ${request.url}:`, error);
+
+    if (response.headersSent || response.writableEnded) {
+      // The response is already on its way (uploads, downloads, OpenCode
+      // proxy streams), so a 500 cannot be sent. Drop the connection instead.
+      response.destroy();
+      return;
+    }
+
+    errorResponse(response, 500, 'INTERNAL_ERROR', 'An internal server error occurred.');
+  });
 });
 
 // Extend server timeouts to support long-running proxied commands (e.g. batch files via OpenCode).

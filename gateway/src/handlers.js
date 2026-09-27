@@ -261,17 +261,49 @@ async function ensureViewerStateDir() {
   }
 }
 
+let legacyViewerStateLogged = false;
+
+// Locations to read the state from, newest first. The legacy path inside
+// ROOT_PATH is only ever read: the Gateway never writes to it and never
+// removes it, and it never changes its Windows attributes.
+function viewerStateReadPaths() {
+  if (CONFIG.VIEWER_STATE_FILE === CONFIG.LEGACY_VIEWER_STATE_FILE) {
+    return [CONFIG.VIEWER_STATE_FILE];
+  }
+  return [CONFIG.VIEWER_STATE_FILE, CONFIG.LEGACY_VIEWER_STATE_FILE];
+}
+
 async function readViewerState() {
-  try {
-    const raw = await readFile(CONFIG.VIEWER_STATE_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && parsed.version === 1) {
-      return parsed;
+  for (const filePath of viewerStateReadPaths()) {
+    let raw;
+    try {
+      raw = await readFile(filePath, 'utf-8');
+    } catch (error) {
+      // Only a missing file falls through to the next candidate. A file that is
+      // present but unreadable keeps the original "reset to default" behaviour.
+      if (error.code === 'ENOENT') continue;
+      return { ...DEFAULT_VIEWER_STATE };
+    }
+
+    if (filePath === CONFIG.LEGACY_VIEWER_STATE_FILE && !legacyViewerStateLogged) {
+      legacyViewerStateLogged = true;
+      console.log(
+        `[ViewerState] Migrating from ${CONFIG.LEGACY_VIEWER_STATE_FILE} to ${CONFIG.VIEWER_STATE_FILE}`,
+      );
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && parsed.version === 1) {
+        return parsed;
+      }
+    } catch {
+      // fall through to the default below
     }
     return { ...DEFAULT_VIEWER_STATE };
-  } catch {
-    return { ...DEFAULT_VIEWER_STATE };
   }
+
+  return { ...DEFAULT_VIEWER_STATE };
 }
 
 async function writeViewerState(state) {

@@ -1,10 +1,26 @@
 import { join } from 'node:path';
+import { homedir } from 'node:os';
+
+// HomePilot keeps its own state outside ROOT_PATH on purpose. ROOT_PATH is the
+// folder the user browses from the PWA/G2, so a state file living there shows up
+// in the listings and can be edited or deleted by accident. It is also the
+// reason Windows can break the Gateway: a file the user marked as Hidden under
+// ROOT_PATH cannot be written by Node (fs.writeFile fails with EPERM), which
+// used to take the whole process down through an unhandled rejection.
+//
+// HOMEPILOT_VIEWER_STATE_DIR keeps overriding the location. The default is the
+// per-user application data folder, which is writable and never inside
+// ROOT_PATH.
+function defaultViewerStateDir() {
+  const base = process.env.LOCALAPPDATA || homedir();
+  return join(base, 'HomePilot');
+}
 
 export const CONFIG = {
   HOST: '127.0.0.1',
   PORT: 51887,
   ROOT_PATH: process.env.HOMEPILOT_ROOT || 'C:\\hp1',
-  VIEWER_STATE_DIR: process.env.HOMEPILOT_VIEWER_STATE_DIR || '',
+  VIEWER_STATE_DIR: process.env.HOMEPILOT_VIEWER_STATE_DIR || defaultViewerStateDir(),
   VIEWER_STATE_FILE: '',  // initialized below
   MAX_HISTORY_ENTRIES: Math.max(1, parseInt(process.env.HISTORY_MAX_ENTRIES || '30', 10) || 30),
   MAX_FILE_SIZE: 10 * 1024 * 1024,
@@ -35,6 +51,9 @@ export const CONFIG = {
 };
 
 // Initialize VIEWER_STATE_FILE path
-CONFIG.VIEWER_STATE_FILE = CONFIG.VIEWER_STATE_DIR
-  ? join(CONFIG.VIEWER_STATE_DIR, '.HomePilotViewerState.json')
-  : join(CONFIG.ROOT_PATH, '.HomePilotViewerState.json');
+CONFIG.VIEWER_STATE_FILE = join(CONFIG.VIEWER_STATE_DIR, '.HomePilotViewerState.json');
+
+// Earlier versions kept the state inside ROOT_PATH. That file is still read so
+// an upgrade keeps the existing history and reading positions, but it is never
+// written to and never deleted, and its Windows attributes are left untouched.
+CONFIG.LEGACY_VIEWER_STATE_FILE = join(CONFIG.ROOT_PATH, '.HomePilotViewerState.json');
