@@ -675,6 +675,13 @@
   word-break: break-all;
 }
 
+/* Storage usage (Settings > ストレージ) */
+.storage-info {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .settings-actions {
   display: flex;
   gap: 8px;

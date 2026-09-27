@@ -7,8 +7,13 @@ import {
   UploadResult,
 } from './FileSystemService';
 
-const STORAGE_KEY = 'homepilot.localFileSystem';
+/** localStorage key that holds the whole Local FileSystem JSON. */
+export const LOCAL_FS_STORAGE_KEY = 'homepilot.localFileSystem';
 const ROOT_PATH = '/';
+
+/** Shown to the user when the browser refuses the write because localStorage is full. */
+export const LOCAL_FS_QUOTA_MESSAGE =
+  'アプリローカルの保存容量が不足しているため、保存できませんでした。';
 
 /** A single virtual file or folder. Files carry their content inline. */
 interface LocalEntry {
@@ -51,7 +56,7 @@ function isEntries(value: unknown): value is LocalEntries {
 
 function loadEntries(): LocalEntries {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(LOCAL_FS_STORAGE_KEY);
     if (!raw) return createRootEntries();
     const parsed = JSON.parse(raw);
     if (!isEntries(parsed)) return createRootEntries();
@@ -90,6 +95,14 @@ function isValidName(name: string): boolean {
 
 function byteLength(text: string): number {
   return new TextEncoder().encode(text).length;
+}
+
+/** Detects the browser's "localStorage is full" failure (`QuotaExceededError`). */
+function isQuotaExceededError(e: unknown): boolean {
+  if (typeof e !== 'object' || e === null) return false;
+  const err = e as { name?: unknown; message?: unknown };
+  if (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED') return true;
+  return typeof err.message === 'string' && /quota/i.test(err.message);
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -148,9 +161,15 @@ export class LocalFileSystemService implements FileSystemService {
 
   private persist(entries: LocalEntries): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-    } catch (e: any) {
-      throw new Error(`Local storage save failed: ${e?.message || e}`);
+      localStorage.setItem(LOCAL_FS_STORAGE_KEY, JSON.stringify(entries));
+    } catch (e: unknown) {
+      const detail = (e instanceof Error && e.message) || String(e);
+      // 既存の呼び出し側・テストが参照する識別子は末尾に残す。
+      throw new Error(
+        isQuotaExceededError(e)
+          ? `${LOCAL_FS_QUOTA_MESSAGE} (Local storage save failed: ${detail})`
+          : `Local storage save failed: ${detail}`,
+      );
     }
     this.entries = entries;
   }

@@ -241,3 +241,25 @@ describe('LocalFileSystemService mimeType', () => {
     expect((await service.getItem('/note.md'))?.mimeType).toBe('text/markdown');
   });
 });
+
+describe('LocalFileSystemService 容量超過', () => {
+  it('容量不足による保存失敗を日本語で通知する', async () => {
+    useFullLocalStorage();
+
+    await expect(service.writeFile('/big.txt', 'x')).rejects.toThrow(
+      'アプリローカルの保存容量が不足しているため、保存できませんでした。',
+    );
+    // 既存のエラー識別子は残す（呼び出し側・既存テスト互換）
+    await expect(service.createFolder('/', 'full-folder')).rejects.toThrow(
+      'Local storage save failed',
+    );
+  });
+
+  it('容量超過でも保存形式は変えない', async () => {
+    await service.writeFile('/ok.txt', 'before');
+    useFullLocalStorage();
+
+    await expect(service.writeFile('/ok.txt', 'after')).rejects.toThrow();
+    expect(store.get(STORAGE_KEY)).toContain('before');
+  });
+});
