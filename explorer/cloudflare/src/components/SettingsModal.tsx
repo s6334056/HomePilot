@@ -327,9 +327,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </section>
 
-          {/* Storage usage (Local FileSystem / browser estimate) */}
-          <StorageSection info={{ ...localUsage, siteUsageBytes }} />
-
           {/* QR Scanner */}
           {showQRScanner && (
             <section className="settings-section">
@@ -349,6 +346,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {error}
             </div>
           )}
+
+          {/* Storage usage (Local FileSystem / browser estimate) */}
+          <StorageSection info={{ ...localUsage, siteUsageBytes }} />
 
           {/* G2 Startup Screen */}
           <section className="settings-section">
