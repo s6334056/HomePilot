@@ -528,6 +528,28 @@ export function App() {
                 handleDownloadForPaths([selectedFile.path], selectedFile.name);
               },
             },
+            ...(canCopyToThisDevice
+              ? [
+                  {
+                    label: COPY_TO_DEVICE_LABEL,
+                    disabled: isCopying,
+                    onClick: () => {
+                      handleCopyToThisDeviceFromViewer();
+                    },
+                  },
+                ]
+              : []),
+            ...(canCopyToPc
+              ? [
+                  {
+                    label: COPY_TO_PC_LABEL,
+                    disabled: isCopying,
+                    onClick: () => {
+                      handleCopyToPcFromViewer();
+                    },
+                  },
+                ]
+              : []),
             {
               label: '名前を変更',
               onClick: () => {
@@ -953,6 +975,81 @@ export function App() {
       },
     );
   }, [selectedPaths, fileService, runCopy, startCopyIndicator]);
+
+  // ── FileViewer copy handlers (single file from viewer) ────────
+
+  const handleCopyToThisDeviceFromViewer = useCallback(async () => {
+    if (!selectedFile) return;
+
+    const ui = DIRECTION_UI['to-device'];
+
+    await withCopyIndicator(
+      () => startCopyIndicator('to-device'),
+      () => setIsCopying(false),
+      async () => {
+        const source = fileService;
+        const target = createFileSystemService('local');
+
+        let plan: CopyPlanItem[];
+        try {
+          plan = await planItemsCopy(source, target, [selectedFile.path], { targetLabel: ui.target });
+        } catch (e: any) {
+          alert(`${ui.failed}: ${e?.message || e}`);
+          return;
+        }
+
+        const conflict = plan.find((p) => p.existing !== 'none');
+        if (conflict) {
+          const kind = conflict.existing === 'directory' ? 'フォルダ' : 'ファイル';
+          alert(`${ui.target}に同名の${kind}があるためコピーできません: ${conflict.name}`);
+          return;
+        }
+
+        await runCopy(source, target, plan, 'to-device');
+      },
+    );
+  }, [selectedFile, fileService, runCopy, startCopyIndicator]);
+
+  const handleCopyToPcFromViewer = useCallback(async () => {
+    if (!selectedFile) return;
+
+    const ui = DIRECTION_UI['to-pc'];
+
+    await withCopyIndicator(
+      () => startCopyIndicator('to-pc'),
+      () => setIsCopying(false),
+      async () => {
+        const source = fileService;
+
+        // The gateway reports an empty root path until `initialize()` has
+        // finished, so the connection is opened before anything is planned.
+        let target: FileSystemService;
+        try {
+          target = await createInitializedGatewayService();
+        } catch (e: any) {
+          alert(`${ui.failed}: ${e?.message || e}`);
+          return;
+        }
+
+        let plan: CopyPlanItem[];
+        try {
+          plan = await planItemsCopy(source, target, [selectedFile.path], { targetLabel: ui.target });
+        } catch (e: any) {
+          alert(`${ui.failed}: ${e?.message || e}`);
+          return;
+        }
+
+        const conflict = plan.find((p) => p.existing !== 'none');
+        if (conflict) {
+          const kind = conflict.existing === 'directory' ? 'フォルダ' : 'ファイル';
+          alert(`${ui.target}に同名の${kind}があるためコピーできません: ${conflict.name}`);
+          return;
+        }
+
+        await runCopy(source, target, plan, 'to-pc');
+      },
+    );
+  }, [selectedFile, fileService, runCopy, startCopyIndicator]);
 
 
 
