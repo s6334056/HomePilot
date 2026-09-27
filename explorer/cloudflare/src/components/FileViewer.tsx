@@ -1,11 +1,47 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo, useImperativeHandle, useLayoutEffect } from 'react';
 import { loadAutoScrollSettings } from '../services/AutoScrollSettings';
 import { getSharedPosition, saveSharedPosition } from '../services/SharedPositionStore';
+import { getLocalReadingPosition, saveLocalReadingPosition } from '../services/LocalReadingPositionStore';
 import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
 
 function computeScrollProgress(el: HTMLDivElement): number {
   const maxScroll = el.scrollHeight - el.clientHeight;
   return maxScroll > 0 ? Math.min(1, Math.max(0, el.scrollTop / maxScroll)) : 0;
+}
+
+/**
+ * Resolve the stored reading progress (0.0 ~ 1.0) for a file.
+ * 自宅PC (Gateway) reads the shared Gateway state, アプリ (Local) reads
+ * localStorage. Exported so the branch itself is unit-testable.
+ */
+export async function resolveReadingProgress(
+  gatewayService: GatewayFileSystemService | null | undefined,
+  localMode: boolean,
+  filePath: string,
+): Promise<number | null> {
+  if (gatewayService) {
+    try {
+      return await getSharedPosition(gatewayService, filePath);
+    } catch {
+      return null;
+    }
+  }
+  if (localMode) return getLocalReadingPosition(filePath);
+  return null;
+}
+
+/** Persist the reading progress to the active filesystem's store. */
+export function persistReadingProgress(
+  gatewayService: GatewayFileSystemService | null | undefined,
+  localMode: boolean,
+  filePath: string,
+  progress: number,
+): void {
+  if (gatewayService) {
+    saveSharedPosition(gatewayService, filePath, progress);
+    return;
+  }
+  if (localMode) saveLocalReadingPosition(filePath, progress);
 }
 
 const EMPTY_FILE_LABEL = '(Empty file)';
@@ -64,6 +100,8 @@ interface FileViewerProps {
   content: string;
   filePath?: string;
   gatewayService?: GatewayFileSystemService | null;
+  /** true when the viewer is showing the browser Local filesystem (アプリ). */
+  localMode?: boolean;
   editing?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
 }
@@ -73,6 +111,7 @@ export const FileViewer = React.forwardRef<FileViewerHandle, FileViewerProps>(
     content,
     filePath,
     gatewayService,
+    localMode = false,
     editing = false,
     onDirtyChange,
   }, ref) {
@@ -141,12 +180,9 @@ export const FileViewer = React.forwardRef<FileViewerHandle, FileViewerProps>(
     const savePosition = useCallback(() => {
       if (!filePath || !viewerRef.current) return;
       const el = viewerRef.current;
-      // Save scroll progress (0.0 ~ 1.0) to Gateway
-      if (gatewayService) {
-        const progress = computeScrollProgress(el);
-        saveSharedPosition(gatewayService, filePath, progress);
-      }
-    }, [filePath, gatewayService]);
+      // Save scroll progress (0.0 ~ 1.0) to Gateway (自宅PC) or Local (アプリ)
+      persistReadingProgress(gatewayService, localMode, filePath, computeScrollProgress(el));
+    }, [filePath, gatewayService, localMode]);
 
     const debouncedSave = useCallback(() => {
       if (saveTimerRef.current !== null) {
@@ -354,7 +390,7 @@ export const FileViewer = React.forwardRef<FileViewerHandle, FileViewerProps>(
       };
     }, [debouncedSave, clearAutoScrollTimer, scheduleNextAutoScroll]);
 
-    // Restore reading position from shared position (Gateway only — no localStorage fallback)
+    // Restore reading position from the active filesystem's store
     useEffect(() => {
       if (!filePath || positionRestoredRef.current) return;
 
@@ -362,21 +398,14 @@ export const FileViewer = React.forwardRef<FileViewerHandle, FileViewerProps>(
       if (!el) return;
 
       const restore = async () => {
-        // Try shared position (Gateway)
-        if (gatewayService) {
-          try {
-            const sharedProgress = await getSharedPosition(gatewayService, filePath);
-            if (sharedProgress !== null && sharedProgress >= 0 && sharedProgress <= 1) {
-              requestAnimationFrame(() => {
-                const maxScroll = el.scrollHeight - el.clientHeight;
-                el.scrollTop = sharedProgress * maxScroll;
-                positionRestoredRef.current = true;
-              });
-              return;
-            }
-          } catch {
-            // Gateway unavailable — start from top
-          }
+        const savedProgress = await resolveReadingProgress(gatewayService, localMode, filePath);
+        if (savedProgress !== null && savedProgress >= 0 && savedProgress <= 1) {
+          requestAnimationFrame(() => {
+            const maxScroll = el.scrollHeight - el.clientHeight;
+            el.scrollTop = savedProgress * maxScroll;
+            positionRestoredRef.current = true;
+          });
+          return;
         }
 
         // No saved position — start from top
@@ -384,7 +413,7 @@ export const FileViewer = React.forwardRef<FileViewerHandle, FileViewerProps>(
       };
 
       restore();
-    }, [filePath, content, gatewayService]);
+    }, [filePath, content, gatewayService, localMode]);
 
     // Cleanup on unmount or file change
     useEffect(() => {

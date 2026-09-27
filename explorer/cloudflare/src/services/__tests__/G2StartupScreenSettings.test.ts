@@ -34,7 +34,7 @@ describe('G2StartupScreenSettings persistence', () => {
   });
 
   it('round-trips all supported screens', () => {
-    const screens: G2StartupScreen[] = ['explorer', 'agent', 'history'];
+    const screens: G2StartupScreen[] = ['explorer', 'agent', 'history', 'home'];
     for (const screen of screens) {
       saveG2StartupScreen(screen);
       expect(loadG2StartupScreen()).toBe(screen);
@@ -81,5 +81,20 @@ describe('resolveG2StartupPage', () => {
     expect(
       resolveG2StartupPage('agent', { hasGateway: true, hasAgent: false }),
     ).toBe('explorer');
+  });
+
+  it('returns home for the home setting regardless of capabilities', () => {
+    expect(
+      resolveG2StartupPage('home', { hasGateway: true, hasAgent: true }),
+    ).toBe('home');
+    expect(
+      resolveG2StartupPage('home', { hasGateway: false, hasAgent: false }),
+    ).toBe('home');
+  });
+
+  it('keeps the existing explorer/history/agent behaviour unchanged', () => {
+    expect(resolveG2StartupPage('explorer', { hasGateway: false, hasAgent: false })).toBe('explorer');
+    expect(resolveG2StartupPage('history', { hasGateway: true, hasAgent: true })).toBe('history');
+    expect(resolveG2StartupPage('agent', { hasGateway: true, hasAgent: true })).toBe('agent');
   });
 });

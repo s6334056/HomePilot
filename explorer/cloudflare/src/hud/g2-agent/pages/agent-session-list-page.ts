@@ -41,6 +41,7 @@ export class AgentSessionListPage extends BasePage {
     onReturnToExplorer: () => Promise<void>,
     onNavigateToHistory: () => Promise<void>,
     currentPath: string = "",
+    onNavigateToHome?: () => Promise<void>,
   ) {
     super();
     this.pageType = "AgentSessionListPage";
@@ -49,6 +50,7 @@ export class AgentSessionListPage extends BasePage {
     this.onModelSelect = onModelSelect;
     this.onReturnToExplorer = onReturnToExplorer;
     this.onNavigateToHistory = onNavigateToHistory;
+    this.onNavigateToHome = onNavigateToHome;
     this.currentPath = currentPath;
   }
 
@@ -80,7 +82,7 @@ export class AgentSessionListPage extends BasePage {
   public render(): PageRenderResult {
     const total = this.sessions.length;
     const pageIndicator = `[${this.selectedIndex}/${total}]`;
-    const headerContent = this.buildHeaderLine(this.currentPath || "Sessions", pageIndicator, LIST_MAX_WIDTH, "[Sessions]");
+    const headerContent = this.buildHeaderLine(this.currentPath || "セッション選択", pageIndicator, LIST_MAX_WIDTH, "[Sessions]");
 
     const totalItems = total + 1;
     const selected = Math.max(0, Math.min(this.selectedIndex, totalItems - 1));
@@ -143,16 +145,17 @@ export class AgentSessionListPage extends BasePage {
       isEventCapture: 1,
     });
 
+    const menuList = [
+      { id: "history", title: "閲覧履歴画面へ" },
+      { id: "explorer", title: "エクスプローラ画面へ" },
+      { id: "refresh", title: "更新" },
+    ];
+    this.addHomeMenuItem(menuList);
+
     return {
       containerTotalNum: 2,
       textObject: [headerProp, bodyProp],
-      menuObject: {
-        menuList: [
-          { id: "history", title: "閲覧履歴画面へ" },
-          { id: "explorer", title: "エクスプローラ画面へ" },
-          { id: "refresh", title: "更新" },
-        ],
-      },
+      menuObject: { menuList },
     };
   }
 
@@ -189,7 +192,12 @@ export class AgentSessionListPage extends BasePage {
   }
 
   public async onDoubleClick() {
-    // Show system exit confirmation dialog
+    if (this.onNavigateToHome) {
+      // Session List root → Home (HomeのDouble Tapがアプリ終了確認を担う)
+      await this.onNavigateToHome();
+      return;
+    }
+    // Legacy: show system exit confirmation dialog
     await this.bridge.shutDownPageContainer(1);
   }
 
@@ -198,6 +206,7 @@ export class AgentSessionListPage extends BasePage {
   }
 
   public async onMenuItemClick(menuId: string) {
+    if (await this.handleCommonMenuItem(menuId)) return;
     switch (menuId) {
       case "history":
         await this.onNavigateToHistory();

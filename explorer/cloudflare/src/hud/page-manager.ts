@@ -35,6 +35,17 @@ export interface PageRenderResult {
   };
 }
 
+/**
+ * Context menu item shared by every G2 page except Home itself.
+ * Selecting it jumps straight to the Home screen (the G2 root), through
+ * the runtime's existing navigateToHome() — no return stack is built.
+ */
+export const G2_MENU_HOME_ID = "home";
+export const G2_MENU_HOME_TITLE = "ホーム画面へ";
+
+/** Menu entry shape used by PageRenderResult.menuObject.menuList. */
+export type G2MenuItem = { id: string; title: string };
+
 export abstract class BasePage {
   public isActive: boolean = true;
   public pageType: string = "BasePage";
@@ -50,6 +61,13 @@ export abstract class BasePage {
    * the shared ~400ms interval accordingly.
    */
   protected onAutoTickChanged?: () => void;
+
+  /**
+   * Set by G2RuntimeManager when this page may jump straight to Home.
+   * Home itself never sets it (Home is the destination), so no page gets a
+   * "go to Home" entry while already on Home.
+   */
+  protected onNavigateToHome?: () => Promise<void>;
 
   /**
    * Whether this page currently requires the shared ~400ms interval tick.
@@ -88,6 +106,35 @@ export abstract class BasePage {
   public onLongPress(_event?: unknown) {}
   public onLongPressRelease(_event?: unknown) {}
   public onMenuItemClick(_menuId: string, _event?: unknown) {}
+
+  /**
+   * Prepend the shared "ホーム画面へ" entry to this page's context menu.
+   * Called from render() by every G2 page except Home. The entry is only
+   * added when the runtime actually wired an onNavigateToHome callback,
+   * so a menu item can never appear without a working destination.
+   * Existing entries keep their relative order (only the new one is first).
+   */
+  protected addHomeMenuItem(menuList: G2MenuItem[]): void {
+    if (this.onNavigateToHome) {
+      menuList.unshift({
+        id: G2_MENU_HOME_ID,
+        title: G2_MENU_HOME_TITLE,
+      });
+    }
+  }
+
+  /**
+   * Handle menu ids shared by every G2 page. Returns true when consumed,
+   * so pages call it before their own switch. It only navigates to Home via
+   * the existing navigateToHome(); it never touches Double Tap behaviour.
+   */
+  protected async handleCommonMenuItem(menuId: string): Promise<boolean> {
+    if (menuId === G2_MENU_HOME_ID && this.onNavigateToHome) {
+      await this.onNavigateToHome();
+      return true;
+    }
+    return false;
+  }
 
   /**
    * Called by PageManager's shared ~400ms interval tick.

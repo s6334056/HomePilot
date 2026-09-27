@@ -3,6 +3,7 @@ import { BasePage, PageRenderResult } from "../page-manager";
 import { FileSystemItem } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
 import { GatewayFileSystemService } from "../../services/GatewayFileSystemService";
+import { HistoryAccess } from "../../services/HistoryAccess";
 import { FileViewerPage } from "./file-viewer-page";
 
 export const G2_MAX_LIST_LINES = 9;
@@ -18,6 +19,7 @@ export class ExplorerPage extends BasePage {
   private onFileViewerStateChange?: (file: FileSystemItem, content: string) => void;
   private onAgentSessionList?: () => Promise<void>;
   private onNavigateToHistory?: () => Promise<void>;
+  private historyAccess?: HistoryAccess | null;
   private initialRestoreIndex?: number;
   private sortMode: 'default' | 'modified' = 'default';
 
@@ -30,6 +32,8 @@ export class ExplorerPage extends BasePage {
     onAgentSessionList?: () => Promise<void>,
     gatewayService?: GatewayFileSystemService | null,
     onNavigateToHistory?: () => Promise<void>,
+    onNavigateToHome?: () => Promise<void>,
+    historyAccess?: HistoryAccess | null,
   ) {
     super();
     this.pageType = "ExplorerPage";
@@ -41,6 +45,8 @@ export class ExplorerPage extends BasePage {
     this.initialRestoreIndex = initialRestoreIndex;
     this.onAgentSessionList = onAgentSessionList;
     this.onNavigateToHistory = onNavigateToHistory;
+    this.onNavigateToHome = onNavigateToHome;
+    this.historyAccess = historyAccess ?? null;
   }
 
   public getCurrentPath(): string {
@@ -148,17 +154,23 @@ export class ExplorerPage extends BasePage {
       isEventCapture: 1,
     });
 
+    // Agent は自宅PC (gateway) 専用。ローカル接続時はメニューに出さない。
+    const menuList = [
+      { id: "history", title: "閲覧履歴画面へ" },
+    ];
+    if (this.onAgentSessionList) {
+      menuList.push({ id: "agent", title: "エージェント画面へ" });
+    }
+    menuList.push(
+      { id: "refresh", title: "更新" },
+      { id: "toggleSort", title: "並び順切替" },
+    );
+    this.addHomeMenuItem(menuList);
+
     return {
       containerTotalNum: 2,
       textObject: [headerProp, bodyProp],
-      menuObject: {
-        menuList: [
-          { id: "history", title: "閲覧履歴画面へ" },
-          { id: "agent", title: "エージェント画面へ" },
-          { id: "refresh", title: "更新" },
-          { id: "toggleSort", title: "並び順切替" },
-        ],
-      },
+      menuObject: { menuList },
     };
   }
 
@@ -211,6 +223,10 @@ export class ExplorerPage extends BasePage {
         this.onNavigateToHistory
           ? () => this.onNavigateToHistory!()
           : undefined,
+        this.historyAccess,
+        this.onNavigateToHome
+          ? () => this.onNavigateToHome!()
+          : undefined,
       );
       await this.navigate(viewerPage);
     }
@@ -226,8 +242,11 @@ export class ExplorerPage extends BasePage {
       const restoreIndex = idx >= 0 ? idx : 0;
       await this.loadDirectory(parentPath, restoreIndex);
       await this.navigate(this);
+    } else if (this.onNavigateToHome) {
+      // Root: return to Home (HomeのDouble Tapがアプリ終了確認を担う)
+      await this.onNavigateToHome();
     } else {
-      // Root: show system exit confirmation dialog
+      // Root (legacy path without Home): show system exit confirmation dialog
       await this.bridge.shutDownPageContainer(1);
     }
   }
@@ -237,6 +256,7 @@ export class ExplorerPage extends BasePage {
   }
 
   public async onMenuItemClick(menuId: string) {
+    if (await this.handleCommonMenuItem(menuId)) return;
     switch (menuId) {
       case "refresh":
         await this.loadDirectory(this.currentPath);

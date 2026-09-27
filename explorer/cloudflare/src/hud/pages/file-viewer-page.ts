@@ -3,9 +3,10 @@ import { BasePage, PageRenderResult } from "../page-manager";
 import { FileSystemItem } from "../../domain/types";
 import { FileSystemService } from "../../services/FileSystemService";
 import { GatewayFileSystemService } from "../../services/GatewayFileSystemService";
+import { HistoryAccess } from "../../services/HistoryAccess";
 import { loadAutoScrollSettings } from "../../services/AutoScrollSettings";
 import { getG2SharedPosition, saveG2SharedPosition } from "../services/g2-shared-position-store";
-import { addG2ToHistory } from "../services/g2-viewer-history-store";
+import { getLocalReadingPosition, saveLocalReadingPosition } from "../../services/LocalReadingPositionStore";
 
 export const G2_VIEWER_LINES = 9;
 export const G2_VIEWER_MAX_WIDTH = 56;
@@ -93,6 +94,7 @@ export class FileViewerPage extends BasePage {
   private file: FileSystemItem;
   private fileService: FileSystemService;
   private gatewayService: GatewayFileSystemService | null;
+  private historyAccess: HistoryAccess | null;
   private onBackToExplorer: () => Promise<boolean>;
   private onNavigateToHistory?: () => Promise<void>;
   private onStateChange?: (file: FileSystemItem, content: string) => void;
@@ -132,16 +134,20 @@ export class FileViewerPage extends BasePage {
     onAgentSessionList?: () => Promise<void>,
     gatewayService?: GatewayFileSystemService | null,
     onNavigateToHistory?: () => Promise<void>,
+    historyAccess?: HistoryAccess | null,
+    onNavigateToHome?: () => Promise<void>,
   ) {
     super();
     this.pageType = "FileViewerPage";
     this.file = file;
     this.fileService = fileService;
     this.gatewayService = gatewayService ?? null;
+    this.historyAccess = historyAccess ?? null;
     this.onBackToExplorer = onBackToExplorer;
     this.onStateChange = onStateChange;
     this.onAgentSessionList = onAgentSessionList;
     this.onNavigateToHistory = onNavigateToHistory;
+    this.onNavigateToHome = onNavigateToHome;
   }
 
   public getCurrentPath(): string {
@@ -171,7 +177,8 @@ export class FileViewerPage extends BasePage {
       this.lines = this.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
       this.buildWrappedLines();
 
-      // Try shared position (Gateway) — no localStorage fallback
+      // Try reading position: 自宅PC (Gateway) shared store, アプリ (Local)
+      // localStorage. Both use the same progress ratio (0.0 ~ 1.0).
       let savedProgress: number | null = null;
       if (this.gatewayService) {
         try {
@@ -179,8 +186,14 @@ export class FileViewerPage extends BasePage {
         } catch {
           // Gateway unavailable — start from top
         }
-        // Add to viewing history (fire-and-forget, non-blocking)
-        addG2ToHistory(this.gatewayService, this.file.path).catch(() => {});
+      } else {
+        savedProgress = getLocalReadingPosition(this.file.path);
+      }
+
+      // Add to viewing history (fire-and-forget, non-blocking).
+      // 接続先に応じて Local / Gateway の HistoryAccess が渡される。
+      if (this.historyAccess) {
+        this.historyAccess.addToHistory(this.file.path).catch(() => {});
       }
 
       if (savedProgress !== null && savedProgress >= 0 && savedProgress <= 1) {
@@ -217,8 +230,9 @@ export class FileViewerPage extends BasePage {
   }
 
   /**
-   * Save reading position as scroll progress (0.0 ~ 1.0) to Gateway (debounced).
-   * Gateway PATCH is coalesced: rapid scrolls only trigger one HTTP call
+   * Save reading position as scroll progress (0.0 ~ 1.0) (debounced).
+   * 自宅PC (Gateway) writes via PATCH, アプリ (Local) writes to localStorage.
+   * Writes are coalesced: rapid scrolls only trigger one store update
    * after 2s of inactivity. Immediate save on deactivate/top/bottom.
    */
   private saveCurrentPosition(): void {
@@ -227,19 +241,28 @@ export class FileViewerPage extends BasePage {
       ? Math.min(1, Math.max(0, this.scrollPosition / maxPosition))
       : 0;
 
-    // Gateway shared position — debounced
+    this.pendingPositionSave = { progress };
+    if (this.positionSaveTimer === null) {
+      this.positionSaveTimer = setTimeout(() => {
+        this.positionSaveTimer = null;
+        if (this.pendingPositionSave) {
+          const { progress: p } = this.pendingPositionSave;
+          this.pendingPositionSave = null;
+          this.commitPositionSave(p);
+        }
+      }, FileViewerPage.POSITION_SAVE_DEBOUNCE_MS);
+    }
+  }
+
+  /**
+   * Write a progress value to the store matching the connection target.
+   * gatewayService あり = 自宅PC (Gateway) / なし = アプリ (Local).
+   */
+  private commitPositionSave(progress: number): void {
     if (this.gatewayService) {
-      this.pendingPositionSave = { progress };
-      if (this.positionSaveTimer === null) {
-        this.positionSaveTimer = setTimeout(() => {
-          this.positionSaveTimer = null;
-          if (this.pendingPositionSave && this.gatewayService) {
-            const { progress: p } = this.pendingPositionSave;
-            this.pendingPositionSave = null;
-            saveG2SharedPosition(this.gatewayService, this.file.path, p);
-          }
-        }, FileViewerPage.POSITION_SAVE_DEBOUNCE_MS);
-      }
+      saveG2SharedPosition(this.gatewayService, this.file.path, progress);
+    } else {
+      saveLocalReadingPosition(this.file.path, progress);
     }
   }
 
@@ -252,10 +275,10 @@ export class FileViewerPage extends BasePage {
       clearTimeout(this.positionSaveTimer);
       this.positionSaveTimer = null;
     }
-    if (this.pendingPositionSave && this.gatewayService) {
+    if (this.pendingPositionSave) {
       const { progress } = this.pendingPositionSave;
       this.pendingPositionSave = null;
-      saveG2SharedPosition(this.gatewayService, this.file.path, progress);
+      this.commitPositionSave(progress);
     }
   }
 
@@ -361,16 +384,21 @@ export class FileViewerPage extends BasePage {
   }
 
   public render(): PageRenderResult {
-    const menuObject = {
-      menuList: [
-        { id: "history", title: "閲覧履歴画面へ" },
-        { id: "agent", title: "エージェント画面へ" },
-        { id: "refresh", title: "更新" },
-        { id: "top", title: "先頭へ" },
-        { id: "bottom", title: "末尾へ" },
-        { id: "scrollInvert", title: "スクロール操作反転" },
-      ],
-    };
+    // Agent は自宅PC (gateway) 専用。ローカル接続時はメニューに出さない。
+    const menuList = [
+      { id: "history", title: "閲覧履歴画面へ" },
+    ];
+    if (this.onAgentSessionList) {
+      menuList.push({ id: "agent", title: "エージェント画面へ" });
+    }
+    menuList.push(
+      { id: "refresh", title: "更新" },
+      { id: "top", title: "先頭へ" },
+      { id: "bottom", title: "末尾へ" },
+      { id: "scrollInvert", title: "スクロール操作反転" },
+    );
+    this.addHomeMenuItem(menuList);
+    const menuObject = { menuList };
 
     const end = Math.min(this.scrollPosition + G2_VIEWER_LINES, this.wrappedLines.length);
     const visibleLines = this.wrappedLines.slice(this.scrollPosition, end);
@@ -721,6 +749,7 @@ export class FileViewerPage extends BasePage {
   }
 
   public async onMenuItemClick(menuId: string) {
+    if (await this.handleCommonMenuItem(menuId)) return;
     switch (menuId) {
       case "history":
         if (this.onNavigateToHistory) {

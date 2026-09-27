@@ -2,8 +2,8 @@ import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
 import { BasePage, PageRenderResult } from "../page-manager";
 import { GatewayFileSystemService } from "../../services/GatewayFileSystemService";
 import { FileSystemService } from "../../services/FileSystemService";
+import { HistoryAccess } from "../../services/HistoryAccess";
 import { FileViewerPage } from "./file-viewer-page";
-import { getG2History } from "../services/g2-viewer-history-store";
 
 export const G2_HISTORY_MAX_LINES = 9;
 export const G2_HISTORY_MAX_WIDTH = 56;
@@ -15,7 +15,8 @@ interface HistoryItem {
 }
 
 export class HistoryPage extends BasePage {
-  private gatewayService: GatewayFileSystemService;
+  private historyAccess: HistoryAccess;
+  private gatewayService: GatewayFileSystemService | null;
   private fileService: FileSystemService;
   private items: HistoryItem[] = [];
   private selectedIndex: number = 0;
@@ -27,7 +28,7 @@ export class HistoryPage extends BasePage {
   private onNavigateToAgentSessionList?: () => Promise<void>;
 
   constructor(
-    gatewayService: GatewayFileSystemService,
+    historyAccess: HistoryAccess,
     fileService: FileSystemService,
     onStateChange?: (items: HistoryItem[], selectedIndex: number) => void,
     onFileViewerStateChange?: (file: any, content: string) => void,
@@ -35,10 +36,13 @@ export class HistoryPage extends BasePage {
     onBackToExplorer?: () => Promise<void>,
     onNavigateToExplorer?: () => Promise<void>,
     onNavigateToAgentSessionList?: () => Promise<void>,
+    gatewayService?: GatewayFileSystemService | null,
+    onNavigateToHome?: () => Promise<void>,
   ) {
     super();
     this.pageType = "HistoryPage";
-    this.gatewayService = gatewayService;
+    this.historyAccess = historyAccess;
+    this.gatewayService = gatewayService ?? null;
     this.fileService = fileService;
     this.onStateChange = onStateChange;
     this.onFileViewerStateChange = onFileViewerStateChange;
@@ -46,6 +50,7 @@ export class HistoryPage extends BasePage {
     this.onBackToExplorer = onBackToExplorer;
     this.onNavigateToExplorer = onNavigateToExplorer;
     this.onNavigateToAgentSessionList = onNavigateToAgentSessionList;
+    this.onNavigateToHome = onNavigateToHome;
   }
 
   public async afterRender(): Promise<void> {
@@ -59,7 +64,7 @@ export class HistoryPage extends BasePage {
   private async loadHistory() {
     try {
       this.notifyStatus("Loading history...");
-      const history = await getG2History(this.gatewayService);
+      const history = await this.historyAccess.getHistory();
       this.items = history.map((entry) => ({
         path: entry.path,
         name: entry.path.split(/[\/\\]/).pop() || entry.path,
@@ -143,16 +148,20 @@ export class HistoryPage extends BasePage {
       isEventCapture: 1,
     });
 
+    // Agent は自宅PC (gateway) 専用。ローカル接続時はメニューに出さない。
+    const menuList = [
+      { id: "explorer", title: "エクスプローラ画面へ" },
+    ];
+    if (this.onNavigateToAgentSessionList) {
+      menuList.push({ id: "agent", title: "エージェント画面へ" });
+    }
+    menuList.push({ id: "refresh", title: "更新" });
+    this.addHomeMenuItem(menuList);
+
     return {
       containerTotalNum: 2,
       textObject: [headerProp, bodyProp],
-      menuObject: {
-        menuList: [
-          { id: "explorer", title: "エクスプローラ画面へ" },
-          { id: "agent", title: "エージェント画面へ" },
-          { id: "refresh", title: "更新" },
-        ],
-      },
+      menuObject: { menuList },
     };
   }
 
@@ -197,6 +206,10 @@ export class HistoryPage extends BasePage {
       this.onAgentSessionList,
       this.gatewayService,
       async () => { await this.navigate(this); },  // Context Menu "閲覧履歴画面へ" → back to history
+      this.historyAccess,
+      this.onNavigateToHome
+        ? () => this.onNavigateToHome!()
+        : undefined,
     );
     await this.navigate(viewerPage);
   }
@@ -212,6 +225,7 @@ export class HistoryPage extends BasePage {
   }
 
   public async onMenuItemClick(menuId: string) {
+    if (await this.handleCommonMenuItem(menuId)) return;
     switch (menuId) {
       case "refresh":
         await this.loadHistory();

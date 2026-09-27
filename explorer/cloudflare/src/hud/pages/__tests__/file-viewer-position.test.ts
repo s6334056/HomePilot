@@ -116,3 +116,117 @@ describe('shared position progress=0 round trip', () => {
     expect(computeG2RestorePosition(0, TOTAL_WRAPPED_LINES, G2_VIEWER_LINES, 95)).toBe(0);
   });
 });
+
+describe('FileViewerPage local position (gatewayService なし = アプリ)', () => {
+  const LOCAL_KEY = 'homepilot.localFileViewerPositions';
+
+  let store: Map<string, string>;
+  let page: FileViewerPage;
+  let internal: Record<string, any>;
+
+  function localPositions(): Record<string, { progress: number; updatedAt: number }> {
+    const raw = store.get(LOCAL_KEY);
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  beforeEach(() => {
+    store = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+      setItem: (key: string, value: string) => {
+        store.set(key, String(value));
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      clear: () => {
+        store.clear();
+      },
+    };
+
+    // gatewayService を渡さない = アプリ(Local) 接続
+    page = new FileViewerPage(makeFile(), {} as any, async () => true);
+    internal = page as unknown as Record<string, any>;
+    internal.wrappedLines = makeWrappedLines();
+    internal.scrollPosition = 40;
+  });
+
+  it('先頭へ は homepilot.localFileViewerPositions に progress=0 を保存する', async () => {
+    await page.onMenuItemClick('top');
+
+    expect(internal.scrollPosition).toBe(0);
+    expect(localPositions()).toEqual({
+      [FILE_PATH]: { progress: 0, updatedAt: expect.any(Number) },
+    });
+  });
+
+  it('末尾へ は progress=1 を保存する', async () => {
+    internal.scrollPosition = 10;
+
+    await page.onMenuItemClick('bottom');
+
+    expect(internal.scrollPosition).toBe(MAX_POSITION);
+    expect(localPositions()[FILE_PATH].progress).toBe(1);
+  });
+
+  it('通常スクロールは2秒デバウンス後に保存される', async () => {
+    vi.useFakeTimers();
+    try {
+      internal.scrollPosition = 46;
+      internal.saveCurrentPosition();
+      expect(store.has(LOCAL_KEY)).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(localPositions()[FILE_PATH].progress).toBeCloseTo(46 / MAX_POSITION);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('保存済みのローカル位置から復元する', async () => {
+    store.set(LOCAL_KEY, JSON.stringify({ [FILE_PATH]: { progress: 0.5, updatedAt: 123 } }));
+    const content = Array.from({ length: TOTAL_WRAPPED_LINES }, (_, i) => `line ${i}`).join('\n');
+    const reader = { readFile: vi.fn().mockResolvedValue(content) };
+
+    const restorePage = new FileViewerPage(makeFile(), reader as any, async () => true);
+    restorePage.init(
+      async () => true,
+      async () => {},
+      {} as any,
+      () => {},
+    );
+    const restoreInternal = restorePage as unknown as Record<string, any>;
+
+    await restoreInternal.loadFileContent();
+
+    expect(restoreInternal.scrollPosition).toBe(
+      computeG2RestorePosition(
+        0.5,
+        restoreInternal.wrappedLines.length,
+        G2_VIEWER_LINES,
+        restoreInternal.lines.length,
+      ),
+    );
+  });
+
+  it('gatewayService が有る場合は localStorage に書かず Gateway へ保存する', async () => {
+    const patchPosition = vi.fn().mockResolvedValue(undefined);
+    const gatewayPage = new FileViewerPage(
+      makeFile(),
+      {} as any,
+      async () => true,
+      undefined,
+      undefined,
+      { patchPosition } as any,
+    );
+    const gatewayInternal = gatewayPage as unknown as Record<string, any>;
+    gatewayInternal.wrappedLines = makeWrappedLines();
+    gatewayInternal.scrollPosition = 40;
+
+    await gatewayPage.onMenuItemClick('top');
+
+    expect(patchPosition).toHaveBeenCalledWith(FILE_PATH, 0, expect.any(Number));
+    expect(store.has(LOCAL_KEY)).toBe(false);
+  });
+});

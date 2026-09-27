@@ -1,11 +1,11 @@
 const STORAGE_KEY = 'homepilot.g2StartupScreen';
 
-export type G2StartupScreen = 'explorer' | 'agent' | 'history';
+export type G2StartupScreen = 'explorer' | 'agent' | 'history' | 'home';
 
 export const DEFAULT_G2_STARTUP_SCREEN: G2StartupScreen = 'explorer';
 
 function isG2StartupScreen(v: unknown): v is G2StartupScreen {
-  return v === 'explorer' || v === 'agent' || v === 'history';
+  return v === 'explorer' || v === 'agent' || v === 'history' || v === 'home';
 }
 
 export function loadG2StartupScreen(): G2StartupScreen {
@@ -33,11 +33,15 @@ export function saveG2StartupScreen(screen: G2StartupScreen): void {
  * Falls back to the Explorer when the requested screen is unavailable
  * (no Gateway connection / no Agent controller) so the glasses always
  * land on a usable page.
+ *
+ * 'home' は既存値 (explorer/agent/history) と後方互換を保ちつつ追加した値。
+ * Home はローカルファイルシステムのみで完結するため capability 条件を持たない。
  */
 export function resolveG2StartupPage(
   screen: G2StartupScreen,
   capabilities: { hasGateway: boolean; hasAgent: boolean },
-): 'explorer' | 'agent' | 'history' {
+): 'explorer' | 'agent' | 'history' | 'home' {
+  if (screen === 'home') return 'home';
   if (screen === 'history' && capabilities.hasGateway) return 'history';
   if (screen === 'agent' && capabilities.hasAgent) return 'agent';
   return 'explorer';

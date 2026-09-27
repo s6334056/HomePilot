@@ -6,15 +6,23 @@ import {
 import { PageManager, BasePage } from './page-manager';
 import { ExplorerPage } from './pages/explorer-page';
 import { HistoryPage } from './pages/history-page';
+import { HomePage, G2ConnectionMode } from './pages/home-page';
 import { AgentSessionListPage } from './g2-agent/pages/agent-session-list-page';
 import { AgentModelSelectPage } from './g2-agent/pages/agent-model-select-page';
 import { AgentChatPage } from './g2-agent/pages/agent-chat-page';
 import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
+import { LocalFileSystemService } from '../services/LocalFileSystemService';
+import { FileSystemService } from '../services/FileSystemService';
+import { createFileSystemService } from '../services/FileSystemSelection';
+import { HistoryAccess } from '../services/HistoryAccess';
+import { createGatewayHistoryAccess } from '../services/ViewerHistoryStore';
+import { createLocalHistoryAccess } from '../services/LocalHistoryStore';
 import { OpenCodeClient } from '../services/OpenCodeClient';
 import { G2AgentController } from './g2-agent/g2-agent-controller';
 import { AgentStateStore } from './g2-agent/agent-state-store';
 import { resolveConfig } from '../services/ConnectionConfig';
 import {
+  type G2StartupScreen,
   loadG2StartupScreen,
   resolveG2StartupPage,
 } from '../services/G2StartupScreenSettings';
@@ -22,6 +30,29 @@ import {
 export type G2RuntimeState = 'inactive' | 'starting' | 'active' | 'stopping';
 
 export type G2RuntimeStateListener = (state: G2RuntimeState) => void;
+
+export type G2InitialPage = 'explorer' | 'agent' | 'history' | 'home';
+
+/**
+ * Decide which screen the G2 starts on.
+ *
+ * - Gateway 接続あり → startupScreen 設定に従う（既存動作そのまま）
+ * - Gateway 接続なし → startupScreen に関係なく Home へフォールバック
+ *
+ * Gateway 未接続時に explorer / history / agent を起動すると、
+ * FileSystem が無いため表示も操作もできず（Double Tap も効かない）、
+ * 画面から抜けられない状態になるため。
+ *
+ * 設定値 (homepilot.g2StartupScreen) は一切書き換えない。
+ * 次回 Gateway が使える状態で起動すれば、従来どおり設定に従う。
+ */
+export function resolveG2InitialPage(
+  configured: G2StartupScreen,
+  capabilities: { hasGateway: boolean; hasAgent: boolean },
+): G2InitialPage {
+  if (!capabilities.hasGateway) return 'home';
+  return resolveG2StartupPage(configured, capabilities);
+}
 
 /**
  * G2RuntimeManager manages the lifecycle of the G2 Runtime:
@@ -48,9 +79,15 @@ export class G2RuntimeManager {
   // G2 Runtime resources (only exist while active)
   private pageManager: PageManager | null = null;
   private gatewayService: GatewayFileSystemService | null = null;
+  private localFileService: LocalFileSystemService | null = null;
   private openCodeClient: OpenCodeClient | null = null;
   private g2AgentController: G2AgentController | null = null;
   private agentStateStore: AgentStateStore | null = null;
+
+  // Which file system the Runtime is currently driving.
+  // 'gateway' is the legacy default (before Home was introduced).
+  // It only changes when the user picks a target on Home — never persisted.
+  private connectionMode: G2ConnectionMode = 'gateway';
 
   // Agent Navigation state
   private agentReturnPage: BasePage | null = null;
@@ -58,6 +95,7 @@ export class G2RuntimeManager {
   private modelSelectPage: AgentModelSelectPage | null = null;
   private historyPage: HistoryPage | null = null;
   private historyReturnPage: BasePage | null = null;
+  private homePage: HomePage | null = null;
   private agentCurrentPath: string = '';
 
   // Last Agent page state (for Explorer → Agent return)
@@ -191,7 +229,8 @@ export class G2RuntimeManager {
    * 4. OpenCodeClient creation
    * 5. G2AgentController creation + initialize()
    * 6. Navigate to the configured startup screen
-   *    (エクスプローラー / エージェント / 履歴 — PWA setting, default エクスプローラー)
+   *    (ホーム / エクスプローラー / エージェント / 履歴 — PWA setting,
+   *     default エクスプローラー; 既存値 explorer/history/agent は従来通り)
    */
   async startG2Runtime(): Promise<void> {
     // Prevent double-start
@@ -243,16 +282,23 @@ export class G2RuntimeManager {
       }
 
       // 6. Create the initial page according to the startup screen setting
-      // Gateway is always initialized before this point (step 3)
-      const startupPage = resolveG2StartupPage(loadG2StartupScreen(), {
-        hasGateway: this.gatewayService !== null,
+      // Gateway is always initialized before this point (step 3).
+      // Gateway 未接続時は startupScreen 設定に関係なく Home へフォールバックする
+      // (設定値 homepilot.g2StartupScreen は書き換えない)。
+      const startupPage = resolveG2InitialPage(loadG2StartupScreen(), {
+        hasGateway: this.isGatewayAvailable(),
         hasAgent: this.g2AgentController !== null,
       });
 
-      if (startupPage === 'history') {
+      if (startupPage === 'home') {
+        // Home does not touch any file system: the connection target is
+        // decided by the selection made on Home itself.
+        this.updateStatus('Loading G2 Home...');
+        await this.navigateToHome();
+      } else if (startupPage === 'history') {
         // Startup History has no "page entered from" origin, so clear the
-        // History return point: double-tap then always falls back to the
-        // root Explorer (G2起動 → History → Double Tap → Root Explorer).
+        // History return point: double-tap then falls back to Home
+        // (G2起動 → History → Double Tap → Home).
         // Normal History return paths (navigateToHistory from other pages)
         // are unaffected.
         this.updateStatus('Loading G2 History...');
@@ -263,6 +309,8 @@ export class G2RuntimeManager {
         this.agentReturnPage = null;
         await this.navigateToSessionList();
       } else {
+        // Backward compatibility: startupScreen=explorer still starts on the
+        // Gateway side exactly like before Home was introduced.
         this.updateStatus('Loading G2 Explorer...');
         const rootPath = this.gatewayService
           ? this.gatewayService.getRootPath()
@@ -273,9 +321,11 @@ export class G2RuntimeManager {
           undefined,
           undefined,
           undefined,
-          () => this.navigateToAgentFromExplorer(),
+          this.showAgentEntries() ? () => this.navigateToAgentFromExplorer() : undefined,
           this.gatewayService,
           () => this.navigateToHistory(),
+          () => this.navigateToHome(),
+          this.resolveHistoryAccess(),
         );
         await this.pageManager.navigateTo(explorerPage);
       }
@@ -331,6 +381,9 @@ export class G2RuntimeManager {
 
       // 5. Clear gateway reference
       this.gatewayService = null;
+      this.localFileService = null;
+      this.homePage = null;
+      this.connectionMode = 'gateway';
 
     // 6. Clear agent navigation state
     this.agentReturnPage = null;
@@ -366,6 +419,9 @@ export class G2RuntimeManager {
     }
     this.agentStateStore = null;
     this.gatewayService = null;
+    this.localFileService = null;
+    this.homePage = null;
+    this.connectionMode = 'gateway';
     this.agentReturnPage = null;
     this.sessionListPage = null;
     this.modelSelectPage = null;
@@ -388,6 +444,167 @@ export class G2RuntimeManager {
 
   getG2AgentController(): G2AgentController | null {
     return this.g2AgentController;
+  }
+
+  /** Current connection target: 'local' (アプリ) or 'gateway' (自宅PC). */
+  getConnectionMode(): G2ConnectionMode {
+    return this.connectionMode;
+  }
+
+  // ── Home / Connection (Local ⇄ Gateway) ─────────────────────
+
+  /**
+   * Resolve the FileSystemService for the active connection mode.
+   * 'local' → LocalFileSystemService (created via createFileSystemService),
+   * 'gateway' → the GatewayFileSystemService initialized at startup.
+   */
+  private resolveActiveFileService(): FileSystemService | null {
+    if (this.connectionMode === 'local') {
+      return this.localFileService;
+    }
+    return this.gatewayService;
+  }
+
+  /**
+   * Resolve the HistoryAccess for the active connection mode.
+   * Reuses the existing PWA History foundation (HistoryAccess /
+   * LocalHistoryStore / ViewerHistoryStore) — G2 keeps no separate
+   * history implementation.
+   */
+  private resolveHistoryAccess(): HistoryAccess | null {
+    if (this.connectionMode === 'local') {
+      return this.localFileService ? createLocalHistoryAccess(this.localFileService) : null;
+    }
+    return this.gatewayService ? createGatewayHistoryAccess(this.gatewayService) : null;
+  }
+
+  /** Agent is gateway (自宅PC) only — never offered on the local side. */
+  private showAgentEntries(): boolean {
+    return this.connectionMode === 'gateway';
+  }
+
+  /**
+   * Whether the Gateway service exists AND was able to connect.
+   * 初期化に失敗したサービスが残っていても「接続あり」とはみなさない。
+   */
+  private isGatewayAvailable(): boolean {
+    return (
+      this.gatewayService !== null &&
+      this.gatewayService.isAvailable &&
+      !!this.gatewayService.getRootPath()
+    );
+  }
+
+  /**
+   * Create (and remember) the FileSystemService for the selected target.
+   * An already created Gateway service is reused, but only after it has
+   * been (re)connected — an unavailable one is retried, not returned as-is.
+   */
+  private async resolveFileService(target: G2ConnectionMode): Promise<FileSystemService | null> {
+    if (target === 'local') {
+      if (!this.localFileService) {
+        this.localFileService = createFileSystemService('local') as LocalFileSystemService;
+      }
+      return this.localFileService;
+    }
+
+    if (this.gatewayService) {
+      if (!this.gatewayService.isAvailable || !this.gatewayService.getRootPath()) {
+        // 起動時に接続に失敗している — PC が復帰していても選択時に接続し直す
+        try {
+          await this.gatewayService.initialize();
+        } catch {
+          // initialize() は内部で失敗を握りつぶすはずだが念のため
+        }
+      }
+      if (this.gatewayService.isAvailable && this.gatewayService.getRootPath()) {
+        return this.gatewayService;
+      }
+      return null;
+    }
+
+    const service = createFileSystemService('gateway');
+    if (!(service instanceof GatewayFileSystemService)) return null;
+    try {
+      await service.initialize();
+    } catch {
+      // Gateway unreachable — reported below
+    }
+    if (!service.isAvailable || !service.getRootPath()) return null;
+    this.gatewayService = service;
+    return service;
+  }
+
+  /**
+   * Navigate to Home, the root screen of the G2 app.
+   * Home only returns a choice, so every return point is dropped here.
+   * That prevents navigating back into pages of the previous connection mode.
+   */
+  async navigateToHome(): Promise<void> {
+    if (!this.pageManager) return;
+
+    this.historyReturnPage = null;
+    this.agentReturnPage = null;
+    this.historyPage = null;
+    this.sessionListPage = null;
+    this.modelSelectPage = null;
+
+    this.homePage = new HomePage((target) => this.handleHomeSelection(target));
+    await this.pageManager.navigateTo(this.homePage);
+  }
+
+  /**
+   * Switch to the connection target picked on Home and open the root Explorer.
+   * connectionMode is only updated here and is never persisted.
+   */
+  private async handleHomeSelection(target: G2ConnectionMode): Promise<void> {
+    if (!this.pageManager) return;
+
+    let service: FileSystemService | null = null;
+    try {
+      service = await this.resolveFileService(target);
+    } catch {
+      service = null;
+    }
+    if (!service) {
+      // 接続失敗: PWA 側ステータス (従来どおり) と、G2 Home 画面上の表示の両方へ出す。
+      // notifyStatus / updateStatus は PWA にしか届かないため、G2 上で伝えるには
+      // Home の描画に載せる必要がある。
+      const message =
+        target === 'gateway'
+          ? '自宅PC（Gateway）に接続できませんでした。'
+          : 'アプリ（ローカル）を開けませんでした。';
+      this.updateStatus(message);
+      await this.homePage?.setStatus(message);
+      return;
+    }
+
+    this.connectionMode = target;
+    this.historyReturnPage = null;
+    this.agentReturnPage = null;
+    this.historyPage = null;
+    this.sessionListPage = null;
+    this.modelSelectPage = null;
+
+    await this.navigateToRootExplorer();
+  }
+
+  /**
+   * Create a root Explorer page bound to the active connection mode.
+   */
+  private createRootExplorerPage(service: FileSystemService): ExplorerPage {
+    return new ExplorerPage(
+      service.getRootPath(),
+      service,
+      undefined,
+      undefined,
+      undefined,
+      this.showAgentEntries() ? () => this.navigateToAgentFromExplorer() : undefined,
+      this.connectionMode === 'gateway' ? this.gatewayService : null,
+      () => this.navigateToHistory(),
+      () => this.navigateToHome(),
+      this.resolveHistoryAccess(),
+    );
   }
 
   // ── Agent Navigation ──────────────────────────────────────
@@ -445,6 +662,7 @@ export class G2RuntimeManager {
       () => this.navigateToHistory(),
       this.agentCurrentPath,
       this.agentReturnPage,
+      () => this.navigateToHome(),
     );
 
     await this.pageManager.navigateTo(chatPage);
@@ -461,6 +679,7 @@ export class G2RuntimeManager {
       this.g2AgentController,
       (sessionID) => this.navigateToAgentChat(sessionID),
       () => this.returnToSessionList(),
+      () => this.navigateToHome(),
     );
 
     await this.pageManager.navigateTo(this.modelSelectPage);
@@ -481,6 +700,7 @@ export class G2RuntimeManager {
       () => this.navigateFromAgentToExplorer(),
       () => this.navigateToHistory(),
       this.agentCurrentPath,
+      () => this.navigateToHome(),
     );
   }
 
@@ -563,7 +783,11 @@ export class G2RuntimeManager {
    * File Viewer, Agent Session List, or Agent Chat).
    */
   async navigateToHistory(): Promise<void> {
-    if (!this.pageManager || !this.gatewayService) return;
+    if (!this.pageManager) return;
+
+    const fileService = this.resolveActiveFileService();
+    const historyAccess = this.resolveHistoryAccess();
+    if (!fileService || !historyAccess) return;
 
     const currentPage = this.pageManager.getCurrentPage();
     const pageType = currentPage?.pageType;
@@ -579,18 +803,24 @@ export class G2RuntimeManager {
       this.historyReturnPage = currentPage || null;
     }
 
-    const fileService = this.gatewayService;
+    const showAgent = this.showAgentEntries();
 
     this.historyPage = new HistoryPage(
-      this.gatewayService,
+      historyAccess,
       fileService,
       undefined,
       undefined,
-      () => this.navigateToAgentFromExplorer(),   // onAgentSessionList (forwarded to FileViewer)
+      showAgent
+        ? () => this.navigateToAgentFromExplorer()   // onAgentSessionList (forwarded to FileViewer)
+        : undefined,
       () => this.navigateFromHistoryToExplorer(), // onBackToExplorer (double-tap: back to origin page)
       // Context menu — explicit screen transitions (never restore the origin page):
       () => this.navigateToRootExplorer(),        // "エクスプローラ画面へ" → root Explorer
-      () => this.navigateToSessionList(),         // "エージェント画面へ" → Agent Session List
+      showAgent
+        ? () => this.navigateToSessionList()      // "エージェント画面へ" → Agent Session List
+        : undefined,
+      this.connectionMode === 'gateway' ? this.gatewayService : null,
+      () => this.navigateToHome(),                // "ホーム画面へ" → Home (戻り先は作らない)
     );
 
     await this.pageManager.navigateTo(this.historyPage);
@@ -616,30 +846,24 @@ export class G2RuntimeManager {
       }
       await this.pageManager.navigateTo(returnPage);
     } else {
-      // Fallback: create new Explorer at root (should not happen in normal flow)
-      await this.navigateToRootExplorer();
+      // History root (no origin page to restore): this used to fall back to
+      // the root Explorer, but Home is now the root of the G2 app.
+      await this.navigateToHome();
     }
   }
 
   /**
-   * Create and navigate to a fresh Explorer at the gateway root.
-   * Used as a fallback when a saved return page is missing.
+   * Create and navigate to a fresh Explorer at the root of the active
+   * connection mode. Used when a saved return page is missing, for the
+   * History "エクスプローラ画面へ" menu, and for Home → アプリ / 自宅PC.
    */
   private async navigateToRootExplorer(): Promise<void> {
-    if (!this.pageManager || !this.gatewayService) return;
+    if (!this.pageManager) return;
 
-    const rootPath = this.gatewayService.getRootPath();
-    const explorerPage = new ExplorerPage(
-      rootPath,
-      this.gatewayService,
-      undefined,
-      undefined,
-      undefined,
-      () => this.navigateToAgentFromExplorer(),
-      this.gatewayService,
-      () => this.navigateToHistory(),
-    );
-    await this.pageManager.navigateTo(explorerPage);
+    const service = this.resolveActiveFileService();
+    if (!service) return;
+
+    await this.pageManager.navigateTo(this.createRootExplorerPage(service));
   }
 
   // ── Cleanup ───────────────────────────────────────────────

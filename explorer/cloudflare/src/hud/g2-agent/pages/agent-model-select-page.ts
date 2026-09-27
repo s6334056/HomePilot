@@ -1,5 +1,5 @@
 import { TextContainerProperty } from "@evenrealities/even_hub_sdk";
-import { BasePage, PageRenderResult } from "../../page-manager";
+import { BasePage, G2MenuItem, PageRenderResult } from "../../page-manager";
 import { G2AgentController } from "../g2-agent-controller";
 import { OpenCodeProviderModel } from "../../../domain/types";
 
@@ -17,12 +17,14 @@ export class AgentModelSelectPage extends BasePage {
     controller: G2AgentController,
     onModelSelected: (sessionID: string) => Promise<void>,
     onReturnToSessionList: () => Promise<void>,
+    onNavigateToHome?: () => Promise<void>,
   ) {
     super();
     this.pageType = "AgentModelSelectPage";
     this.controller = controller;
     this.onModelSelected = onModelSelected;
     this.onReturnToSessionList = onReturnToSessionList;
+    this.onNavigateToHome = onNavigateToHome;
   }
 
   public async afterRender(): Promise<void> {
@@ -38,7 +40,7 @@ export class AgentModelSelectPage extends BasePage {
   public render(): PageRenderResult {
     const total = this.models.length;
     const pageIndicator = total > 0 ? `[${this.selectedIndex + 1}/${total}]` : "[0/0]";
-    const headerContent = this.buildHeaderLine("Models", pageIndicator, LIST_MAX_WIDTH, "[Models]");
+    const headerContent = this.buildHeaderLine("モデル選択", pageIndicator, LIST_MAX_WIDTH, "[Models]");
 
     let bodyText = "";
 
@@ -94,9 +96,13 @@ export class AgentModelSelectPage extends BasePage {
       isEventCapture: 1,
     });
 
+    const menuList: G2MenuItem[] = [];
+    this.addHomeMenuItem(menuList);
+
     return {
       containerTotalNum: 2,
       textObject: [headerProp, bodyProp],
+      menuObject: { menuList },
     };
   }
 
@@ -137,5 +143,9 @@ export class AgentModelSelectPage extends BasePage {
 
   public async onLongPress() {
     // Future: Voice Input
+  }
+
+  public async onMenuItemClick(menuId: string) {
+    await this.handleCommonMenuItem(menuId);
   }
 }

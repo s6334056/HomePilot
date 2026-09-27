@@ -35,7 +35,7 @@ describe('History navigation (G2RuntimeManager)', () => {
     vi.restoreAllMocks();
   });
 
-  it('startup History (no current page) keeps historyReturnPage null → double-tap goes to root Explorer', async () => {
+  it('startup History (no current page) keeps historyReturnPage null → double-tap goes to Home', async () => {
     const { mgr, navigated, setCurrentPage, internal } = makeRuntime();
     setCurrentPage(null);
     // Stale value from a previous run must not win
@@ -48,11 +48,12 @@ describe('History navigation (G2RuntimeManager)', () => {
     expect(navigated[navigated.length - 1].pageType).toBe('HistoryPage');
 
     // Double-tap on HistoryPage → navigateFromHistoryToExplorer
+    // Home をルート化したため、戻り先が無い History の root は root Explorer
+    // ではなく Home へ戻る（それ以外の History の戻る動作は変更なし）。
     await mgr.navigateFromHistoryToExplorer();
 
     const target = navigated[navigated.length - 1];
-    expect(target.pageType).toBe('ExplorerPage');
-    expect((target as any).getCurrentPath()).toBe('/root');
+    expect(target.pageType).toBe('HomePage');
   });
 
   it('normal History entry from a viewer still returns to the origin page on double-tap', async () => {

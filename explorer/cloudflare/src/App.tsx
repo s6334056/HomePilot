@@ -52,6 +52,10 @@ function isGatewayService(s: FileSystemService): s is GatewayFileSystemService {
   return s instanceof GatewayFileSystemService;
 }
 
+function isLocalService(s: FileSystemService): s is LocalFileSystemService {
+  return s instanceof LocalFileSystemService;
+}
+
 function pickUniqueTextFileName(existingNames: Set<string>): string {
   const baseName = '新規テキストドキュメント.txt';
   if (!existingNames.has(baseName)) return baseName;
@@ -1447,6 +1451,7 @@ export function App() {
               content={fileContent}
               filePath={selectedFile.path}
               gatewayService={isGatewayService(fileService) ? fileService as GatewayFileSystemService : null}
+              localMode={isLocalService(fileService)}
               editing={fileEditing}
               onDirtyChange={setFileEditDirty}
             />

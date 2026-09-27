@@ -79,6 +79,7 @@ export class AgentChatPage extends BasePage {
     onNavigateToHistory: () => Promise<void>,
     currentPath: string = "",
     returnPage: BasePage | null = null,
+    onNavigateToHome?: () => Promise<void>,
   ) {
     super();
     this.pageType = "AgentChatPage";
@@ -88,6 +89,7 @@ export class AgentChatPage extends BasePage {
     this.onNavigateToHistory = onNavigateToHistory;
     this.currentPath = currentPath;
     this.returnPage = returnPage;
+    this.onNavigateToHome = onNavigateToHome;
   }
 
   public async afterRender(): Promise<void> {
@@ -462,14 +464,14 @@ export class AgentChatPage extends BasePage {
       containerName: "chat_header",
       content: (isQuestionMode || isQuestionVoice)
         ? this.buildHeaderLine(
-            this.currentPath || "Chat",
+            this.currentPath || "チャット",
             "",
             CHAT_MAX_WIDTH,
             "[Question]",
           )
         : isPermissionMode
           ? this.buildHeaderLine(
-              this.currentPath || "Chat",
+              this.currentPath || "チャット",
               "",
               CHAT_MAX_WIDTH,
               "[Permission]",
@@ -477,7 +479,7 @@ export class AgentChatPage extends BasePage {
           : voiceState !== 'idle'
             ? "[Voice Input]"
             : this.buildHeaderLine(
-                this.currentPath || "Chat",
+                this.currentPath || "チャット",
                 "",
                 CHAT_MAX_WIDTH,
                 `[${this.modelName}]`,
@@ -527,7 +529,7 @@ export class AgentChatPage extends BasePage {
       const pageIndicator =
         totalLines > 0 ? `[${viewStart}-${viewEnd}/${totalLines}]${scrollMode}` : `[0/0]${scrollMode}`;
       headerProp.content = this.buildHeaderLine(
-        this.currentPath || "Chat",
+        this.currentPath || "チャット",
         pageIndicator,
         CHAT_MAX_WIDTH,
         `[${this.modelName}]`,
@@ -553,19 +555,20 @@ export class AgentChatPage extends BasePage {
       isEventCapture: 1,
     });
 
+    const menuList = [
+      { id: "history", title: "閲覧履歴画面へ" },
+      { id: "explorer", title: "エクスプローラ画面へ" },
+      { id: "refresh", title: "更新" },
+      { id: "top", title: "先頭へ" },
+      { id: "bottom", title: "末尾へ" },
+      { id: "scrollInvert", title: "スクロール操作反転" },
+    ];
+    this.addHomeMenuItem(menuList);
+
     return {
       containerTotalNum: 2,
       textObject: [headerProp, bodyProp],
-      menuObject: {
-        menuList: [
-          { id: "history", title: "閲覧履歴画面へ" },
-          { id: "explorer", title: "エクスプローラ画面へ" },
-          { id: "refresh", title: "更新" },
-          { id: "top", title: "先頭へ" },
-          { id: "bottom", title: "末尾へ" },
-          { id: "scrollInvert", title: "スクロール操作反転" },
-        ],
-      },
+      menuObject: { menuList },
     };
   }
 
@@ -938,6 +941,7 @@ export class AgentChatPage extends BasePage {
   }
 
   public async onMenuItemClick(menuId: string) {
+    if (await this.handleCommonMenuItem(menuId)) return;
     switch (menuId) {
       case "history":
         await this.onNavigateToHistory();

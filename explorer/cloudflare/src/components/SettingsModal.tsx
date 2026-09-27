@@ -334,6 +334,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <label className="settings-label">起動時に表示する画面</label>
               <div className="settings-radio-group">
                 {([
+                  { value: 'home' as const, label: 'ホーム' },
                   { value: 'explorer' as const, label: 'エクスプローラー' },
                   { value: 'agent' as const, label: 'エージェント' },
                   { value: 'history' as const, label: '履歴' },
