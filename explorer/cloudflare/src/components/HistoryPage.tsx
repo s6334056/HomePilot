@@ -1,18 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Clock, FileText, Check } from 'lucide-react';
 import { FileViewHistoryEntry } from '../domain/types';
-import { getHistory, removeFromHistory, checkHistoryFilesExist } from '../services/ViewerHistoryStore';
-import { GatewayFileSystemService } from '../services/GatewayFileSystemService';
+import { HistoryAccess } from '../services/HistoryAccess';
 import { ContextActionMenu, ContextActionMenuItem } from './ContextActionMenu';
 
 interface HistoryPageProps {
-  gatewayService: GatewayFileSystemService;
+  historyAccess: HistoryAccess;
   onSelectFile: (path: string) => void;
   onActionMenuReady?: (handler: (event: React.MouseEvent) => void) => void;
 }
 
 export const HistoryPage: React.FC<HistoryPageProps> = ({
-  gatewayService,
+  historyAccess,
   onSelectFile,
   onActionMenuReady,
 }) => {
@@ -26,14 +25,14 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
 
   useEffect(() => {
     loadHistory();
-  }, []);
+  }, [historyAccess]);
 
   const loadHistory = async () => {
     setLoading(true);
-    const entries = await getHistory(gatewayService);
+    const entries = await historyAccess.getHistory();
     setHistory(entries);
     // Check file existence
-    const existence = await checkHistoryFilesExist(gatewayService, entries);
+    const existence = await historyAccess.checkFilesExist(entries);
     setExistenceMap(existence);
     setLoading(false);
   };
@@ -56,7 +55,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
     setIsRemoving(true);
     try {
       for (const path of paths) {
-        await removeFromHistory(gatewayService, path);
+        await historyAccess.removeFromHistory(path);
       }
       setSelectedPaths(new Set());
       await loadHistory();

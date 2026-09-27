@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo, type MouseEvent as ReactMouseEvent } from 'react';
 import { GatewayFileSystemService } from './services/GatewayFileSystemService';
 import { LocalFileSystemService } from './services/LocalFileSystemService';
 import { FileSystemService } from './services/FileSystemService';
@@ -38,7 +38,9 @@ import { ContextActionMenu, ContextActionMenuItem } from './components/ContextAc
 import { MoveCopyBar, MoveCopyMode } from './components/MoveCopyBar';
 import { Toast } from './components/Toast';
 import { G2RuntimeManager, G2RuntimeState } from './hud/g2-runtime';
-import { addToHistory } from './services/ViewerHistoryStore';
+import { createGatewayHistoryAccess } from './services/ViewerHistoryStore';
+import { createLocalHistoryAccess } from './services/LocalHistoryStore';
+import type { HistoryAccess } from './services/HistoryAccess';
 import './App.css';
 
 type PaneType = 'explorer' | 'agent';
@@ -79,6 +81,12 @@ export function App() {
   const [fileSystemMode, setFileSystemMode] = useState<FileSystemMode | null>(null);
   const [homeError, setHomeError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
+
+  const historyAccess = useMemo<HistoryAccess | null>(() => {
+    if (isGatewayService(fileService)) return createGatewayHistoryAccess(fileService);
+    if (fileService instanceof LocalFileSystemService) return createLocalHistoryAccess(fileService);
+    return null;
+  }, [fileService]);
 
   // G2 Runtime Manager (created once, manages lifecycle of all G2 resources)
   const [g2Runtime] = useState(() => new G2RuntimeManager(
@@ -379,9 +387,7 @@ export function App() {
       setReturnPage(source || 'explorer');
       setCurrentScreen('file_viewer');
       // Add to history
-      if (isGatewayService(fileService)) {
-        addToHistory(fileService as GatewayFileSystemService, file.path);
-      }
+      historyAccess?.addToHistory(file.path);
     } catch (e: any) {
       alert(`Failed to open file: ${e.message}`);
     }
@@ -1229,8 +1235,7 @@ export function App() {
 
   // The Agent talks to the home PC (OpenCode), so it is not offered for "アプリ".
   const showAgentPane = fileSystemMode !== 'local';
-  // History is a gateway-backed feature.
-  const canNavigateToHistory = isGatewayService(fileService) && currentScreen !== 'history';
+  const canNavigateToHistory = historyAccess !== null && currentScreen !== 'history';
 
   // Overlays shared by every screen, including Home.
   const overlayLayer = (
@@ -1447,9 +1452,9 @@ export function App() {
             />
           )}
 
-          {currentScreen === 'history' && isGatewayService(fileService) && (
+          {currentScreen === 'history' && historyAccess && (
             <HistoryPage
-              gatewayService={fileService as GatewayFileSystemService}
+              historyAccess={historyAccess}
               onActionMenuReady={handleHistoryActionMenuReady}
               onSelectFile={(path) => {
                 // Open file from history with source='history'

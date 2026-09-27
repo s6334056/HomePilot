@@ -1,5 +1,6 @@
 import { FileViewHistoryEntry } from '../domain/types';
 import { GatewayFileSystemService } from './GatewayFileSystemService';
+import { HistoryAccess } from './HistoryAccess';
 
 /**
  * ViewerHistoryStore manages file viewing history via Gateway API.
@@ -50,4 +51,15 @@ export async function checkHistoryFilesExist(
   });
   await Promise.allSettled(checks);
   return results;
+}
+
+export function createGatewayHistoryAccess(
+  gatewayService: GatewayFileSystemService,
+): HistoryAccess {
+  return {
+    addToHistory: (path) => addToHistory(gatewayService, path),
+    getHistory: () => getHistory(gatewayService),
+    removeFromHistory: (path) => removeFromHistory(gatewayService, path),
+    checkFilesExist: (history) => checkHistoryFilesExist(gatewayService, history),
+  };
 }
