@@ -1,335 +1,215 @@
 
-# HomePilot Setup Guide
+# HomePilot Getting Started
 
-This guide explains how to set up HomePilot **from a clean Windows PC and get it running with a local LLM**.
+HomePilot runs an AI Agent on your own Windows PC.
 
-This guide intentionally does not cover the details of the development environment or HomePilot's internal architecture.
+This guide takes you from an empty PC to a working HomePilot, in order. Follow
+the chapters from top to bottom.
 
-> **Goal: Follow the steps from top to bottom and get HomePilot running.**
+**By the end of this guide you will be able to:**
+
+1. Start HomePilot on your PC
+2. Open the PWA in a smartphone browser and connect it to the PC
+3. Get an answer from a local LLM through the Agent
+4. Browse the files in the folder you allow
+5. Copy a file between the PC and the app
+
+This guide does not cover internal design or development. See
+`README.md`, `SETUP.md` and `DEVELOPMENT.md` for those.
 
 ---
 
-## 1. Install the Required Software
+## 1. What HomePilot Is
 
-Install the following software:
+HomePilot is a personal file and Agent tool for Windows.
+
+- The **Agent** is handled by **OpenCode**, which HomePilot starts for you.
+- The **AI model** comes from an OpenAI-compatible server such as **LM Studio**,
+  so the model can stay on your own machine.
+- You use HomePilot from a **web app (PWA)** — on the PC, on a smartphone, or on
+  Even Realities G2 glasses.
+- You can **browse and manage files** in the folder you allow HomePilot to use,
+  and you can **ask the Agent questions**. The Agent can read files and run tools
+  while answering.
+- **Voice input** is transcribed by a small Cloudflare Worker.
+
+```text
+Smartphone / PC / G2
+        │  (web app)
+        ▼
+   HomePilot PWA
+        │
+        ▼
+   HomePilot Gateway ────── files on your PC
+        │
+        ▼
+   OpenCode Server ────── LM Studio ────── local LLM
+        │
+        └──────── Speech Worker (voice input)
+```
+
+For the full list of features, see `README.md`.
+
+---
+
+## 2. What You Need
 
 ### Required
 
-- Git
-- GitHub CLI
-- Node.js
-- OpenCode CLI
-- LM Studio
+| Item | Why it is needed |
+|---|---|
+| Windows PC | HomePilot runs on Windows. Windows 11 is the main development environment. |
+| Internet connection | Needed on the first run: `npm install`, Wrangler, and the tunnel. |
+| Git | To get the source code. |
+| GitHub CLI (`gh`) | To clone the repository. |
+| Node.js (LTS) and npm | To run HomePilot. |
+| OpenCode CLI | The Agent runtime. The Launcher starts it. |
+| An LLM for the Agent | This guide uses **LM Studio** (local). A cloud LLM also works; see `SETUP.md`. |
+| A Cloudflare account | Needed to run the Speech Worker. See [Chapter 5](#5-gateway-and-the-speech-worker). |
 
-### 1-1. Git
+### Recommended
 
-Search for **"Git installation"** and install the latest version of Git.
+| Item | Why |
+|---|---|
+| A smartphone | To use HomePilot from the phone. See [Chapter 7](#7-connecting-from-a-smartphone). |
 
-After installation, open Command Prompt and run:
+### Optional
+
+| Item | Why |
+|---|---|
+| Even Realities G2 | To use HomePilot on glasses. See [Chapter 11](#11-using-the-even-realities-g2-optional). |
+
+---
+
+## 3. First-Time Setup
+
+### 3-1. Install the software
+
+Install the required software, then check each one:
 
 ```bat
 git --version
-```
-
-If a version number is displayed, Git is installed correctly.
-
----
-
-### 1-2. GitHub CLI
-
-Search for **"GitHub CLI installation"** and install the latest version of GitHub CLI (`gh`).
-
-After installation, run:
-
-```bat
 gh --version
-```
-
-to verify the installation.
-
-Then log in to GitHub:
-
-```bat
-gh auth login
-```
-
-Follow the instructions to complete the GitHub login.
-
-> **Note**
->
-> GitHub CLI does not replace Git itself.
->
-> **Install both Git and GitHub CLI.**
-
----
-
-## 2. Install Node.js
-
-Search for **"Node.js installation"** and install Node.js.
-
-In general, use the **LTS version**.
-
-After installation, run:
-
-```bat
 node --version
 npm --version
-```
-
-If both commands display version numbers, Node.js and npm are installed correctly.
-
----
-
-## 3. Install OpenCode CLI
-
-Search for **"OpenCode CLI installation"** and install OpenCode CLI.
-
-After installation, run:
-
-```bat
 opencode --version
 ```
 
-to verify the installation.
-
-HomePilot uses OpenCode for local LLM execution and Agent processing.
+If a version number is displayed, that tool is installed.
 
 ---
 
-## 4. Install LM Studio
-
-Search for **"LM Studio installation"** and install LM Studio.
-
-After installation, launch LM Studio and make sure it starts correctly.
-
-HomePilot uses LM Studio as the **local LLM server**.
-
----
-
-## 5. Get HomePilot
-
-Clone HomePilot from GitHub.
-
-Example:
+### 3-2. Get HomePilot
 
 ```bat
+gh auth login
 cd C:\
 gh repo clone s6334056/HomePilot
 ```
 
-This creates a directory such as:
+This creates:
 
 ```text
 C:\HomePilot
 ```
 
-From this point onward, this directory is referred to as the **HomePilot root directory**.
-
-> The actual location can be anywhere you prefer.
->
-> `C:\HomePilot` is used in this guide simply to keep the examples easy to follow.
+This guide calls this the **HomePilot folder**. The actual location can be
+anywhere you like; `C:\HomePilot` is only used to keep the examples short.
 
 ---
 
-## 6. Install HomePilot Dependencies
-
-HomePilot contains several Node.js projects.
-
-Run `npm install` in the following three directories.
-
-### 6-1. Gateway
+### 3-3. Install the dependencies
 
 ```bat
 cd C:\HomePilot\gateway
 npm install
 ```
 
----
-
-### 6-2. Launcher
-
 ```bat
 cd C:\HomePilot\launcher
 npm install
 ```
 
----
-
-### 6-3. Speech Worker
-
 ```bat
 cd C:\HomePilot\speech-worker
 npm install
 ```
 
-If all three commands complete without errors, the dependencies are installed correctly.
+```bat
+cd C:\HomePilot\explorer\cloudflare
+npm install
+```
+
+The fourth one, `explorer\cloudflare`, is the PWA — the web app you will use. It
+will not start without it.
+
+If you use the G2, run `npm install` in `C:\HomePilot\explorer\evenhub` as well.
+See [Chapter 11](#11-using-the-even-realities-g2-optional).
 
 ---
 
-## 7. Configure the Launcher
+### 3-4. Create `launcher\.env`
 
-Create the Launcher's environment configuration file:
+The repository ships a template file. Copy it:
 
-```text
-HomePilot
-└─ launcher
-   └─ .env
+```bat
+cd C:\HomePilot\launcher
+copy .env.example .env
 ```
 
-Set the **root folder** that HomePilot will be allowed to operate on.
+The Launcher reads this file. Three values must be set:
 
-Example:
+| Name | Meaning |
+|---|---|
+| `ROOT_PATH` | The folder HomePilot is allowed to use. |
+| `HOMEPILOT_WORKER_URL` | URL of the Speech Worker. Set in [Chapter 5](#5-2-set-up-the-speech-worker). |
+| `HOMEPILOT_WORKER_SECRET_TOKEN` | Token for the Speech Worker. Set in [Chapter 5](#5-2-set-up-the-speech-worker). |
+
+> **Important** — If any of the three is missing, the Launcher stops with
+> "Configuration missing".
+
+---
+
+### 3-5. Create the `ROOT_PATH` folder
+
+**Create this folder before starting HomePilot.** If it does not exist, the
+Launcher stops with "Root folder not found".
+
+```bat
+mkdir C:\HomePilotWork
+```
+
+Then set it in `launcher\.env`:
 
 ```env
 ROOT_PATH=C:\HomePilotWork
 ```
 
-The directory specified by `ROOT_PATH` becomes the root directory shown in HomePilot's Explorer.
+Everything in this folder is what the Explorer and the Agent can see. Choose a
+dedicated folder such as `C:\HomePilotWork` rather than your whole drive.
 
-For example:
-
-```text
-C:\HomePilotWork
-├─ documents
-├─ projects
-└─ test
-```
-
-> **Note**
->
-> `ROOT_PATH` does not have to point to the HomePilot source directory.
->
-> Set it to the directory that you want HomePilot to operate on.
+> **Reached this point?** Git, Node.js and OpenCode CLI are installed, the
+> repository is cloned, `npm install` has finished in four folders, and
+> `launcher\.env` has `ROOT_PATH` set.
 
 ---
 
-## 8. Configure Voice Input
+## 4. Preparing OpenCode and the Agent
 
-HomePilot's voice input uses a Cloudflare Worker for speech recognition.
+HomePilot does not run the Agent by itself. It uses **OpenCode** as its internal
+Agent runtime. The Launcher starts OpenCode for you, so you do not run it by
+hand. What you do need to do is tell OpenCode which model to use.
 
-The Cloudflare Worker URL and authentication token are configured in **`launcher/.env`**.
+### 4-1. Tell OpenCode about LM Studio
 
----
-
-### 8-1. Cloudflare Account
-
-A Cloudflare account is required.
-
-After logging in to Cloudflare, deploy `speech-worker` as a Cloudflare Worker.
-
----
-
-### 8-2. Cloudflare CLI
-
-The Cloudflare Worker is deployed using Wrangler.
-
-If necessary, log in with:
-
-```bat
-npx wrangler login
-```
-
-A browser window will open. Follow the instructions to complete the Cloudflare authentication.
-
----
-
-### 8-3. Deploy the Speech Worker
-
-Go to the `speech-worker` directory:
-
-```bat
-cd C:\HomePilot\speech-worker
-```
-
-Then deploy the Worker:
-
-```bat
-npx wrangler deploy
-```
-
-After a successful deployment, Wrangler displays the Cloudflare Worker URL.
-
-Example:
-
-```text
-https://xxxxxxxx.homepilot-speech.workers.dev
-```
-
-Keep this URL for the next step.
-
----
-
-### 8-4. Configure the Voice Input Token
-
-The Speech Worker uses a secret token to protect voice input requests.
-
-Set the token as a Cloudflare Worker Secret:
-
-```bat
-npx wrangler secret put HOMEPILOT_WORKER_SECRET_TOKEN
-```
-
-When prompted, enter a long, randomly generated token.
-
-You will also configure the same token in HomePilot.
-
-> **Important**
->
-> Never commit the token to GitHub.
->
-> Keep it as a secret in `.env` and as a Cloudflare Secret.
-
----
-
-### 8-5. Configure the Cloudflare Settings in Launcher
-
-Add the Cloudflare Worker URL and token to `launcher/.env`.
-
-Example:
-
-```env
-ROOT_PATH=C:\HomePilotWork
-HOMEPILOT_WORKER_URL=https://xxxxxxxx.homepilot-speech.workers.dev
-HOMEPILOT_WORKER_SECRET_TOKEN=your-token-here
-```
-
----
-
-## 9. Prepare a Local LLM in LM Studio
-
-Launch LM Studio and download the model you want to use.
-
-HomePilot uses LM Studio as an OpenAI-compatible API server.
-
-For example, you can use:
-
-```text
-Qwen3.5 4B
-```
-
-After downloading the model, make sure the model is available in LM Studio.
-
-**Start LM Studio's Local Server** so that HomePilot/OpenCode can connect to it.
-
----
-
-## 10. Configure the LM Studio Model in OpenCode
-
-To allow OpenCode to use LM Studio, place an `opencode.json` file in the OpenCode user configuration directory.
-
-On Windows, the usual location is:
-
-```text
-C:\Users\<username>\.config\opencode\opencode.json
-```
-
-In other words:
+LM Studio serves the model as an OpenAI-compatible API. Register it in OpenCode's
+configuration file:
 
 ```text
 %USERPROFILE%\.config\opencode\opencode.json
 ```
 
-If the directory does not exist, create it.
+Create the file if it does not exist:
 
 ```text
 %USERPROFILE%
@@ -337,8 +217,6 @@ If the directory does not exist, create it.
    └─ opencode
       └─ opencode.json
 ```
-
-Configure the LM Studio model in `opencode.json`.
 
 Example:
 
@@ -362,524 +240,718 @@ Example:
 }
 ```
 
-> **Note**
->
-> Change `qwen3.5-4b` to match the actual model ID used by your LM Studio setup.
->
-> For detailed OpenCode configuration, see the developer-oriented `SETUP.md`.
+> This is an example of a configuration in use, not the only correct one.
+> Replace `qwen3.5-4b` with the model ID shown in LM Studio.
 
 ---
 
-## 11. Start LM Studio
+### 4-2. Download and load the model in LM Studio
 
-Before starting HomePilot, launch LM Studio.
+1. Start LM Studio and download the model you want to use.
+2. Start the **Local Server**. Its OpenAI-compatible API is normally at
+   `http://127.0.0.1:1234/v1`.
 
-Load the model you want to use and **start the Local Server**.
-
-The OpenAI-compatible API is normally available at:
-
-```text
-http://127.0.0.1:1234/v1
-```
-
----
-
-## 12. Start HomePilot
-
-Once all configuration is complete, HomePilot can be started using:
-
-```text
-HomePilot/launcher/start-homepilot.bat
-```
-
-The Launcher starts the components required by HomePilot, including the Gateway, Cloudflare-related processing, and OpenCode.
-
-After startup, open the HomePilot PWA.
-
-> **Additional information**
->
-> `HomePilot/explorer` contains the processing used by the PC PWA, smartphone PWA, and Even G2.
->
-> See the developer-oriented `SETUP.md` for details.
-
----
-
-## 13. Verify the Setup
-
-At minimum, verify the following.
-
-### Explorer
-
-- The files and folders under the configured `ROOT_PATH` are displayed.
-- Folders can be opened.
-- Files can be selected.
-
-### Agent
-
-- An Agent session can be created.
-- A message can be sent.
-- A response is returned from the local LLM.
-
-### Voice Input
-
-- Voice input can be started.
-- Speech is recognized.
-- The recognized text can be used as Agent input.
-
-If all of these work, the basic HomePilot setup is complete.
-
----
-
-## 14. Setup Checklist
-
-If something does not work, go through this checklist from the top.
-
-- [ ] Git is installed
-- [ ] GitHub CLI is installed
-- [ ] `gh auth login` has been completed
-- [ ] Node.js is installed
-- [ ] OpenCode CLI is installed
-- [ ] LM Studio is installed
-- [ ] HomePilot has been cloned
-- [ ] `npm install` has been run in `gateway`
-- [ ] `npm install` has been run in `launcher`
-- [ ] `npm install` has been run in `speech-worker`
-- [ ] `launcher/.env` has been created
-- [ ] `ROOT_PATH` has been configured
-- [ ] The Cloudflare Worker has been deployed
-- [ ] The Cloudflare Worker URL has been obtained
-- [ ] The Cloudflare Worker Secret Token has been configured
-- [ ] `HOMEPILOT_WORKER_URL` has been configured
-- [ ] `HOMEPILOT_WORKER_SECRET_TOKEN` has been configured
-- [ ] The desired local LLM has been downloaded in LM Studio
-- [ ] OpenCode's `opencode.json` has been created
-- [ ] The LM Studio model has been configured in `opencode.json`
-- [ ] The LM Studio Local Server has been started
-- [ ] HomePilot Launcher has been started
-- [ ] The Agent can be used from the PWA
-- [ ] Voice input has been verified if needed
-
----
-
-## 15. Troubleshooting
-
-If something does not work, check the following first.
-
-### The Agent does not respond
-
-1. Is LM Studio running?
-2. Is the desired model installed in LM Studio?
-3. Is the model loaded?
-4. Is the LM Studio Local Server running?
-5. Is the model ID in `opencode.json` correct?
-6. Can OpenCode CLI start normally?
-
----
-
-### Explorer does not show files
-
-Check the following setting in `launcher/.env`:
+To avoid loading the model by hand every time, add this to `launcher\.env`. The
+Launcher then loads the model before it starts OpenCode:
 
 ```env
-ROOT_PATH=...
+LOCAL_MODEL=qwen3.5-4b
 ```
 
-Also make sure that the specified directory actually exists.
+> This is optional. If you set it, the value must exactly match a model in LM
+> Studio, or the Launcher stops with an error.
+
+> **Reached this point?** LM Studio is running, its Local Server is started, and
+> `opencode.json` names the same model.
 
 ---
+
+## 5. Gateway and the Speech Worker
+
+### 5-1. What runs
+
+| Process | Started by | Address |
+|---|---|---|
+| LM Studio | You | `http://127.0.0.1:1234` |
+| Gateway | Launcher | `http://127.0.0.1:51887` |
+| OpenCode Server | Launcher | `http://127.0.0.1:4096` |
+| Speech Worker | You — see [5-2](#5-2-set-up-the-speech-worker) | Depends on the method |
+| PWA | You — see [Chapter 6](#6-starting-homepilot) | `http://localhost:5174` |
+
+The **Gateway** is the bridge between the PWA and your PC. It reads and writes
+files in `ROOT_PATH` on behalf of the PWA, and it forwards Agent requests to
+OpenCode. Because the Gateway is configured by the Launcher, the Launcher cannot
+start without the Speech Worker settings.
+
+### 5-2. Set up the Speech Worker
+
+> **Required.** `HOMEPILOT_WORKER_URL` and `HOMEPILOT_WORKER_SECRET_TOKEN` must
+> both be set in `launcher\.env`. If either is missing, the Launcher stops with
+> "Configuration missing".
+
+Choose one of the following.
+
+#### Method A: Run it on your PC
+
+Easiest way to try HomePilot first.
+
+1. Create `speech-worker\.dev.vars` and put a long random token in it:
+
+   ```bat
+   cd C:\HomePilot\speech-worker
+   notepad .dev.vars
+   ```
+
+   ```
+   WORKER_SECRET_TOKEN="put-a-long-random-token-here"
+   ```
+
+2. Start the Worker:
+
+   ```bat
+   npm run dev
+   ```
+
+   The URL is normally:
+
+   ```text
+   http://127.0.0.1:8787
+   ```
+
+   > **Keep this window open** while using HomePilot. The first run may ask you
+   > to log in to Cloudflare, because the Worker uses a Cloudflare service.
+
+3. Write both values into `launcher\.env`:
+
+   ```env
+   HOMEPILOT_WORKER_URL=http://127.0.0.1:8787
+   HOMEPILOT_WORKER_SECRET_TOKEN=put-a-long-random-token-here
+   ```
+
+   > The token in `.dev.vars` and the token in `launcher\.env` **must be exactly
+   > the same string**.
+
+#### Method B: Deploy it to Cloudflare
+
+Deploy the Worker to Cloudflare, obtain its URL, set the secret token on the
+Worker, then write both values into `launcher\.env`. The detailed steps are in
+`SETUP.md`.
+
+> Method A is only available while the Worker window is open. Use Method B if you
+> want HomePilot to work without keeping that window open.
+
+> **Reached this point?** `launcher\.env` has `ROOT_PATH`,
+> `HOMEPILOT_WORKER_URL` and `HOMEPILOT_WORKER_SECRET_TOKEN` set, and the Speech
+> Worker is running.
+
+---
+
+## 6. Starting HomePilot
+
+Three processes are needed. Start them in this order.
+
+### 6-1. Start LM Studio
+
+Load the model and start the Local Server.
+
+### 6-2. Start the Launcher
+
+```bat
+cd C:\HomePilot\launcher
+start-homepilot.bat
+```
+
+The Launcher starts the Gateway, then OpenCode, then the connection to the
+Internet. Wait until it prints something like this:
+
+```text
+HomePilot Gateway
+-----------------
+  Root     : C:\HomePilotWork
+  Gateway  : http://127.0.0.1:51887
+  OpenCode : http://127.0.0.1:4096
+  Token    : [REDACTED]
+  Worker   : http://127.0.0.1:8787
+
+Quick Tunnel
+  Status : READY
+  URL    : https://xxxxxxxx.trycloudflare.com
+
+Connection JSON
+{"type":"homepilot-connection","version":1,"url":"https://xxxxxxxx.trycloudflare.com","token":"..."}
+
+Connection QR
+```
+
+The QR code is printed under **Connection JSON**.
+[Chapter 7](#7-connecting-from-a-smartphone) uses both.
+
+> **Keep this window open.** Everything stops when it is closed. Press `Ctrl+C` to
+> stop HomePilot. See [Chapter 12](#12-stopping-homepilot).
+
+You can also point the Launcher at a different folder for one run:
+
+```bat
+start-homepilot.bat C:\HomePilotWork
+```
+
+This overrides `ROOT_PATH` for that run.
+
+### 6-3. Start the PWA
+
+The Launcher does not start the web app. Start it in a second window:
+
+```bat
+cd C:\HomePilot\explorer\cloudflare
+npm run dev
+```
+
+Then open it in your browser:
+
+```text
+http://localhost:5174
+```
+
+> **Reached this point?** `http://localhost:5174` opens and shows the HomePilot
+> home screen.
+
+---
+
+## 7. Connecting from a Smartphone
+
+The PWA needs two things: the address of the PWA itself, and the connection
+information for the Gateway (its URL and token). The Launcher prints the second
+one as **Connection JSON** and as a **QR code**.
+
+### 7-1. On the PC
+
+1. Keep the Launcher window open.
+2. Copy the JSON shown under **Connection JSON**.
+3. Note the address of this PC on your home network. Run `ipconfig` and look for
+   the IPv4 address, for example `192.168.0.2`.
+
+### 7-2. On the smartphone
+
+1. Open the smartphone browser and go to the PWA on the PC:
+
+   ```text
+   http://<your PC's IP address>:5174
+   ```
+
+   For example `http://192.168.0.2:5174`.
+
+   > The PC and the smartphone must be on the same network. If the page does not
+   > open, see [Chapter 13](#13-when-something-does-not-work).
+
+2. Tap the Settings icon (gear) in the top right.
+3. Under 接続情報, paste the Connection JSON and tap 適用.
+4. When it is connected, the home screen shows アプリ and 自宅PC.
+
+   > If モック（開発用） is still shown, the connection did not complete. Paste the
+   > JSON again.
+
+   > On the PC itself, open `http://localhost:5174` and do the same thing.
+
+5. Tap 自宅PC.
+
+**When connected**
+
+- 自宅PC shows the files in `ROOT_PATH`.
+- The Agent becomes available.
+- アプリ is a storage area inside that browser, usable without a connection.
+
+### 7-3. Scanning the QR code instead
+
+The same 接続情報 section has a QR scan button. Tap it and point the camera at
+the QR code shown in the Launcher window.
+
+> The camera is only available on `https://` or `localhost`. If the button
+> reports that the camera is unavailable, use the paste method above instead.
+> `SETUP.md` describes how to get `https://` access.
+
+### 7-4. Notes
+
+- You can add the PWA to the smartphone's home screen from the browser menu.
+- The connection information is stored in that browser, so you normally paste it
+  once per device.
+- The token changes every time the Launcher starts. If HomePilot stops working
+  after restarting the Launcher, paste the new JSON again.
+
+> **Reached this point?** You can open 自宅PC from the smartphone and see the
+> folder you created in [3-5](#3-5-create-the-root_path-folder).
+
+---
+
+## 8. Trying the Agent in the PWA
+
+The Agent is available from 自宅PC.
+
+### 8-1. Open the Agent
+
+- **On a PC browser:** the Explorer and the Agent are shown side by side. Use the
+  swap button (⇄) to switch between them.
+- **On a smartphone:** tap the Agent icon in the Explorer bar.
+
+> The Agent is not shown while アプリ is selected.
+
+### 8-2. Create a session and ask a question
+
+1. Tap **New Session**.
+2. Type a question, for example `What files are in this folder?`
+3. Send it.
+4. `Processing...` is shown while the Agent is working.
+
+### 8-3. When a permission dialog appears
+
+The Agent sometimes needs permission before using a tool. A 権限の確認 dialog
+appears. Choose whether to allow it, allow it always, or deny it.
+
+If you deny it, the Agent continues without that tool.
+
+### 8-4. When a question appears
+
+When the Agent needs a decision, it shows a question with choices. Tap a choice,
+or type your own answer in 自由入力 and send it.
+
+If you do nothing, the Agent waits. That is not an error.
+
+### 8-5. When the answer is complete
+
+The answer is shown in the conversation, and the session can be reopened from the
+session list later.
+
+> **Reached this point?** You received an answer containing text from the local
+> LLM.
+
+### 8-6. Voice input (optional)
+
+If you set up the Speech Worker in [5-2](#5-2-set-up-the-speech-worker), you can
+speak instead of typing. The audio is converted to text and shown, and you can
+check it before sending it to the Agent.
+
+---
+
+## 9. Browsing and Working with Files
+
+Selecting 自宅PC shows the files in `ROOT_PATH`.
+
+### 9-1. Basic operations
+
+| What you want | How |
+|---|---|
+| Open a folder | Tap it |
+| Open a file | Tap it — it opens in the viewer |
+| Go back | Back button |
+| Reload | Refresh button |
+| Change the sort order | Actions (⋯) → 並び順切替 |
+| Create a folder | Actions (⋯) → フォルダを作成 |
+| Rename | Select it → Actions (⋯) → 名前を変更 |
+| Delete | Select it → Actions (⋯) → 削除 |
+
+> The Actions menu (⋯) is at the right edge of the path bar.
+
+### 9-2. Two kinds of storage
+
+| Label | What it is |
+|---|---|
+| 自宅PC | The real folder on your PC. Changes are applied to the actual files. |
+| アプリ | A storage area inside the browser on the device you are using. Nothing is written to the PC. |
+
+### 9-3. Things that may surprise you
+
+- **Files with the Windows Hidden attribute are not listed.** This is based on
+  the attribute, not on the file name, and it is not a permission setting. If a
+  file you expected is missing, check the Hidden attribute in File Explorer.
+  `SETUP.md` has the details.
+- **Files over 10 MB cannot be opened for viewing.** Download them instead.
+- **HomePilot manages a few files internally.** For example, the reading position
+  of files you have opened is remembered automatically, in a file HomePilot keeps
+  outside the folder you browse. You do not need to create, edit or delete these
+  files, and they do not appear in the file list. `SETUP.md` explains where they
+  are stored.
+
+---
+
+## 10. Copying Files Between the PC and the App
+
+The アプリ storage belongs to the device you are using. Copying a file into the
+app on your smartphone gives you a copy on the smartphone that also works without
+a connection.
+
+### 10-1. From the PC to the app
+
+1. Open 自宅PC and select a file.
+2. Actions (⋯) → **アプリへコピー**.
+3. If a file with the same name already exists, confirm 上書きしてコピー.
+
+### 10-2. From the app back to the PC
+
+1. Open アプリ and select a file.
+2. Actions (⋯) → **自宅PCへコピー**.
+3. Choose the destination folder.
+4. The file is written into that folder on your PC.
+
+> 自宅PCへコピー is only shown while アプリ is selected and a connection is
+> configured.
+
+### 10-3. Where to check afterwards
+
+- After アプリへコピー, open アプリ.
+- After 自宅PCへコピー, open 自宅PC.
+
+> **Reached this point?** You copied a file from 自宅PC to アプリ and confirmed it
+> in アプリ.
+
+> The app storage uses the browser's own local storage, so its capacity is
+> limited. `SETUP.md` describes the numbers shown in the settings screen.
+
+---
+
+## 11. Using the Even Realities G2 (Optional)
+
+If you do not have a G2, skip this chapter. Everything up to
+[Chapter 10](#10-copying-files-between-the-pc-and-the-app) is enough to use
+HomePilot.
+
+The G2 runs the same PWA. When the PWA is opened on the G2, it switches to the G2
+interface on its own. What differs is the operation method — tap, double tap,
+long press — and which features are available.
+
+### 11-1. What is needed
+
+| Item | Why |
+|---|---|
+| Even Realities G2 | The device itself |
+| An EvenHub environment | The environment the G2 app runs in |
+| `explorer\evenhub` | The app for the G2. Installed in [3-3](#3-3-install-the-dependencies). |
+
+### 11-2. Three ways to try it
+
+| Method | Command | What you need |
+|---|---|---|
+| Simulator | `cd explorer\evenhub` then `npm run simulator` | Nothing. Runs on the PC. |
+| QR test | `npm run qr` | An EvenHub environment |
+| Device | `npm run pack`, then upload the generated `.ehpk` | An EvenHub environment and the physical G2 |
+
+The G2 loads the PWA from a URL. That URL is currently written directly in the
+source file `explorer\evenhub\src\App.tsx`, so if you host the PWA somewhere
+else, change it there and rebuild.
+
+### 11-3. First thing to try
+
+1. Open the app on the G2.
+2. Tap 自宅PC.
+3. Open the Agent and send one message.
+
+> **Reached this point?** The home screen appears on the G2 and 自宅PC opens.
+
+> The G2 has its own limits for long press, voice input and screen size.
+> `SETUP.md` and `DEVELOPMENT.md` describe them.
+
+---
+
+## 12. Stopping HomePilot
+
+Press `Ctrl+C` in the Launcher window. The Gateway, OpenCode and the tunnel are
+stopped together, and the window shows:
+
+```text
+HomePilot stopped.
+```
+
+Stop the other windows as well:
+
+| Window | How to stop it |
+|---|---|
+| Launcher | `Ctrl+C` |
+| PWA (`npm run dev`) | `Ctrl+C` |
+| Speech Worker (`npm run dev`, Method A) | `Ctrl+C` |
+| LM Studio | Quit from the tray |
+
+> Nothing is written to disk when stopping, so it is safe to stop at any time.
+> Close these windows before shutting down the PC.
+
+To start again, repeat [Chapter 6](#6-starting-homepilot). Because the token
+changes, reconnect the PWA with the new Connection JSON.
+
+---
+
+## 13. When Something Does Not Work
+
+Only the most common cases are listed. `SETUP.md` has the full troubleshooting
+guide.
+
+### The Launcher stops immediately
+
+| Message | What to do |
+|---|---|
+| `Root folder not found` | The `ROOT_PATH` folder does not exist. See [3-5](#3-5-create-the-root_path-folder). |
+| `Configuration missing` | `HOMEPILOT_WORKER_URL` or `HOMEPILOT_WORKER_SECRET_TOKEN` is not set. See [5-2](#5-2-set-up-the-speech-worker). |
+| `cloudflared.exe was not found` | `tools\cloudflared.exe` is missing. Clone the repository again. |
+| `Port 51887 may already be in use` | A previous Launcher is still running. Close it and start again. |
+| `Local Model Load Failed` | The `LOCAL_MODEL` value does not exist in LM Studio. See [4-2](#4-2-download-and-load-the-model-in-lm-studio). |
+
+### The Agent does not answer
+
+1. Is LM Studio running, with the Local Server started?
+2. Does the model ID in `opencode.json` match a model in LM Studio?
+3. Did the Launcher print `OpenCode Server is ready.`?
+4. Is the model small enough for your PC? A large model may simply be too slow.
+
+### The smartphone cannot open the page
+
+1. Are the PC and the smartphone on the same network?
+2. Is the PWA running? (`npm run dev` in `explorer\cloudflare`)
+3. Is the address still correct? Check with `ipconfig` — the PC's address can change.
+4. Is Windows Firewall blocking it? Allow Node.js on private networks when asked.
+
+### 自宅PC cannot connect on the smartphone
+
+1. Has the Connection JSON been pasted into the smartphone's settings?
+2. Is the Launcher window still open?
+3. Was the Launcher restarted after the JSON was pasted? The token changes, so paste it again.
+4. If `自宅PC（Gateway）に接続できませんでした。` appears, the connection information is not set.
 
 ### Voice input does not work
 
-Check the following:
+1. Is the Speech Worker window still open? (Method A)
+2. Is the token in `.dev.vars` exactly the same as the one in `launcher\.env`?
+3. Is `HOMEPILOT_WORKER_URL` correct?
 
-1. Is the Cloudflare Worker deployed?
-2. Is `HOMEPILOT_WORKER_URL` correct?
-3. Is the Cloudflare Worker Secret Token configured?
-4. Does `HOMEPILOT_WORKER_SECRET_TOKEN` match the configured Cloudflare Secret?
+### The QR scan button reports that the camera is unavailable
 
----
+The camera only works on `https://` or `localhost`. Use the paste method in
+[7-2](#7-2-on-the-smartphone), or see `SETUP.md` for `https://` access.
 
-## 16. For More Details
+### A file is not listed
 
-This page is a **quick setup guide for getting HomePilot running from scratch**.
-
-For details about HomePilot's internal architecture, development environment, and advanced configuration, see:
-
-- `SETUP.md` — Detailed setup information
-- `DEVELOPMENT.md` — Developer information
-- `README.md` — HomePilot overview
+Check the Windows Hidden attribute. See [9-3](#9-3-things-that-may-surprise-you).
 
 ---
 
-## Required Components
+## 14. Where to Read More
 
-The final setup should look roughly like this:
+| If you want to know | Read |
+|---|---|
+| What HomePilot can do, and what is implemented now | `README.md` |
+| Detailed setup for each component, production deployment, the G2 in detail, full troubleshooting | `SETUP.md` |
+| Internal structure, design decisions, development policy | `DEVELOPMENT.md` |
 
-```text
-Windows PC
-│
-├─ Git
-├─ GitHub CLI
-├─ Node.js / npm
-├─ OpenCode CLI
-├─ LM Studio
-│   └─ Local LLM
-│
-├─ HomePilot
-│   ├─ gateway
-│   ├─ launcher
-│   └─ speech-worker
-│
-├─ OpenCode configuration
-│   └─ %USERPROFILE%\.config\opencode\opencode.json
-│
-└─ Cloudflare
-    └─ Speech Worker
-```
-
-Once everything is configured, start the Launcher and HomePilot can use the local LLM.
-
-
+---
 
 # HomePilot セットアップ手順
 
-このページでは、**Windows PCに何もない状態からHomePilotを起動し、ローカルLLMを使える状態にするまで**の手順を説明します。
+HomePilotは、自分のWindows PC上でAI Agentを動かすツールです。
 
-細かい開発環境やHomePilot内部の仕組みについては、ここでは扱いません。
+このガイドでは、空のPCからHomePilotが動くところまで、手順どおりに進めます。
+**上から順番に読み進めてください。**
 
-> **目的：上から順番に作業すれば、とりあえずHomePilotが動く状態にする。**
+**このガイドを読み終えると、次のことができるようになります。**
+
+1. PCでHomePilotを起動する
+2. スマートフォンのブラウザでPWAを開いて、PCと接続する
+3. ローカルLLMからAgentの回答を受け取る
+4. 許可したフォルダのファイルを見る
+5. PCとアプリの間でファイルをコピーする
+
+内部設計や開発の話は、このガイドでは扱いません。
+詳しくは `README.md`、`SETUP.md`、`DEVELOPMENT.md` を参照してください。
 
 ---
 
-## 1. 必要なソフトをインストールする
+## 1. HomePilotとは
 
-以下のソフトをインストールします。
+HomePilotは、Windows向けの、个人用ファイル・Agentツールです。
+
+- **Agent** は **OpenCode** が担当します。HomePilotが自動で起動します。
+- **AIモデル** は **LM Studio** などのOpenAI互換サーバーから取得します。
+  モデルを自分のPC内に置くこともできます。
+- HomePilotは **PWA（ウェブアプリ）** 経由で使います。
+  PC・スマートフォン・Even Realities G2のいずれからでも操作できます。
+- **HomePilotがアクセスを許可したフォルダ** のファイルを閲覧・操作できます。
+  作成・移動・コピー・削除も行えます。
+- **Agentに質問** できます。Agentは回答のためにファイルを読み込んだり、
+  ツールを実行したりします。
+- **音声入力** は、Cloudflare Workerが文字起こしを行います。
+
+```text
+スマートフォン / PC / G2
+        │  （PWA）
+        ▼
+   HomePilot PWA
+        │
+        ▼
+   HomePilot Gateway ────── PC上のファイル
+        │
+        ▼
+   OpenCode Server ────── LM Studio ────── ローカルLLM
+        │
+        └──────── Speech Worker（音声入力）
+```
+
+機能の全体像は `README.md` を参照してください。
+
+---
+
+## 2. 必要なもの
 
 ### 必須
 
-- Git
-- GitHub CLI
-- Node.js
-- OpenCode CLI
-- LM Studio
+| 項目 | 用途 |
+|---|---|
+| Windows PC | HomePilotはWindowsで動作します。開発は主にWindows 11です。 |
+| インターネット接続 | 初回のみ必要です（`npm install`、Wrangler、トンネル）。 |
+| Git | ソースコードの取得。 |
+| GitHub CLI（`gh`） | リポジトリのclone。 |
+| Node.js（LTS）とnpm | HomePilotの実行。 |
+| OpenCode CLI | Agent実行基盤。Launcherが起動します。 |
+| Agentが使うLLM | このガイドでは **LM Studio（ローカル）** を使います。クラウドLLMも利用可能です。`SETUP.md` を参照。 |
+| Cloudflareアカウント | Speech Workerの実行に必要。［第5章](#5-gateway-と-speech-worker)を参照。 |
 
-### 1-1. Git
+### 推奨
 
-「Git インストール方法」で調べて、最新の方法でGitをインストールします。
+| 項目 | 用途 |
+|---|---|
+| スマートフォン | スマホからHomePilotを使う場合。［第7章](#7-スマートフォンから-homepilot-に接続する)を参照。 |
 
-インストール後、コマンドプロンプトで以下を実行して確認します。
+### 任意
+
+| 項目 | 用途 |
+|---|---|
+| Even Realities G2 | スマートグラスでHomePilotを使う場合。［第11章］(#11-even-realities-g2-を使う場合任意)を参照。 |
+
+---
+
+## 3. 初回セットアップ
+
+### 3-1. ソフトをインストールする
+
+必要なソフトをインストールし、以下のコマンドで確認します。
 
 ```bat
 git --version
-```
-
-バージョン番号が表示されればOKです。
-
----
-
-### 1-2. GitHub CLI
-
-「Github CLI インストール方法」で調べて、最新の方法でGitHub CLI (`gh`) をインストールします。
-
-インストール後、
-
-```bat
 gh --version
-```
-
-で確認します。
-
-その後、GitHubにログインします。
-
-```bat
-gh auth login
-```
-
-画面の指示に従ってGitHubへのログインを完了してください。
-
-> **注意**
->
-> GitHub CLIをインストールしても、Git本体の代わりにはなりません。
->
-> **GitとGitHub CLIの両方をインストールしてください。**
-
----
-
-## 2. Node.jsをインストールする
-
-「Node.js インストール方法」で調べて、Node.jsをインストールします。
-
-基本的には **LTS版** を使用してください。
-
-インストール後、
-
-```bat
 node --version
 npm --version
-```
-
-を実行し、両方ともバージョン番号が表示されればOKです。
-
----
-
-## 3. OpenCode CLIをインストールする
-
-「OpenCode CLI インストール方法」で調べて、OpenCode CLIをインストールします。
-
-インストール後、
-
-```bat
 opencode --version
 ```
 
-で確認します。
-
-HomePilotでは、OpenCodeをローカルLLMの実行・Agent処理に使用します。
+バージョンが表示されれば、インストールは成功しています。
 
 ---
 
-## 4. LM Studioをインストールする
-
-「LM Studio インストール方法」で調べて、LM Studioをインストールします。
-
-インストール後、LM Studioを起動できることを確認してください。
-
-HomePilotでは、LM Studioを**ローカルLLMの実行サーバー**として使用します。
-
----
-
-## 5. HomePilotを取得する
-
-GitHubからHomePilotをクローンします。
-
-例：
+### 3-2. HomePilotを取得する
 
 ```bat
+gh auth login
 cd C:\
 gh repo clone s6334056/HomePilot
 ```
 
-これで、
+これで次のようなフォルダが作成されます。
 
 ```text
 C:\HomePilot
 ```
 
-のようなフォルダが作成されます。
-
-以降、このフォルダを**HomePilotのルートフォルダ**として説明します。
-
-> 実際に配置する場所は任意です。
->
-> ここでは説明を簡単にするため `C:\HomePilot` としています。
+このガイドでは、このフォルダを **HomePilotフォルダ** と呼びます。
+実際の場所はどこでも構いません。`C:\HomePilot` は例を短くするためだけのものです。
 
 ---
 
-## 6. HomePilotの依存パッケージをインストールする
-
-HomePilotには複数のNode.jsプロジェクトがあります。
-
-以下の3箇所で `npm install` を実行します。
-
-### 6-1. Gateway
+### 3-3. 依存パッケージをインストールする
 
 ```bat
 cd C:\HomePilot\gateway
 npm install
 ```
 
----
-
-### 6-2. Launcher
-
 ```bat
 cd C:\HomePilot\launcher
 npm install
 ```
 
----
-
-### 6-3. Speech Worker
-
 ```bat
 cd C:\HomePilot\speech-worker
 npm install
 ```
 
-3箇所ともエラーが出ずに終了すればOKです。
+```bat
+cd C:\HomePilot\explorer\cloudflare
+npm install
+```
+
+4番目の `explorer\cloudflare` が、後から使うPWA（ウェブアプリ）です。
+これをインストールしないとPWAは起動しません。
+
+G2を使う場合は、`C:\HomePilot\explorer\evenhub` でも `npm install` を実行します。
+［第11章](#11-even-realities-g2-を使う場合任意)を参照。
 
 ---
 
-## 7. Launcherの設定
+### 3-4. `launcher\.env` を作る
 
-Launcherの環境設定ファイルを作成します。
+リポジトリにテンプレートファイルがあります。コピーして使います。
 
-```text
-HomePilot
-└─ launcher
-   └─ .env
+```bat
+cd C:\HomePilot\launcher
+copy .env.example .env
 ```
 
-`.env` に、HomePilotが操作する**ルートフォルダ**を設定します。
+Launcherはこのファイルを読み込みます。以下の3つを設定する必要があります。
 
-例：
+| 名前 | 意味 |
+|---|---|
+| `ROOT_PATH` | HomePilotが操作できるフォルダ。 |
+| `HOMEPILOT_WORKER_URL` | Speech WorkerのURL。［5-2](#5-2-speech-worker-を設定する)で設定します。 |
+| `HOMEPILOT_WORKER_SECRET_TOKEN` | Speech Workerのトークン。［5-2](#5-2-speech-worker-を設定する)で設定します。 |
+
+> **重要** — 3つのうちどれかが欠けると、Launcherは
+> "Configuration missing" を表示して起動せず停止します。
+
+---
+
+### 3-5. `ROOT_PATH` のフォルダを作る
+
+**HomePilotを起動する前に、このフォルダを作成してください。**
+存在しないと、Launcherは "Root folder not found" を表示して起動せず停止します。
+
+```bat
+mkdir C:\HomePilotWork
+```
+
+そして、`launcher\.env` に設定します。
 
 ```env
 ROOT_PATH=C:\HomePilotWork
 ```
 
-ここで指定したフォルダが、HomePilotのExplorerで操作するルートになります。
+このフォルダの中身が、ExplorerとAgentから見える範囲です。
+ドライブ全体ではなく、`C:\HomePilotWork` のような専用フォルダを指定してください。
 
-例えば、
-
-```text
-C:\HomePilotWork
-├─ documents
-├─ projects
-└─ test
-```
-
-のようなフォルダを指定できます。
-
-> **注意**
->
-> `ROOT_PATH` はHomePilotのソースコードを置く場所とは別でも構いません。
->
-> HomePilotから操作させたいフォルダを指定してください。
+> **ここまでできましたか？**
+> Git・Node.js・OpenCode CLI のインストール、リポジトリの取得、4つのフォルダでの
+> `npm install`、`launcher\.env` の `ROOT_PATH` 設定が完了しました。
 
 ---
 
-## 8. 音声入力の設定
+## 4. OpenCode と Agent の準備
 
-HomePilotの音声入力では、Cloudflare Workerを経由して音声認識を行います。
+HomePilotは、単独でAgentを動かしません。
+**OpenCode** を内部のAgent実行基盤として利用します。
+OpenCodeの起動はLauncherが行うので、手動で起動する必要はありません。
+あなたがすべきのは「OpenCodeにどのモデルを使うか」を伝えることです。
 
-そのため、`launcher/.env` にCloudflare WorkerのURLと認証用トークンを設定します。
+### 4-1. OpenCode に LM Studio を設定する
 
----
-
-### 8-1. Cloudflareアカウント
-
-Cloudflareを使用するため、Cloudflareのアカウントを用意します。
-
-Cloudflareのログイン後、`speech-worker` をWorkerとしてデプロイします。
-
----
-
-### 8-2. Cloudflare CLI
-
-Cloudflare Workerのデプロイには Wrangler を使用します。
-
-必要に応じてログインします。
-
-```bat
-npx wrangler login
-```
-
-ブラウザが開くので、Cloudflareへのログインと認証を完了してください。
-
----
-
-### 8-3. Speech Workerをデプロイする
-
-HomePilotの `speech-worker` フォルダへ移動します。
-
-```bat
-cd C:\HomePilot\speech-worker
-```
-
-その状態でWorkerをデプロイします。
-
-```bat
-npx wrangler deploy
-```
-
-デプロイが成功すると、Cloudflare上のWorker URLが表示されます。
-
-例：
-
-```text
-https://xxxxxxxx.homepilot-speech.workers.dev
-```
-
-このURLを控えておきます。
-
----
-
-### 8-4. 音声入力用トークンを設定する
-
-Speech Workerでは、音声入力リクエストを保護するためのトークンを使用します。
-
-Cloudflare Worker側にSecretとして設定します。
-
-例：
-
-```bat
-npx wrangler secret put HOMEPILOT_WORKER_SECRET_TOKEN
-```
-
-表示された入力欄に、任意の長いランダムなトークンを入力します。
-
-このトークンは、後でHomePilot側にも設定します。
-
-> **重要**
->
-> トークンはGitHubへコミットしないでください。
->
-> `.env` やCloudflare Secretなど、秘密情報として管理してください。
-
----
-
-### 8-5. LauncherのCloudflare設定
-
-`launcher/.env` に、Cloudflare WorkerのURLとトークンを設定します。
-
-例：
-
-```env
-ROOT_PATH=C:\HomePilotWork
-HOMEPILOT_WORKER_URL=https://xxxxxxxx.homepilot-speech.workers.dev
-HOMEPILOT_WORKER_SECRET_TOKEN=ここに設定したトークン
-```
-
----
-
-## 9. LM StudioにローカルLLMを用意する
-
-LM Studioを起動し、使用したいモデルをダウンロードします。
-
-HomePilotではLM StudioをOpenAI互換APIサーバーとして利用します。
-
-例えば、使用するモデルとして
-
-```text
-Qwen3.5 4B
-```
-
-などを用意できます。
-
-モデルのダウンロードが完了したら、LM StudioのLocal Serverを開始します。
-
----
-
-## 10. OpenCodeにLM Studioのモデルを設定する
-
-OpenCodeからLM Studioを利用するため、OpenCodeのユーザー設定に `opencode.json` を配置します。
-
-Windowsでは、通常以下の場所です。
-
-```text
-C:\Users\<ユーザー名>\.config\opencode\opencode.json
-```
-
-つまり、
+LM Studioは、モデルをOpenAI互換APIとして提供します。
+OpenCodeの設定ファイルに登録します。
 
 ```text
 %USERPROFILE%\.config\opencode\opencode.json
 ```
 
-です。
-
-フォルダが存在しない場合は作成してください。
+存在しない場合は作成してください。
 
 ```text
 %USERPROFILE%
@@ -888,9 +960,8 @@ C:\Users\<ユーザー名>\.config\opencode\opencode.json
       └─ opencode.json
 ```
 
-`opencode.json` には、使用するLM Studioのモデルを設定します。
+例:
 
-例：
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
@@ -911,177 +982,502 @@ C:\Users\<ユーザー名>\.config\opencode\opencode.json
 }
 ```
 
-> **注意**
->
-> `qwen3.5-4b` の部分は、LM Studioで実際に使用するモデルIDに合わせて変更してください。
->
-> HomePilotで使用するモデル設定の詳細は、開発者向け `SETUP.md` も参照してください。
+> これは現在使っている構成例であり、唯一の正解ではありません。
+> `qwen3.5-4b` の部分は、LM Studioに表示されている実際のモデルIDに置き換えてください。
 
 ---
 
-## 11. LM Studioを起動する
+### 4-2. LM Studio でモデルを用意する
 
-HomePilotを起動する前に、LM Studioを起動しLocal Serverを開始します。
+1. LM Studioを起動し、使用したいモデルをダウンロードします。
+2. **Local Server** を開始します。OpenAI互換APIは通常
+   `http://127.0.0.1:1234/v1` で動作します。
 
-LM StudioのOpenAI互換APIは通常、
-
-```text
-http://127.0.0.1:1234/v1
-```
-
-で動作します。
-
----
-
-## 12. HomePilotを起動する
-
-ここまで設定できたら、Launcherの `start-homepilot.bat` からHomePilotが起動できるようになります。
-
-LauncherがGateway、Cloudflare関連処理、OpenCodeなど必要なコンポーネントを起動します。
-
-起動後、HomePilotのPWAへアクセスします。
-
-> **補足**
->
-> `HomePilot/explorer`が、パソコンPWA・スマホPWA・EvenG2側の処理を担っています。
->
-> 詳細は、開発者向け `SETUP.md` を参照してください。
-
----
-
-## 13. 動作確認
-
-最低限、以下を確認します。
-
-### Explorer
-
-- 指定した `ROOT_PATH` のファイル・フォルダが表示される
-- フォルダを開ける
-- ファイルを選択できる
-
-### Agent
-
-- Agentのセッションを作成できる
-- メッセージを送信できる
-- ローカルLLMから回答が返ってくる
-
-### 音声入力
-
-- 音声入力を開始できる
-- 音声が認識される
-- 認識結果がAgentへの入力として使用できる
-
-ここまで動けば、HomePilotの基本セットアップは完了です。
-
----
-
-## 14. セットアップ全体のチェックリスト
-
-困ったときは、まずここを上から確認してください。
-
-- [ ] Gitをインストールした
-- [ ] GitHub CLIをインストールした
-- [ ] `gh auth login` を完了した
-- [ ] Node.jsをインストールした
-- [ ] OpenCode CLIをインストールした
-- [ ] LM Studioをインストールした
-- [ ] HomePilotをcloneした
-- [ ] `gateway` で `npm install` した
-- [ ] `launcher` で `npm install` した
-- [ ] `speech-worker` で `npm install` した
-- [ ] `launcher/.env` を作成した
-- [ ] `ROOT_PATH` を設定した
-- [ ] Cloudflare Workerをデプロイした
-- [ ] Cloudflare WorkerのURLを取得した
-- [ ] Cloudflare WorkerのSecret Tokenを設定した
-- [ ] `HOMEPILOT_WORKER_URL` を設定した
-- [ ] `HOMEPILOT_WORKER_SECRET_TOKEN` を設定した
-- [ ] LM Studioで使用するモデルをダウンロードした
-- [ ] OpenCodeの `opencode.json` を作成した
-- [ ] LM Studioのモデル設定をOpenCodeに追加した
-- [ ] LM Studioを起動した
-- [ ] HomePilot Launcherを起動した
-- [ ] PWAからAgentを使用できた
-- [ ] 必要なら音声入力を確認した
-
----
-
-## 15. うまく動かない場合
-
-まず、以下を確認してください。
-
-### Agentが回答しない
-
-1. LM Studioが起動しているか
-2. 使用するモデルがLM Studioに存在するか
-3. モデルが読み込まれているか
-4. `opencode.json` のモデルIDが正しいか
-5. OpenCode CLIが正常に起動できるか
-
----
-
-### Explorerにファイルが表示されない
-
-`launcher/.env` の
+毎回手動でモデルをロードするのを避けるには、`launcher\.env` に次を追加します。
+LauncherがOpenCodeを起動する前にモデルを読み込みます。
 
 ```env
-ROOT_PATH=...
+LOCAL_MODEL=qwen3.5-4b
 ```
 
-を確認してください。
+> これは任意です。設定する場合は、LM Studioに実在するモデルIDと
+> 正確に一致させてください。違う場合はLauncherがエラーで停止します。
 
-指定したフォルダが実際に存在することも確認してください。
+> **ここまでできましたか？**
+> LM Studioが起動し、Local Serverを開始し、`opencode.json` に
+> 同じモデルが指定できました。
 
 ---
+
+## 5. Gateway と Speech Worker
+
+### 5-1. 起動するプロセス
+
+| プロセス | 起動するのは | アドレス |
+|---|---|---|
+| LM Studio | あなた | `http://127.0.0.1:1234` |
+| Gateway | Launcher | `http://127.0.0.1:51887` |
+| OpenCode Server | Launcher | `http://127.0.0.1:4096` |
+| Speech Worker | あなた — ［5-2](#5-2-speech-worker-を設定する)を参照 | 方法によって異なります |
+| PWA | あなた — ［第6章](#6-homepilot-を起動する)を参照 | `http://localhost:5174` |
+
+**Gateway** はPWAとPCをつなぐ橋渡し役です。PWAからの依頼を受けて
+`ROOT_PATH` 内のファイルを読み書きし、Agentの依頼をOpenCodeへ 전달します。
+Gatewayの設定はLauncherが行うため、**LauncherはSpeech Workerの設定がないと
+起動できません**。
+
+### 5-2. Speech Worker を設定する
+
+> **必須です。** `HOMEPILOT_WORKER_URL` と `HOMEPILOT_WORKER_SECRET_TOKEN` は
+> 両方とも `launcher\.env` に設定する必要があります。
+> どちらかが欠けると、Launcherは "Configuration missing" を表示して停止します。
+
+以下のどちらかを選んでください。
+
+#### 方法A：自分のPCで動かす
+
+まずHomePilotを試すなら、方法Aから試すのがおすすめです。
+
+1. `speech-worker\.dev.vars` を作り、長いランダムトークンを記入します。
+
+   ```bat
+   cd C:\HomePilot\speech-worker
+   notepad .dev.vars
+   ```
+
+   ```
+   WORKER_SECRET_TOKEN="put-a-long-random-token-here"
+   ```
+
+2. Workerを起動します。
+
+   ```bat
+   npm run dev
+   ```
+
+   URLは通常次のようになります。
+
+   ```text
+   http://127.0.0.1:8787
+   ```
+
+   > **このウィンドウは開いたままにしてください。**
+   > 初回はCloudflareへのログインを求められることがあります。
+   > WorkerがCloudflareのサービスを利用するためです。
+
+3. 2つの値を `launcher\.env` に記入します。
+
+   ```env
+   HOMEPILOT_WORKER_URL=http://127.0.0.1:8787
+   HOMEPILOT_WORKER_SECRET_TOKEN=put-a-long-random-token-here
+   ```
+
+   > `.dev.vars` のトークンと `launcher\.env` のトークンは
+   > **完全に同じ文字列**でなければなりません。
+
+#### 方法B：Cloudflareにデプロイする
+
+WorkerをCloudflareにデプロイし、URLを取得し、Worker側にトークンを設定してから、
+2つの値を `launcher\.env` に記入します。具体的な手順は `SETUP.md` にあります。
+
+> 方法Aは、Workerのウィンドウを開いている間だけ利用できます。
+> ウィンドウを開きたくない場合や、外出先でも音声入力を使いたい場合は方法Bを使ってください。
+
+> **ここまでできましたか？**
+> `launcher\.env` に `ROOT_PATH`、`HOMEPILOT_WORKER_URL`、
+> `HOMEPILOT_WORKER_SECRET_TOKEN` が設定でき、Speech Workerが起動しています。
+
+---
+
+## 6. HomePilot を起動する
+
+3つのプロセスが必要です。下の順番で起動してください。
+
+### 6-1. LM Studio を起動する
+
+モデルを読み込み、Local Serverを開始します。
+
+### 6-2. Launcher を起動する
+
+```bat
+cd C:\HomePilot\launcher
+start-homepilot.bat
+```
+
+Launcherは、Gateway、OpenCode、インターネットへの接続の順に起動します。
+次のような表示が出るまで待ってください。
+
+```text
+HomePilot Gateway
+-----------------
+  Root     : C:\HomePilotWork
+  Gateway  : http://127.0.0.1:51887
+  OpenCode : http://127.0.0.1:4096
+  Token    : [REDACTED]
+  Worker   : http://127.0.0.1:8787
+
+Quick Tunnel
+  Status : READY
+  URL    : https://xxxxxxxx.trycloudflare.com
+
+Connection JSON
+{"type":"homepilot-connection","version":1,"url":"https://xxxxxxxx.trycloudflare.com","token":"..."}
+
+Connection QR
+```
+
+**Connection JSON** の下にQRコードが表示されます。
+［第7章](#7-スマートフォンから-homepilot-に接続する)で両方を使います。
+
+> **このウィンドウは開いたままにしてください。**
+> 閉じるとすべて停止します。`Ctrl+C` でHomePilotを停止できます。
+> ［第12章](#12-終了するとき)を参照してください。
+
+1回だけ別のフォルダを使うこともできます。
+
+```bat
+start-homepilot.bat C:\HomePilotWork
+```
+
+この指定は、その実行のみ `ROOT_PATH` を上書きします。
+
+### 6-3. PWA を起動する
+
+Launcherはウェブアプリを起動しません。別のウィンドウで起動してください。
+
+```bat
+cd C:\HomePilot\explorer\cloudflare
+npm run dev
+```
+
+ブラウザで次のように開きます。
+
+```text
+http://localhost:5174
+```
+
+> **ここまでできましたか？**
+> `http://localhost:5174` が開き、HomePilotのホーム画面が表示されます。
+
+---
+
+## 7. スマートフォンから HomePilot に接続する
+
+PWAには、次の2つが必要です。
+
+- PWA自体のアドレス
+- Gatewayの接続情報（URLとトークン）
+
+後者はLauncherが **Connection JSON** と **QRコード** として表示します。
+
+### 7-1. PC側で行うこと
+
+1. Launcherのウィンドウを開いたままにします。
+2. **Connection JSON** の下に表示されているJSONをコピーします。
+3. このPCの自宅ネットワーク上のアドレスを控えます。
+   `ipconfig` を実行し、IPv4アドレス（例：`192.168.0.2`）を探してください。
+
+### 7-2. スマートフォン側で行うこと
+
+1. スマートフォンのブラウザで、PC上のPWAを開きます。
+
+   ```text
+   http://<PCのIPアドレス>:5174
+   ```
+
+   たとえば `http://192.168.0.2:5174` です。
+
+   > PCとスマートフォンが同じネットワークにある必要があります。
+   > 開けない場合は［第13章](#13-困ったとき)を参照してください。
+
+2. 右上のSettingsアイコン（歯車）をタップします。
+3. 接続情報の欄に Connection JSON を貼り付け、適用 をタップします。
+4. 接続されると、ホーム画面に アプリ と 自宅PC が表示されます。
+
+   > まだ モック（開発用） が表示されている場合は、接続ができていません。
+   > JSON を貼り付け直してください。
+
+   > PC 自身で使う場合は、`http://localhost:5174` を開いて同じ操作を行います。
+
+5. 自宅PC をタップします。
+
+**接続できたときの変化**
+
+- 自宅PC では `ROOT_PATH` のファイルが表示されます。
+- Agentが使えるようになります。
+- アプリ はそのブラウザ内の保存領域で、接続なしでも使えます。
+
+### 7-3. QRコードを読み取る場合
+
+接続情報の欄にはQRスキャン用のボタンがあります。
+タップして、Launcherウィンドウに表示されたQRコードにカメラを向けます。
+
+> カメラは `https://` または `localhost` でのみ利用できます。
+> カメラが利用できないという表示が出た場合は、上記の貼り付け方法を使ってください。
+> `https://` でのアクセス方法は `SETUP.md` に記載があります。
+
+### 7-4. 補足
+
+- ブラウザのメニューから、PWAをスマートフォンのホーム画面に追加できます。
+- 接続情報はそのブラウザに保存されるため、通常は端末ごとに1回貼り付けるだけです。
+- トークンはLauncherを起動するたびに変わります。Launcherを再起動した後に
+  接続できない場合は、新しいJSONを貼り付け直してください。
+
+> **ここまでできましたか？**
+> スマートフォンから自宅PCを開き、［3-5](#3-5-root_path-のフォルダを作る)で
+> 作ったフォルダの中質が見えます。
+
+---
+
+## 8. PWA で Agent を使ってみる
+
+Agentは 自宅PC から使えます。
+
+### 8-1. Agent を開く
+
+- **PCのブラウザの場合**：ExplorerとAgentが横に並びます。
+  入れ替えボタン（⇄）で切り替えられます。
+- **スマートフォンの場合**：ExplorerのバーのAgentアイコンをタップします。
+
+> アプリ を選択しているときは、Agentは表示されません。
+
+### 8-2. セッションを作って質問する
+
+1. **New Session** をタップします。
+2. 質問を入力します。例：`What files are in this folder?`
+3. 送信します。
+4. Agentが作業している間、`Processing...` と表示されます。
+
+### 8-3. 権限の確認ダイアログが表示された場合
+
+Agentがツールを使う前に、権限の確認が必要になることがあります。
+権限の確認 ダイアログが表示されたら、許可・常に許可・拒否 のいずれかを選びます。
+
+拒否した場合、Agentはそのツールを使わずに処理を続けます。
+
+### 8-4. 質問が表示された場合
+
+Agentが判断を必要とするときは、選択肢付きの質問を表示します。
+選択肢をタップするか、自由入力 に回答を入力して送信してください。
+
+何もしない場合、Agentはそのまま待ちます。エラーではありません。
+
+### 8-5. 回答が完了したとき
+
+回答は会話の中に表示されます。セッションは、あとでセッション一覧から
+もう一度開けます。
+
+> **ここまでできましたか？**
+> ローカルLLMからのテキストを含む回答を受け取りました。
+
+### 8-6. 音声入力（任意）
+
+［5-2](#5-2-speech-worker-を設定する)でSpeech Workerを設定した場合は、
+入力する代わりに話すこともできます。音声がテキストに変換されて表示されるので、
+送信する前に内容を確認できます。
+
+---
+
+## 9. ファイルを見る・操作する
+
+自宅PC を選ぶと、`ROOT_PATH` のファイルが表示されます。
+
+### 9-1. 基本の操作
+
+| やりたいこと | 操作 |
+|---|---|
+| フォルダを開く | タップする |
+| ファイルを開く | タップする（ビューアで開きます） |
+| 戻る | 戻るボタン |
+| 再読み込み | リフレッシュボタン |
+| 並び順を変える | Actions（⋯）→ 並び順切替 |
+| フォルダを作る | Actions（⋯）→ フォルダを作成 |
+| 名前を変える | 選択 → Actions（⋯）→ 名前を変更 |
+| 削除する | 選択 → Actions（⋯）→ 削除 |
+
+> Actionsメニュー（⋯）は、パスバーの右端にあります。
+
+### 9-2. 2種類の保存場所
+
+| 表示 | 中身 |
+|---|---|
+| 自宅PC | PC上の実際のフォルダ。変更は実ファイルに反映されます。 |
+| アプリ | いま使っている端末のブラウザ内の保存領域。PCには何も書き込まれません。 |
+
+### 9-3. 知っておくとよいこと
+
+- **WindowsのHidden属性が付いたファイル・フォルダは表示されません。**
+  これはファイル名ではなくHidden属性に基づく表示であり、アクセス制御では
+  ありません。探しているファイルが見つからない場合は、ファイルエクスプローラーで
+  Hidden属性を確認してください。詳細は `SETUP.md` に記載があります。
+- **10MBを超えるファイルは内容を開けません。** ダウンロードしてください。
+- **HomePilotは内部でいくつかのファイルを管理します。** たとえば、開いたファイルの
+  既読位置は自動的に記憶されます。このファイルは、閲覧するフォルダの外側に
+  HomePilotが保持します。自分で作ったり編集したり削除したりする必要はなく、
+  一覧にも表示されません。保存場所は `SETUP.md` に記載があります。
+
+---
+
+## 10. PCとアプリの間でファイルをコピーする
+
+アプリの保存領域は、使っている端末ごとにあります。スマートフォンのアプリに
+コピーすれば、接続がない状態でも使えるコピーを手元に用意できます。
+
+### 10-1. 自宅PC → アプリ
+
+1. 自宅PC を開いて、ファイルを選択します。
+2. Actions（⋯）→ **アプリへコピー**。
+3. 同名のファイルが既にある場合は、上書きしてコピー を確認します。
+
+### 10-2. アプリ → 自宅PC
+
+1. アプリ を開いて、ファイルを選択します。
+2. Actions（⋯）→ **自宅PCへコピー**。
+3. 保存先フォルダを選択します。
+4. ファイルがPCのそのフォルダに書き込まれます。
+
+> 自宅PCへコピー は、アプリ を選択中、かつ接続が設定済みのときにだけ表示されます。
+
+### 10-3. 確認する方法
+
+- アプリへコピー の後は、アプリ を開いて確認します。
+- 自宅PCへコピー の後は、自宅PC を開いて確認します。
+
+> **ここまでできましたか？**
+> 自宅PCからアプリへファイルをコピーし、アプリ で確認できました。
+
+> アプリの保存領域はブラウザのローカルストレージを使うため、容量には上限があります。
+> 設定画面に表示される数値の詳細は `SETUP.md` に記載があります。
+
+---
+
+## 11. Even Realities G2 を使う場合（任意）
+
+G2をお持ちでない方は、この章を読み飛ばしてください。
+［第10章](#10-pcとアプリの間でファイルをコピーする)まででHomePilotを使えます。
+
+G2でも同じPWAが動きます。PWAをG2で開くと、G2向けの画面に切り替わります。
+違うのは操作方法（タップ、ダブルタップ、ロングプレス）と利用できる機能だけです。
+
+### 11-1. 必要なもの
+
+| 項目 | 用途 |
+|---|---|
+| Even Realities G2 | 端末そのもの |
+| EvenHub 環境 | G2のアプリが動作する環境 |
+| `explorer\evenhub` | G2用アプリ。［3-3](#3-3-依存パッケージをインストールする)でインストールします。 |
+
+### 11-2. 3つの方法
+
+| 方法 | コマンド | 必要なもの |
+|---|---|---|
+| シミュレータ | `cd explorer\evenhub` の後 `npm run simulator` | 不要。PC上で動きます。 |
+| QRテスト | `npm run qr` | EvenHub 環境 |
+| 実機 | `npm run pack` の後、生成された `.ehpk` をアップロード | EvenHub 環境と実機のG2 |
+
+G2はPWAのURLを読み込みます。このURLは現在、ソースファイル
+`explorer\evenhub\src\App.tsx` に直接書かれています。
+PWAを別の場所に置く場合は、そこを変更して再ビルドしてください。
+
+### 11-3. 最初にやってみること
+
+1. G2でアプリを開きます。
+2. 自宅PC をタップします。
+3. Agentを開いて、メッセージを1つ送ります。
+
+> **ここまでできましたか？**
+> G2でホーム画面が表示され、自宅PC を開けました。
+
+> G2には、ロングプレス・音声入力・画面サイズなどG2固有の制限があります。
+> `SETUP.md` と `DEVELOPMENT.md` に記載があります。
+
+---
+
+## 12. 終了するとき
+
+Launcherウィンドウで `Ctrl+C` を押します。
+Gateway、OpenCode、トンネルがまとめて停止し、次のように表示されます。
+
+```text
+HomePilot stopped.
+```
+
+他のウィンドウも停止してください。
+
+| ウィンドウ | 停止方法 |
+|---|---|
+| Launcher | `Ctrl+C` |
+| PWA（`npm run dev`） | `Ctrl+C` |
+| Speech Worker（`npm run dev`、方法A） | `Ctrl+C` |
+| LM Studio | トレイから終了 |
+
+> 停止時にディスクへ書き込むことはないので、いつでも安全に停止できます。
+> PCの電源を落とす前に、これらのウィンドウを閉じてください。
+
+再開するときは［第6章](#6-homepilot-を起動する)を繰り返してください。
+トークンは変わるので、新しい Connection JSON でPWAを接続し直してください。
+
+---
+
+## 13. 困ったとき
+
+よくある場合だけを挙げています。詳細なトラブルシュートは `SETUP.md` にあります。
+
+### Launcherがすぐに停止する
+
+| 表示 | 対処 |
+|---|---|
+| `Root folder not found` | `ROOT_PATH` のフォルダが存在しません。［3-5](#3-5-root_path-のフォルダを作る)を参照。 |
+| `Configuration missing` | `HOMEPILOT_WORKER_URL` または `HOMEPILOT_WORKER_SECRET_TOKEN` が未設定です。［5-2](#5-2-speech-worker-を設定する)を参照。 |
+| `cloudflared.exe was not found` | `tools\cloudflared.exe` がありません。リポジトリを取得し直してください。 |
+| `Port 51887 may already be in use` | 前回のLauncherが残っています。閉じてから起動し直してください。 |
+| `Local Model Load Failed` | `LOCAL_MODEL` の値がLM Studioにありません。［4-2](#4-2-lm-studio-でモデルを用意する)を参照。 |
+
+### Agentが答えない
+
+1. LM Studioが起動し、Local Serverを開始していますか？
+2. `opencode.json` のモデルIDは、LM Studioのモデルと一致していますか？
+3. Launcherは `OpenCode Server is ready.` と表示しましたか？
+4. モデルはPCの性能に対して大きすぎませんか？大きなモデルは応答が遅くなります。
+
+### スマートフォンでページが開かない
+
+1. PCとスマートフォンが同じネットワークにありますか？
+2. PWAは起動していますか？（`explorer\cloudflare` で `npm run dev`）
+3. アドレスは最新ですか？`ipconfig` で確認してください。PCのIPアドレスは変わることがあります。
+4. Windowsファイヤーウォールでブロックされていませんか？
+   求められたら、プライベートネットワークでNode.jsを許可してください。
+
+### スマートフォンで自宅PC に接続できない
+
+1. スマートフォンの設定に Connection JSON を貼り付けましたか？
+2. Launcherのウィンドウはまだ開いていますか？
+3. JSONを貼り付けたあとにLauncherを再起動していませんか？
+   トークンが変わるので、貼り付け直してください。
+4. `自宅PC（Gateway）に接続できませんでした。` と表示される場合、接続情報が未設定です。
 
 ### 音声入力が動かない
 
-1. Cloudflare Workerがデプロイされているか
-2. `HOMEPILOT_WORKER_URL` が正しいか
-3. Cloudflare Worker側のSecret Tokenが設定されているか
-4. `HOMEPILOT_WORKER_SECRET_TOKEN` が一致しているか
+1. Speech Workerのウィンドウはまだ開いていますか？（方法A）
+2. `.dev.vars` のトークンと `launcher\.env` のトークンは完全に一致していますか？
+3. `HOMEPILOT_WORKER_URL` は正しいですか？
 
-を確認してください。
+### QRスキャンボタンでカメラが利用できないと表示される
 
----
+カメラは `https://` または `localhost` でのみ利用できます。
+［7-2](#7-2-スマートフォン側で行うこと)の貼り付け方法を使ってください。
+`https://` でのアクセス方法は `SETUP.md` に記載があります。
 
-## 16. さらに詳しく知りたい場合
+### ファイルが表示されない
 
-このページは、**HomePilotをゼロから動かすための簡易セットアップ手順**です。
-
-HomePilotの内部構成、開発環境、各コンポーネントの詳細設定などについては、以下のドキュメントを参照してください。
-
-- `SETUP.md` — 詳細なセットアップ情報
-- `DEVELOPMENT.md` — 開発者向け情報
-- `README.md` — HomePilot全体の概要
+WindowsのHidden属性を確認してください。［9-3](#9-3-知っておくとよいこと)を参照。
 
 ---
 
-## 最終的に必要なもの
+## 14. 詳しい情報
 
-HomePilotを動かすために、最終的には以下のような構成になります。
-
-```text
-Windows PC
-│
-├─ Git
-├─ GitHub CLI
-├─ Node.js / npm
-├─ OpenCode CLI
-├─ LM Studio
-│   └─ ローカルLLM
-│
-├─ HomePilot
-│   ├─ gateway
-│   ├─ launcher
-│   └─ speech-worker
-│
-├─ OpenCode設定
-│   └─ %USERPROFILE%\.config\opencode\opencode.json
-│
-└─ Cloudflare
-    └─ Speech Worker
-```
-
-この状態でLauncherを起動すると、HomePilotからローカルLLMを利用できます。
-
+| 知りたいこと | 読むもの |
+|---|---|
+| HomePilotで何ができるか、現在何が実装されているか | `README.md` |
+| 各コンポーネントの詳細な設定、本番デプロイ、G2の詳細、トラブルシュート | `SETUP.md` |
+| 内部構造、設計の意図、開発の方針 | `DEVELOPMENT.md` |

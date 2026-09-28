@@ -19,7 +19,7 @@ This document explains:
 - Why HomePilot was designed this way
 - How the architecture evolved
 - How the major development phases were implemented
-- How ChatGPT, OpenCode, MiMo, and the human developer were used
+- How ChatGPT, Kilo, OpenCode, MiMo, and the human developer were used
 - How implementation decisions were validated
 - How the system should be extended in the future
 - What lessons were learned during development
@@ -54,7 +54,6 @@ This was especially important when working with:
 - EvenHub
 - Even Realities G2 hardware
 - Browser microphone APIs
-- SSE
 - Local LLMs
 
 Documentation, generated API definitions, simulators, and AI suggestions were treated as references.
@@ -86,14 +85,18 @@ HomePilot was developed using three major roles.
                        │
                        ▼
 ┌─────────────────────────────────────────────┐
-│              OpenCode / MiMo                │
+│                 Kilo                        │
 │                                             │
 │  Implementation / Code Modification         │
-│  Build Fixes / Refactoring                 │
+│  Test and Build Support / Debugging         │
 └─────────────────────────────────────────────┘
 ```
 
 The important point is that these roles were intentionally separated.
+
+Note that the Kilo box above is the coding agent used to develop this repository. It is
+unrelated to the OpenCode server that HomePilot itself runs on; see
+[Section 6](#6-coding-agent-role).
 
 ---
 
@@ -110,6 +113,8 @@ The human developer remains responsible for:
 - Evaluating UX
 - Confirming whether a fix actually works
 - Deciding when a feature is complete
+- Committing and pushing changes
+- Deployment
 
 AI was not treated as the final authority.
 
@@ -145,15 +150,19 @@ Design solution
 Define implementation requirements
  ↓
 Create implementation prompt
- ↓
-Give prompt to MiMo / OpenCode
- ↓
+  ↓
+Give prompt to Kilo
+  ↓
 Review implementation
- ↓
-Build / test
- ↓
+  ↓
+Human builds / tests
+  ↓
+Human verifies on the real device
+  ↓
+Human commits / pushes
+  ↓
 Report actual result
- ↓
+  ↓
 Continue discussion
 ```
 
@@ -161,11 +170,11 @@ ChatGPT was therefore used primarily for **thinking**, rather than directly modi
 
 ---
 
-# 6. OpenCode / MiMo Role
+# 6. Coding Agent Role
 
-OpenCode, with MiMo used as the primary implementation-oriented AI, was used primarily as the coding agent.
+Kilo is the current main coding agent for developing this repository.
 
-Typical tasks included:
+Typical tasks include:
 
 - Editing TypeScript
 - Editing React components
@@ -177,6 +186,7 @@ Typical tasks included:
 - Implementing voice input
 - Implementing state persistence
 - Updating existing behavior according to specifications
+- Running tests and builds, and investigating failures
 
 The preferred workflow was to provide a detailed implementation specification rather than simply asking the coding agent to "make it work."
 
@@ -191,6 +201,25 @@ A good implementation request described:
 7. Acceptance criteria
 
 This significantly reduced unintended changes.
+
+## OpenCode and MiMo, historically
+
+OpenCode and MiMo were the main coding agents during the earlier phases of the project.
+The techniques recorded in this document — the API verification, the specification-first
+prompts, the review step — were developed while working with them and still apply to Kilo.
+
+Kilo replaced them as the main coding agent. They were not removed from the system, because
+OpenCode is still used by HomePilot itself: it is the Agent execution layer that HomePilot
+talks to at runtime, through the Gateway, in order to run an Agent session. The OpenCode API
+investigation and integration work documented in [Section 16](#16-opencode-api-verification)
+and the following sections is therefore still current, not historical.
+
+The two must not be confused:
+
+```text
+Coding agent for developing this repository  →  Kilo
+Agent execution layer inside HomePilot       →  OpenCode
+```
 
 ---
 
@@ -527,7 +556,6 @@ This approach was especially important for:
 
 - Session
 - Message
-- SSE
 - Question
 - Permission
 
@@ -544,7 +572,7 @@ GET  /session
 GET  /session/{sessionID}
 GET  /session/{sessionID}/message
 
-SSE
+POST /session/{sessionID}/message
 
 GET  /question
 POST /question/{questionID}/reply
@@ -559,11 +587,17 @@ HomePilot should not assume that an API remains unchanged forever.
 
 ---
 
-# 17. SSE Design
+# 17. Agent State Update Method (Historical SSE Investigation)
 
-SSE is used to receive Agent-side state updates.
+> **Historical.** The SSE-based event model described in this section was investigated and
+> implemented during an earlier phase. HomePilot does **not** use SSE today. It is kept
+> because the API investigation itself is still valuable, and because it explains why the
+> current fetch-based design looks the way it does.
 
-Observed events included:
+## What was investigated
+
+SSE was explored as the way to receive Agent-side state updates. The events that were
+observed on the OpenCode server were:
 
 ```text
 question.replied
@@ -576,7 +610,7 @@ session.updated
 session.diff
 ```
 
-A typical Agent operation can look like:
+The Agent operation they described looked like this:
 
 ```text
 session.status: busy
@@ -598,7 +632,27 @@ assistant response
 session.idle
 ```
 
-This event-driven model is used to update the HomePilot UI.
+## What HomePilot does now
+
+The current implementation does not open a streaming connection. Agent state is read
+through the ordinary REST endpoints listed in
+[Section 16](#16-opencode-api-verification):
+
+```text
+POST /session/{sessionID}/message   → send, then GET the message list
+GET  /session/{sessionID}/message   → read the current state
+GET  /question                       → read pending questions
+```
+
+In the PWA, `useOpenCode` sends the message and then fetches the authoritative message
+state with a single `getMessages()` call, clearing the Processing flag once the last
+assistant message has `finish === 'stop'`. In the G2, `g2-agent-controller` reads the same
+message list when it rebuilds Processing and Unread state, and decides completion from the
+last message in the list.
+
+The result is a request/response model rather than a streaming one. The Processing and
+Unread states described in this document are still accurate; what drives them is a fetch
+of current state, not a push.
 
 ---
 
@@ -819,6 +873,38 @@ The purpose is to remember where the user was and restore the appropriate Agent 
 
 This became necessary because the G2 application's lifecycle differs from a normal React browser application.
 
+The same pattern was later applied to History, which added:
+
+```text
+historyReturnPage
+historyPage
+```
+
+`historyReturnPage` records where History was opened from, so Double Tap can go back
+there. When History was entered at startup there is no such page, and Double Tap goes to
+Home instead. This case distinction is deliberate; do not collapse it.
+
+`G2RuntimeManager.navigateToHome()` clears every return page at once
+(`historyReturnPage`, `agentReturnPage`, `historyPage`, `sessionListPage`,
+`modelSelectPage`). Reaching Home is therefore a reset of navigation state, not just a
+screen change.
+
+### Home as the root page
+
+The Home screen is the root. It does not browse anything and only returns the selected
+file system to the runtime. Two consequences:
+
+- The choice is not persisted. `connectionMode` is reset to `'gateway'` on shutdown, so
+  the next launch starts from the home PC side whenever a Gateway is configured.
+- Every other page injects a **"ホーム画面へ"** entry as the **first** item of its
+  context menu, via `BasePage.addHomeMenuItem()`. The mechanism is `unshift` on the menu
+  array, so a page only declares its own items. Home itself does not register the entry,
+  because `handleCommonMenuItem` only shows it when `onNavigateToHome` is set.
+
+Per-page context menus are pinned by tests in
+`src/hud/__tests__/g2-home-navigation.test.ts`. Add the new page to those expectations
+when you add a page, or the ordering contract silently drifts.
+
 ---
 
 # 25. Processing State
@@ -1032,7 +1118,7 @@ Major capabilities:
 - Messages
 - Agent responses
 - Model selection
-- SSE
+- Agent state updates over the OpenCode API
 - Permission handling
 - Question handling
 
@@ -1104,7 +1190,7 @@ Major areas included:
 - Context specification
 - Processing state
 - Unread handling
-- SSE / Agent state synchronization
+- Agent state synchronization
 - Date/time metadata
 - Regression testing
 
@@ -1140,6 +1226,42 @@ The important lesson from Phase 4 was:
 > **Simulator success does not guarantee hardware success.**
 
 Several issues only became visible on the physical G2.
+
+---
+
+## Phase 5 — Real-world Operation
+
+The phases above describe reaching the planned feature set. Everything after them
+happened during actual daily use, and is grouped here because it does not belong to the
+original plan.
+
+Two themes run through this phase.
+
+**A second file system.** The Local FileSystem was added so the app is useful when the
+Gateway is unreachable. It brought a second implementation of every file operation, a
+second history and reading-position store, and the need to keep the two from mixing.
+See [Section 51](#51-the-filesystem-abstraction).
+
+**Navigation that matches the real device.** The G2 gained a Home screen, a History
+screen, and a context menu entry for going home on every page. The Gateway gained a
+hidden-file filter and moved its viewer state out of the exposed directory.
+
+Other areas worked on in this phase:
+
+- History page, with PC and app-local sources
+- File creation, folder creation, rename, move, copy, delete, upload, download, ZIP
+- In-place text editing in the File Viewer
+- Sort order toggle
+- Color theme, auto-scroll settings, G2 startup screen setting
+- Copy between the home PC and the app, from both the Explorer and the File Viewer
+- Local storage usage display
+- Request-level error handling and longer timeouts in the Gateway
+- Timeouts reduced to make the Agent feel more responsive
+
+The main lesson of this phase:
+
+> **A feature that works on one client is not finished until the other client agrees
+> with it about storage, navigation and state.**
 
 ---
 
@@ -1322,7 +1444,6 @@ Especially for:
 - Processing state
 - Unread state
 - Voice input
-- SSE
 - Local LLM
 
 long-term real-world usage is valuable.
@@ -1376,7 +1497,7 @@ Decide:
 
 ## Step 4 — Specify
 
-Create a precise implementation request for the coding agent.
+Create a precise implementation request for the coding agent (Kilo).
 
 Include:
 
@@ -1395,7 +1516,7 @@ Acceptance criteria
 
 ## Step 5 — Implement
 
-Give the implementation specification to OpenCode / MiMo.
+Give the implementation specification to Kilo.
 
 Allow the coding agent to modify the repository.
 
@@ -1807,8 +1928,6 @@ Sessions
    ✓
 Messages
    ✓
-SSE
-   ✓
 Permissions
    ✓
 Questions
@@ -1835,6 +1954,12 @@ External Agent result detection
    ✓
 Local LLM integration
    ✓
+Local FileSystem
+   ✓
+Copy between home PC and app
+   ✓
+G2 Home screen and History
+   ✓
 ```
 
 The remaining work is primarily:
@@ -1847,7 +1972,313 @@ The remaining work is primarily:
 
 ---
 
-# 51. Final Development Principle
+# 51. The FileSystem Abstraction
+
+Both the PWA and the G2 talk to files through one interface,
+`src/services/FileSystemService.ts`. It covers listing, reading, writing, creating
+folders, renaming, deleting, moving and copying, and it takes an optional sort mode.
+
+There are three implementations:
+
+| Implementation | Backing | Used when |
+|---|---|---|
+| `GatewayFileSystemService` | The Gateway, over HTTP | "自宅PC" is selected |
+| `LocalFileSystemService` | `localStorage` | "アプリ" is selected |
+| `MockFileSystemService` | In-memory sample data | Only when `VITE_FILE_SERVICE_MODE=mock` |
+
+`services/FileSystemSelection.ts` holds the factory and the two labels
+(`local → アプリ`, `gateway → 自宅PC`). `HomeScreen.tsx` (PWA) and `home-page.ts` (G2)
+render the choice; neither persists it.
+
+### The rule that keeps the two apart
+
+Anything that persists to the Gateway **must not** fall back to `localStorage`, and vice
+versa. `SharedPositionStore.ts` and `hud/services/g2-shared-position-store.ts` therefore
+swallow their errors and return `null` instead of falling back — a missing Gateway means
+"no position", never "a different position".
+
+`LocalReadingPositionStore.ts` is pinned against this by test: it asserts that the key
+`homepilot.fileViewerPositions` is never written, so a `/pc/a.txt` position can never
+leak into a `/local/a.txt` position.
+
+Keep this invariant when adding a store. A silent fallback is the failure mode that
+produces "it worked on my device and showed nonsense on the other one".
+
+### `resolveExplorerBackTarget`
+
+Back at the root of a file system, the PWA returns to Home rather than staying. This is
+a small function (`FileSystemSelection.ts`) with a dedicated test; keep it that way.
+
+---
+
+# 52. Local FileSystem Internals
+
+`src/services/LocalFileSystemService.ts`.
+
+Everything lives in one `localStorage` value:
+
+```text
+key:    homepilot.localFileSystem
+value:  a flat JSON map keyed by absolute '/' separated path
+```
+
+There is no IndexedDB anywhere in the project. A file entry carries its content inline:
+
+```text
+{ type, name, parent, content?, size?, mimeType?, modifiedAt? }
+```
+
+### Constraints to respect when changing it
+
+- **Every mutation rewrites the whole JSON.** This is what makes it simple, and also what
+  makes it slow as the data grows. Do not add a "read one entry" optimization without
+  accepting a full rewrite on write.
+- **Write order matters.** `persist()` assigns `this.entries` only after
+  `localStorage.setItem` succeeds. If you swap those two lines, a quota failure will
+  leave the in-memory file system out of sync with what is actually stored.
+- **Quota errors are expected, not exceptional.** `isQuotaExceededError` recognizes
+  `QuotaExceededError`, `NS_ERROR_DOM_QUOTA_REACHED` and `/quota/i`, and the user sees
+  `LOCAL_FS_QUOTA_MESSAGE`. Keep that message stable; tests assert on it.
+- **A corrupt or unrecognized payload resets to an empty root only.** `isEntries()` is
+  strict, so a partially written value will not half-load.
+- **Text only.** `readFile` returns `''` for content-less entries and uploads go through
+  `File.text()`. `getDownloadUrl` and `downloadItems` are stubs returning `null` / `{}`.
+  If you implement downloads here, remember there is no binary to download.
+- **MIME is a fixed 8-entry extension table.** Unknown extensions get `undefined`.
+
+### Reading the size back out
+
+`src/services/StorageUsage.ts` reports three separate numbers, and they are not
+interchangeable:
+
+| Value | Source | Meaning |
+|---|---|---|
+| `fileSystemBytes` | `localStorage` raw string length (UTF-8) | Space taken by the whole structure |
+| `fileContentBytes` | sum of `size`, falling back to content length | Space taken by file contents, folders excluded |
+| `siteUsageBytes` | `navigator.storage.estimate().usage` | The browser's estimate for the whole origin |
+
+`quota` is deliberately **not** read. It is not the remaining `localStorage` capacity,
+so displaying it would mislead. There is no remaining-space or warning-threshold display.
+
+`siteUsageBytes` is tri-state on purpose: `undefined` = still loading, `null` = could not
+be read (no `navigator.storage`, insecure context, or the API rejected). On some devices
+the third value is simply unavailable, and the UI shows "取得できません". Do not treat
+`null` as a bug to fix.
+
+---
+
+# 53. Copying Between the Home PC and the App
+
+`src/services/FileSystemCopy.ts`, orchestrated from `App.tsx`.
+
+The copy runs **in the client**: it reads from one service and writes to the other. It is
+not a Gateway operation, which is why a copy into the app needs no Gateway while a copy
+into the home PC does.
+
+Menu availability is asymmetric on purpose (`App.tsx`):
+
+```text
+"アプリへコピー"    isGatewayService(fileService)
+"自宅PCへコピー"   fileService instanceof LocalFileSystemService
+                  && resolveConfig().mode === 'gateway'
+```
+
+The mirror-image conditions are intentional. "自宅PCへコピー" additionally needs
+`createInitializedGatewayService()`, which throws if the Gateway cannot be reached — the
+home PC has to be reachable for the copy to land.
+
+Both entries are rendered twice: once in the Explorer menu (for the selection) and once
+in the File Viewer menu (for the file being viewed). The File Viewer variants act on the
+current file only.
+
+`CopyInProgressIndicator` is shown from before the first `await` until the copy
+finishes, because a copy of a large tree can take a noticeable time with no other
+feedback.
+
+---
+
+# 54. ViewerState on the Gateway
+
+The Gateway owns view history and reading positions for the home PC files. It matters
+that both the PWA and the G2 read and write the same place, so that a file opened on one
+resumes on the other.
+
+### Storage location and migration
+
+```text
+new:    %LOCALAPPDATA%\HomePilot\.HomePilotViewerState.json
+        (override with HOMEPILOT_VIEWER_STATE_DIR)
+legacy: <ROOT_PATH>/.HomePilotViewerState.json
+```
+
+`viewerStateReadPaths()` returns `[new, legacy]` and the reader takes the first one that
+exists. Only `ENOENT` falls through to the next candidate; a file that exists but cannot
+be parsed, or a payload with an unexpected `version`, resets to
+`DEFAULT_VIEWER_STATE`.
+
+Consequences that are intentional and should not be "fixed":
+
+- **The legacy file is never written to and never deleted.** The migration is
+  read-through, not a move. Users keep a stale file under their root until they remove
+  it themselves.
+- **Keeping it outside the root is the point.** The file is internal state; if it lived
+  under the exposed root it would appear in the user's own listings.
+
+Shape: `{ version: 1, positions: { [path]: { progress, updatedAt } }, history: [{ path, lastViewedAt }] }`.
+
+`positions` is a 0.0–1.0 ratio, not a pixel offset. `history` is newest-first and
+trimmed to `HISTORY_MAX_ENTRIES` (default 30). Position writes are last-writer-wins by
+`updatedAt`. Neither has a TTL.
+
+### Client-side position stores
+
+- Gateway: `SharedPositionStore.ts` (PWA) and `hud/services/g2-shared-position-store.ts`
+  (G2). Identical logic, separate modules, because the G2 HUD must not import from the
+  React tree.
+- App: `LocalReadingPositionStore.ts`, key `homepilot.localFileViewerPositions`, max 100
+  entries, no TTL. Read and written by both PWA and G2.
+
+Debounce differs by client: 400 ms in the PWA `FileViewer`, 2000 ms in the G2
+`FileViewerPage` (the G2 writes over a tunnel, so it batches harder).
+
+### Dead code you may find
+
+`FileViewerPositionStore.ts` (key `homepilot.fileViewerPositions`) stores raw pixel
+positions under `g2|path` / `pwa|path` keys and has a 180-day TTL. **Nothing imports
+it.** Data written under that key by an older build is not read by any current code path
+and will not migrate. Leave it alone or delete it deliberately; do not wire it back up.
+
+---
+
+# 55. Gateway Behaviors That Are Easy to Break
+
+### One request must not kill the process
+
+`createServer` wraps the handler in a promise rejection handler
+(`gateway/src/index.js`). A handler that throws returns HTTP 500 for that request and
+nothing else. If headers were already sent — streaming uploads, downloads, the OpenCode
+proxy — the socket is destroyed instead.
+
+This is a reliability requirement, not a style choice. The Gateway is the only thing
+holding up the Cloudflare tunnel, so a single bad request that terminates the Node
+process takes down every client at once. `gateway/test/server-resilience.test.js` exists
+to protect it; keep passing it.
+
+When you add a route, make sure its failure path returns an error rather than escaping
+the handler.
+
+### Timeouts
+
+`server.timeout`, `headersTimeout` and `requestTimeout` are all set to 3 hours
+(`gateway/src/index.js`). Node's default `headersTimeout` is short enough to break long
+OpenCode proxied commands. Lowering these will reintroduce that failure.
+
+### Hidden files
+
+`gateway/src/hiddenFiles.js` runs a PowerShell probe
+(`Get-ChildItem -Force -Attributes Hidden`) per directory listing and filters the result.
+
+Details that matter:
+
+- **Windows only.** On other platforms it returns an empty set.
+- **Fail-open.** Any error resolves to an empty set, so the listing is unfiltered. This
+  is deliberate: a missing `powershell.exe` should not make the Explorer unusable. The
+  cost is that a failure looks like "the hidden files are showing".
+- **Not an access control.** Nothing stops a client from reading a hidden file by path.
+  It only keeps them out of listings.
+- The path is passed through an environment variable, not the command line, and the
+  command is `-EncodedCommand`. Do not build the script by string interpolation; that
+  was a deliberate injection fix, and `hidden-files.test.js` covers it.
+
+The probe is started before `readdir` and awaited after, so the PowerShell startup and
+the directory read overlap. Keep that ordering if you touch the handler.
+
+### Path validation
+
+`pathValidator.js` rejects relative paths, normalizes and resolves, checks the relative
+path against the root, and then **re-checks after `realpath`**. The second check is what
+prevents a symlink inside the root from escaping it. Do not remove the `realpath` step
+as redundant.
+
+### Upload
+
+Busboy is configured with `files: 100` but `fileSize: Infinity` — there is no per-file
+size limit on upload. `MAX_FILE_SIZE` (10 MB) applies to the read/write endpoint, not to
+upload. Uploads stage into a temp directory under the root and clean it up on both
+success and failure.
+
+---
+
+# 56. G2 Voice Input Limits
+
+Shared by both clients and enforced in different places.
+
+| Limit | Value | Enforced in |
+|---|---|---|
+| Recording length | 60 s | `useSpeechRecognition.ts`, `g2-agent-controller.ts` |
+| Audio payload | 5 MB | `gateway/src/config.js` |
+| Accepted content types | `audio/webm`, `audio/mp4`, `audio/wav` | `gateway/src/speech.js` |
+| Speech Worker timeout | 60 s | `gateway/src/config.js` |
+
+The G2 records signed 16-bit PCM at 16 kHz mono and wraps it in WAV itself. The PWA uses
+`MediaRecorder` and negotiates the type through `MediaRecorder.isTypeSupported`, so the
+actual format depends on the browser.
+
+`cancelVoiceInput()` increments a request id so a late response from a cancelled
+recording is discarded. If you touch the voice flow, keep that guard.
+
+---
+
+# 57. Storage Keys
+
+Everything HomePilot persists in the browser, and where it lives.
+
+| Key | Written by | Scope |
+|---|---|---|
+| `homepilot.localFileSystem` | `LocalFileSystemService` | App file system |
+| `homepilot.localFileHistory` | `LocalHistoryStore` | App history, 30 entries |
+| `homepilot.localFileViewerPositions` | `LocalReadingPositionStore` | App positions, 100 entries |
+| `homepilot-connection` | `ConnectionConfig` | Gateway URL and token |
+| `homepilot.g2StartupScreen` | `G2StartupScreenSettings` | `explorer` (default), `home`, `agent`, `history` |
+| `homepilot.autoScroll` | `AutoScrollSettings` | Interval and amount |
+| `homepilot.colorTheme` | `ColorThemeSettings` | `system`, `light`, `dark` (default `dark`) |
+| `homepilot-agent-settings` | `useOpenCode` | Selected project, provider, model |
+| `homepilot-session-lastChecked` | `useOpenCode`, G2 agent state store | Unread baseline, shared PWA/G2 |
+| `homepilot-processing-sessions` | `useOpenCode`, G2 agent state store | Processing recovery, 24 h TTL |
+| `homepilot.fileViewerPositions` | — | **Unused.** See [Section 54](#54-viewerstate-on-the-gateway) |
+
+Two things are deliberately **not** persisted: the sort mode (React state / class field
+only) and the G2 file system choice (reset to `'gateway'` on shutdown). Both are
+intentional session-level settings; do not add persistence without a reason.
+
+`resolveConfig()` falls back to `{ mode: 'mock' }` when no connection is stored and
+`VITE_FILE_SERVICE_MODE` is not `gateway`. That is why the Home screen hides "自宅PC",
+the Agent pane is hidden, and copy-to-PC is unavailable on an unconfigured PWA.
+
+---
+
+# 58. Tests and Build
+
+| Project | Command | Runner |
+|---|---|---|
+| `gateway` | `npm test` | `node --test` (`gateway/test/*.test.js`) |
+| `explorer/cloudflare` | `npm test` | `vitest` (`src/**/__tests__/*.test.ts`) |
+| `speech-worker` | `npm run test` | `vitest` (watch mode) |
+
+The PWA tests sit next to the code they cover, in `__tests__` folders named after the
+module. There is no `tests/` directory at the repository root, and no root-level npm
+workspace — each project installs independently.
+
+The G2 behavior that is easiest to break silently is pinned by
+`src/hud/__tests__/g2-home-navigation.test.ts`, which asserts the full context menu of
+every G2 page. When you add a page or a menu entry, update those expectations.
+
+Builds are `npm run build` (`tsc -b && vite build`) for both frontends, and
+`npm run pack` for the EvenHub package.
+
+---
+
+# 59. Final Development Principle
 
 The most important lesson from HomePilot is not a particular framework or API.
 
@@ -1908,7 +2339,7 @@ while keeping the development cost extremely low.
 - なぜこの構成にしたのか
 - アーキテクチャがどう変化してきたか
 - 各Phaseで何を実装したか
-- ChatGPT / OpenCode / MiMo / 人間をどう使い分けたか
+- ChatGPT / Kilo / OpenCode / MiMo / 人間をどう使い分けたか
 - どうやって実装内容を検証したか
 - 今後どう拡張していくか
 - 開発を通じて何が分かったか
@@ -1949,7 +2380,6 @@ HomePilotでは、
 - EvenHub
 - Even Realities G2
 - Browser microphone
-- SSE
 - Local LLM
 
 では、この考え方が非常に重要でした。
@@ -1982,13 +2412,17 @@ HomePilot開発で非常に大きな意味を持ったのが、AIの役割分担
                        │
                        ▼
 ┌─────────────────────────────────────────────┐
-│              OpenCode / MiMo                │
+│                 Kilo                        │
 │                                             │
-│  実装 / コード変更 / Build修正 / Refactor   │
+│  実装 / コード変更 / テスト・Build支援      │
 └─────────────────────────────────────────────┘
 ```
 
 この役割分担は意図的なものです。
+
+上のKiloは、このリポジトリを開発するCoding Agentです。HomePilot自身が実行時に
+利用するOpenCodeサーバーとは別物です。[6章](#6-coding-agentの役割) を
+参照してください。
 
 ---
 
@@ -2007,6 +2441,8 @@ HomePilot開発で非常に大きな意味を持ったのが、AIの役割分担
 - UXを判断する
 - 本当に直ったか確認する
 - 完成と判断する
+- commit・push
+- デプロイ
 
 といった部分です。
 
@@ -2042,15 +2478,19 @@ ChatGPTと相談
 設計
  ↓
 実装仕様を作成
- ↓
-MiMoへ依頼
- ↓
+  ↓
+Kiloへ依頼
+  ↓
 実装確認
- ↓
-Build / Test
- ↓
+  ↓
+人間がBuild / Test
+  ↓
+人間が実機で確認
+  ↓
+人間がcommit / push
+  ↓
 実測結果を確認
- ↓
+  ↓
 再度相談
 ```
 
@@ -2060,9 +2500,9 @@ Build / Test
 
 ---
 
-# 6. OpenCode / MiMoの役割
+# 6. Coding Agentの役割
 
-OpenCodeとMiMoは主に実装担当です。
+Kiloは、このリポジトリを開発する現在のメインCoding Agentです。
 
 担当した作業は、
 
@@ -2076,6 +2516,7 @@ OpenCodeとMiMoは主に実装担当です。
 - Voice Input実装
 - Persistent State実装
 - 既存機能を維持した上での仕様変更
+- テスト・Buildの実行と失敗の調査
 
 などです。
 
@@ -2088,6 +2529,25 @@ OpenCodeとMiMoは主に実装担当です。
 > 「現在こう動いている。こうしたい。ただしここは絶対に変えるな」
 
 という形で実装を依頼することを重視しました。
+
+## OpenCode / MiMoについて（歴史）
+
+OpenCodeとMiMoは、初期のPhaseで主要的Coding Agentとして使用されていました。この
+ドキュメントに記録したAPI調査、仕様書を先に渡す方式、レビューという手順は、その
+取り組みから得られたもので、Kiloでもそのまま有用です。
+
+現在はKiloがメインCoding Agentに置き換わっています。ただしOpenCodeをシステムから
+廃止したわけではありません。OpenCodeは現在もHomePilotが実行時に利用しているAgent
+実行基盤です。HomePilotはGateway経由でOpenCodeサーバーと通信し、Agent Sessionを
+実行します。したがって[16章](#16-opencode-apiの実測)以降に残っているOpenCode APIの
+調査・実装知見は、現在の仕様として依然として有効です。
+
+この2つは混同してはいけません。
+
+```text
+このリポジトリを開発するCoding Agent  →  Kilo
+HomePilot内部のAgent実行基盤            →  OpenCode
+```
 
 ---
 
@@ -2468,7 +2928,7 @@ GET  /session
 GET  /session/{sessionID}
 GET  /session/{sessionID}/message
 
-SSE
+POST /session/{sessionID}/message
 
 GET  /question
 POST /question/{questionID}/reply
@@ -2481,11 +2941,16 @@ OpenCodeをアップデートした場合は、これらの動作を再確認す
 
 ---
 
-# 17. SSE
+# 17. Agent状態更新方式（SSE調査の履歴）
 
-Agent状態更新にはSSEを利用しています。
+> **過去の内容です。** この節のSSEによるイベントモデルは、初期のPhaseで調査・実装した
+> ものです。現在のHomePilotはSSEを使用していません。API調査そのものは現在も価値が
+> あり、現在の方式がなぜ今の形になっているかを理解する手がかりにもなるため、残して
+> います。
 
-確認したイベント例：
+## 調査したこと
+
+Agent状態更新の手段としてSSEを検討しました。OpenCodeサーバー上で確認したイベントは、
 
 ```text
 question.replied
@@ -2498,29 +2963,49 @@ session.updated
 session.diff
 ```
 
-典型的には、
+で、典型的なAgent処理の流れは、
 
 ```text
 session.status: busy
- ↓
+  ↓
 assistant message
- ↓
+  ↓
 reasoning
- ↓
+  ↓
 tool
- ↓
+  ↓
 permission
- ↓
+  ↓
 permission reply
- ↓
+  ↓
 tool complete
- ↓
+  ↓
 assistant response
- ↓
+  ↓
 session.idle
 ```
 
 という流れになります。
+
+## 現在のHomePilotの方式
+
+現在の実装はストリーミング接続を開かず、[16章](#16-opencode-api実測)に挙げた通常の
+REST APIでAgent状態を取得します。
+
+```text
+POST /session/{sessionID}/message   → 送信後、メッセージ一覧を取得
+GET  /session/{sessionID}/message   → 現在の状態を取得
+GET  /question                       → 保留中のQuestionを取得
+```
+
+PWAの `useOpenCode` は、メッセージ送信後に `getMessages()` を1回呼んで権威のある
+メッセージ状態を取得し、最後のassistantメッセージの `finish === 'stop'` を条件に
+Processingフラグを解除します。G2の `g2-agent-controller` も同様に、ProcessingとUnread
+状態を組み立てるときにメッセージ一覧を取得し、最後のメッセージから完了を判定します。
+
+結果として、現在の方式はイベント配信ではなくリクエスト／レスポンスです。この
+ドキュメントで説明しているProcessing / Unreadの仕様はそのまま有効ですが、それらを
+駆動しているのは状態のpushではなく取得です。
 
 ---
 
@@ -2726,6 +3211,38 @@ modelSelectPage
 > 「前回どこにいたか」
 
 を復元できます。
+
+その後、履歴画面にも同じ仕組みが適用され、次が増えました。
+
+```text
+historyReturnPage
+historyPage
+```
+
+`historyReturnPage` は履歴を開いた元の画面を保持し、Double Tapでそこへ戻れるように
+しています。起動時から履歴を開いた場合はこの値がないため、その場合のDouble Tapは
+ホームへ移動します。この分岐は意図的なものです。まとめないようにしてください。
+
+`G2RuntimeManager.navigateToHome()` は戻り先をすべて一度に破棄します
+（`historyReturnPage`、`agentReturnPage`、`historyPage`、`sessionListPage`、
+`modelSelectPage`）。ホームへ戻ることは、画面の切り替えではなくナビゲーション状態の
+リセットであることを意味します。
+
+### ルートとしてのホーム画面
+
+ホーム画面がルートです。ファイルを閲覧する機能ではなく、どのファイルシステムを
+使うかを選ぶだけの画面です。ここから2つの帰結があります。
+
+- 選択は保存されません。シャットダウン時に `connectionMode` は `'gateway'` へ戻され、
+  Gatewayが設定されていれば次の起動は自宅PC側から始まります。
+- 他のすべての画面は、`BasePage.addHomeMenuItem()` によってコンテキストメニューの
+  **先頭** に「ホーム画面へ」を追加します。実装はメニュー配列への `unshift` なので、
+  各画面は自分の項目だけを宣言します。ホーム自身は `onNavigateToHome` を設定しない
+  ため、この項目は表示されません。
+
+画面ごとのメニュー内容は `src/hud/__tests__/g2-home-navigation.test.ts` で固定され
+ています。画面やメニュー項目を追加するときは、その期待値も更新してください。放置
+すると契約が静かに崩れます。
 
 ---
 
@@ -2939,7 +3456,7 @@ Gatewayを導入。
 
 ---
 
-# 31. Phase 2 — Agent Integration
+## Phase 2 — Agent Integration
 
 OpenCodeをAgent基盤として導入。
 
@@ -2951,7 +3468,7 @@ OpenCodeをAgent基盤として導入。
 - Messages
 - Agent Response
 - Model Selection
-- SSE
+- Agent状態更新
 - Permission
 - Question
 
@@ -2963,7 +3480,7 @@ OpenCodeをAgent基盤として導入。
 
 ---
 
-# 32. Phase 3 — Explorer × Agent Integration
+# 31. Phase 3 — Explorer × Agent Integration
 
 正式名称：
 
@@ -3027,7 +3544,7 @@ PWA Agent UXの仕上げ。
 - Context仕様
 - Processing
 - Unread
-- SSE / Agent State Sync
+- Agent State Sync
 - Date / Time
 - Regression
 
@@ -3041,7 +3558,7 @@ Unreadについて、
 
 ---
 
-# 33. Phase 4 — Even Realities G2
+# 32. Phase 4 — Even Realities G2
 
 G2実機への本格対応。
 
@@ -3068,7 +3585,43 @@ Phase 4で特に重要だったのは、
 
 ---
 
-# 34. G2実機から得た知見
+## Phase 5 — 実運用
+
+ここまでのPhaseは、当初の計画された機能セットに到達するまでのものです。それ以降の
+作業は実際の日常利用の中で行われたもので、当初の計画には含まれていなかったため、
+別途まとめています。
+
+このPhaseを貫くテーマが2つあります。
+
+**2つ目のファイルシステム。** Gatewayに到達できないときもHomePilotが使えるように
+Local FileSystemを追加しました。すべてのファイル操作に2つ目の実装、履歴と既読位置に
+2つ目の保存先、そして両者が混ざらないようにする仕組みが必要になりました。
+[51章](#51-filesystem抽象化) を参照してください。
+
+**実機に合うナビゲーション。** G2にホーム画面と履歴画面が追加され、すべての画面から
+ホームへ戻れるコンテキストメニュー項目が加わりました。GatewayにはHiddenファイルの
+フィルタが入り、ViewerStateは公開ディレクトリの外へ移動しました。
+
+このPhaseで扱った主な領域：
+
+- 履歴画面（自宅PCとアプリローカルの両方）
+- ファイル作成、フォルダ作成、名前変更、移動、複製、削除、アップロード、ダウンロード、ZIP
+- File Viewer上でのテキスト編集
+- 並び順切替
+- カラーテーマ、自動スクロール設定、G2の起動画面設定
+- 自宅PCとアプリ間のコピー（ExplorerとFile Viewerの両方から）
+- ローカルストレージ使用量の表示
+- Gatewayのリクエスト単位のエラー処理とタイムアウトの延長
+- Agentの応答性を高めるためのタイムアウト見直し
+
+このPhaseの主要な教訓は次のとおりです。
+
+> **片方のクライアントで動いた機能は、もう片方が保存場所・ナビゲーション・状態に
+> 同意するまで完成ではない。**
+
+---
+
+# 33. G2実機から得た知見
 
 G2実装では、
 
@@ -3110,7 +3663,7 @@ Gateway側もFault Tolerantにすることで解決しました。
 
 ---
 
-# 35. EvenHub SDKから得た知見
+# 34. EvenHub SDKから得た知見
 
 EvenHub SDKについても、
 
@@ -3138,7 +3691,7 @@ OpenCode APIと同様、
 
 ---
 
-# 36. Local LLM
+# 35. Local LLM
 
 当初は、
 
@@ -3190,7 +3743,7 @@ LauncherからLocal ModelのLoadも可能です。
 
 ---
 
-# 37. テスト思想
+# 36. テスト思想
 
 HomePilotでは複数段階でテストします。
 
@@ -3251,7 +3804,7 @@ Real-world usage
 
 ---
 
-# 38. Regression
+# 37. Regression
 
 HomePilotは継続的に使うシステムです。
 
@@ -3285,7 +3838,6 @@ Test
 - Processing
 - Unread
 - Voice
-- SSE
 - Local LLM
 
 は実際に使い続けることで見つかる問題があります。
@@ -3298,7 +3850,7 @@ Test
 
 ---
 
-# 39. 新機能実装時の基本フロー
+# 38. 新機能実装時の基本フロー
 
 ## Step 1 — 問題定義
 
@@ -3341,7 +3893,7 @@ Test
 
 ## Step 4 — 仕様化
 
-MiMoへ渡すImplementation Promptを作ります。
+Kiloへ渡すImplementation Promptを作ります。
 
 含めるもの：
 
@@ -3360,7 +3912,7 @@ Acceptance criteria
 
 ## Step 5 — 実装
 
-OpenCode / MiMoに実装を依頼します。
+Kiloに実装を依頼します。
 
 ---
 
@@ -3400,7 +3952,7 @@ Case 2: FAIL
 
 ---
 
-# 40. AIへの実装依頼の書き方
+# 39. AIへの実装依頼の書き方
 
 基本形：
 
@@ -3445,7 +3997,7 @@ Case 2: FAIL
 
 ---
 
-# 41. 既存機能を守る
+# 40. 既存機能を守る
 
 特に重要だった教訓：
 
@@ -3469,7 +4021,7 @@ AI Coding Agentを使う場合、このような制約を書くことが非常�
 
 ---
 
-# 42. 小さく変更する
+# 41. 小さく変更する
 
 HomePilotは、
 
@@ -3505,7 +4057,7 @@ Commit
 
 ---
 
-# 43. Git Workflow
+# 42. Git Workflow
 
 基本：
 
@@ -3522,7 +4074,7 @@ git status
 
 ---
 
-# 44. Commit
+# 43. Commit
 
 1つのCommitには、なるべく1つの意味を持たせます。
 
@@ -3546,7 +4098,7 @@ Fix stuff
 
 ---
 
-# 45. Debugging
+# 44. Debugging
 
 問題が発生したら、いきなり大改修しません。
 
@@ -3600,6 +4152,31 @@ Speech Worker
 
 ---
 
+# 45. Local LLM Debugging
+
+Local LLMでは、
+
+```text
+HomePilot
+Gateway
+OpenCode
+LM Studio
+Model
+Quantization
+Hardware
+Context
+```
+
+のどこで問題が起きているかを切り分けます。
+
+まず、
+
+> **どのLayerで失敗したか？**
+
+を確認します。
+
+---
+
 # 46. Cloudflare Workerのデプロイ確認
 
 Cloudflare Workerでは、
@@ -3650,32 +4227,7 @@ HomePilotのVoice Input開発では、
 
 ---
 
-# 47. Local LLM Debugging
-
-Local LLMでは、
-
-```text
-HomePilot
-Gateway
-OpenCode
-LM Studio
-Model
-Quantization
-Hardware
-Context
-```
-
-のどこで問題が起きているかを切り分けます。
-
-まず、
-
-> **どのLayerで失敗したか？**
-
-を確認します。
-
----
-
-# 48. ドキュメント方針
+# 47. ドキュメント方針
 
 3つのドキュメントを役割分担します。
 
@@ -3695,7 +4247,7 @@ Context
 
 ---
 
-# 49. 今後のドキュメント更新
+# 48. 今後のドキュメント更新
 
 ### 新機能
 
@@ -3730,7 +4282,7 @@ README.md
 
 ---
 
-# 50. 今後の拡張
+# 49. 今後の拡張
 
 HomePilotの当初の主要ゴールはほぼ達成しています。
 
@@ -3762,7 +4314,7 @@ HomePilotの当初の主要ゴールはほぼ達成しています。
 
 ---
 
-# 51. 現在の完成基準
+# 50. 現在の完成基準
 
 HomePilotの主要ゴールは、以下が動作することをもって達成とします。
 
@@ -3778,8 +4330,6 @@ Agent
 Sessions
    ✓
 Messages
-   ✓
-SSE
    ✓
 Permissions
    ✓
@@ -3807,6 +4357,12 @@ External Agent Result Detection
    ✓
 Local LLM Integration
    ✓
+Local FileSystem
+   ✓
+Copy between home PC and app
+   ✓
+G2 Home screen and History
+   ✓
 ```
 
 今後残るのは主に、
@@ -3821,7 +4377,317 @@ Local LLM Integration
 
 ---
 
-# 52. 最後に
+# 51. FileSystem抽象化
+
+PWAとG2は、どちらも1つのインターフェース `src/services/FileSystemService.ts` を
+通してファイルへアクセスします。実体は次の3つの実装です。
+
+| Implementation | Backing | Used when |
+|---|---|---|
+| `GatewayFileSystemService` | The Gateway, over HTTP | 「自宅PC」を選択しているとき |
+| `LocalFileSystemService` | `localStorage` | 「アプリ」を選択しているとき |
+| `MockFileSystemService` | In-memory sample data | `VITE_FILE_SERVICE_MODE=mock` のときのみ |
+
+インターフェースは、一覧・読み取り・書き込み・フォルダ作成・名前変更・削除・移動・複製
+をカバーし、任意の並び順を受け取ります。
+
+`services/FileSystemSelection.ts` がファクトリと2つのラベル
+（`local → アプリ`、`gateway → 自宅PC`）を持ちます。選択肢を描画するのは
+`HomeScreen.tsx`（PWA）と `home-page.ts`（G2）で、どちらも保存しません。
+
+### 2つを分離し続けるルール
+
+Gatewayへ永続化するものは **一切 `localStorage` へフォールバックしてはいけません**。
+逆も同様です。そのため `SharedPositionStore.ts` と
+`hud/services/g2-shared-position-store.ts` は、エラーを握りつぶして `null` を返します。
+Gatewayが無いのは「位置が無い」であって、「別の位置がある」わけではありません。
+
+`LocalReadingPositionStore.ts` はテストでこのルールが固定されています。
+キー `homepilot.fileViewerPositions` には一切書き込まないことを表明しているので、
+`/pc/a.txt` の位置が `/local/a.txt` の位置に漏れることはありません。
+
+Storeを追加するときは、この不変条件を保ってください。沈黙したフォールバックが、
+「自分の端末では動いたのに、別の端末ではおかしい値が出る」という障害の原因になります。
+
+### `resolveExplorerBackTarget`
+
+ファイルシステムのルートにいるとき、PWAはそのまま残らずホームへ戻ります。これは
+`FileSystemSelection.ts` の小さな関数のまま、専用のテストを維持しています。
+
+---
+
+# 52. Local FileSystemの内部構造
+
+`src/services/LocalFileSystemService.ts`。
+
+すべては1つの `localStorage` の値に収まっています。
+
+```text
+key:    homepilot.localFileSystem
+value:  a flat JSON map keyed by absolute '/' separated path
+```
+
+プロジェクト全体にIndexedDBはありません。ファイルの中身はエントリの中に直接持ちます。
+
+```text
+{ type, name, parent, content?, size?, mimeType?, modifiedAt? }
+```
+
+### 変更時に守るべき制約
+
+- **変更のたびにJSON全体を書き直します。** これが simplicity の理由であり、データ量が
+  増えると遅くなる理由でもあります。「1件だけ読む」最適化を入れるなら、書き込み時の
+  全体書き直しを受容してからにしてください。
+- **書き込みの順序が重要です。** `persist()` は `localStorage.setItem` が成功して
+  からのち初めて `this.entries` を代入します。この2行を入れ替えると、quota超過時に
+  メモリ上のファイルシステムと実際の保存内容がずれます。
+- **Quotaエラーは例外ではなく想定内です。** `isQuotaExceededError` は
+  `QuotaExceededError`、`NS_ERROR_DOM_QUOTA_REACHED`、`/quota/i` を認識し、
+  ユーザーには `LOCAL_FS_QUOTA_MESSAGE` が表示されます。このメッセージは
+  テストで表明されているため、安定を保ってください。
+- **壊れた、または認識できないpayloadは、空のrootへリセットするだけ。**
+  `isEntries()` は厳格なので、一部だけ書き込まれた値は中途半端に読み込まれません。
+- **テキストのみ。** `readFile` は内容を持たないエントリに対して `''` を返し、
+  uploadは `File.text()` を通します。`getDownloadUrl` と `downloadItems` は
+  `null` / `{}` を返すスタブです。ここにdownloadを実装する場合も、
+  ダウンロードすべきバイナリは存在しないことを覚えておいてください。
+- **MIMEは8項目の拡張子テーブルの固定です。** 未知の拡張子は `undefined` になります。
+
+### 使用量を取り出す
+
+`src/services/StorageUsage.ts` は3つの別の数値を報告します。それらは相互に
+置き換え可能ではありません。
+
+| Value | Source | Meaning |
+|---|---|---|
+| `fileSystemBytes` | `localStorage` の生文字列長（UTF-8） | 構造全体が占める場所 |
+| `fileContentBytes` | `size` の合計（無ければ内容長） | ファイルの内容が占める場所（フォルダは含まない） |
+| `siteUsageBytes` | `navigator.storage.estimate().usage` | origin全体に対するブラウザの概算 |
+
+`quota` は **意図的に読みません。** それは `localStorage` の残り容量ではないため、
+表示すると誤解を招きます。残容量や警告しきい値の表示はありません。
+
+`siteUsageBytes` は意図的に3状態あります。`undefined` は読み込み中、`null` は
+取得できなかった（`navigator.storage` が無い、非secure context、またはAPIが拒否した）
+場合です。ある端末では3つ目がただ取得できず、UIには「取得できません」と表示されます。
+`null` を直すべきバグとして扱わないでください。
+
+---
+
+# 53. 自宅PCとアプリ間のコピー
+
+`src/services/FileSystemCopy.ts`。`App.tsx` から呼ばれます。
+
+コピーは **クライアント内で** 実行されます。一方のserviceから読み、もう一方へ
+書き込みます。Gatewayの処理ではないため、アプリへのコピーにはGatewayが不要ですが、
+自宅PCへのコピーには必要です。
+
+メニューの表示条件は意図的に非対称です（`App.tsx`）。
+
+```text
+"アプリへコピー"    isGatewayService(fileService)
+"自宅PCへコピー"   fileService instanceof LocalFileSystemService
+                  && resolveConfig().mode === 'gateway'
+```
+
+鏡像になっている条件は意図的です。「自宅PCへコピー」はさらに
+`createInitializedGatewayService()` が必要で、これはGatewayに到達できない場合に
+throwします。コピーが着地する先である自宅PCには、到達できる必要があるからです。
+
+どちらの項目も2箇所で描画されます。Explorerのメニュー（選択中の項目用）と
+File Viewerのメニュー（閲覧中のファイル用）です。File Viewer側は現在のファイルだけを
+対象にします。
+
+`CopyInProgressIndicator` は最初の `await` の前からコピーが終わるまで表示します。
+大きなツリーのコピーは、それ以外のフィードバックがないまま相当時間かかることがあるためです。
+
+---
+
+# 54. GatewayのViewerState
+
+閲覧履歴と既読位置の自宅PC側をGatewayが保持します。PWAとG2が同じ場所をread/writeする
+ことが重要で、それによって片方で開いたファイルがもう片方で続きから開けるようになります。
+
+### 保存場所と移行
+
+```text
+new:    %LOCALAPPDATA%\HomePilot\.HomePilotViewerState.json
+        (HOMEPILOT_VIEWER_STATE_DIR で上書き可)
+legacy: <ROOT_PATH>/.HomePilotViewerState.json
+```
+
+`viewerStateReadPaths()` は `[new, legacy]` を返し、readerは存在した最初のものを
+使います。`ENOENT` の場合だけ次の候補に進みます。存在するのにparseできない場合や、
+`version` が想定外のpayloadは `DEFAULT_VIEWER_STATE` にリセットされます。
+
+意図的で「直すべきではない」帰結：
+
+- **legacyファイルに書き込むことも、削除することもありません。** 移行はread-throughで
+  あって移動ではありません。root配下に古いファイルが残るのは、ユーザーが自分で
+  削除するまでのことです。
+- **rootの外に置いていることが本質です。** このファイルは内部状態です。公開している
+  root配下にあったら、ユーザーの一覧に出現してしまいます。
+
+Shape: `{ version: 1, positions: { [path]: { progress, updatedAt } }, history: [{ path, lastViewedAt }] }`。
+
+`positions` はピクセルオフセットではなく 0.0〜1.0 の比率です。`history` は新しい順で
+`HISTORY_MAX_ENTRIES`（既定30）で切り詰められます。positionの書き込みは `updatedAt`
+によるlast-writer-winsです。どちらにもTTLはありません。
+
+### クライアント側のposition store
+
+- Gateway側: `SharedPositionStore.ts`（PWA）と
+  `hud/services/g2-shared-position-store.ts`（G2）。ロジックは同じですがモジュールは
+  分れています。G2のHUDはReactツリーからimportしてはいけないためです。
+- アプリ側: `LocalReadingPositionStore.ts`、キー `homepilot.localFileViewerPositions`、
+  最大100件、TTLなし。PWAとG2の両方がread/writeします。
+
+Debounceはクライアントで異なります。PWAの `FileViewer` は400 ms、G2の
+`FileViewerPage` は2000 msです（G2はトンネル経由の書き込みなので、よりまとめて書きます）。
+
+### 見つかるかもしれないdead code
+
+`FileViewerPositionStore.ts`（キー `homepilot.fileViewerPositions`）は、生のピクセル
+positionを `g2|path` / `pwa|path` キーで保持し、180日のTTLを持ちます。
+**これをimportしているものはありません。** 古いビルドがこのキーに書いたデータは現在の
+どのコードパスからも読まれず、移行もしません。放置するか意図的に削除するかしてください。
+再度つなぎ直さないでください。
+
+---
+
+# 55. Gatewayで壊れやすい挙動
+
+### 1リクエストでプロセスを落とさない
+
+`createServer` はハンドラをpromise rejection handlerで包んでいます
+（`gateway/src/index.js`）。ハンドラがthrowした場合、そのリクエストにHTTP 500を
+返すだけで、ほかの何かは起きません。すでにヘッダを送信済みの場合（ストリーミングの
+upload、download、OpenCodeプロキシ）はsocketを破棄します。
+
+これはスタイルではなく信頼性の要件です。GatewayはCloudflareトンネルを支えている唯一の
+要素なので、Nodeプロセスを終了させる1件のリクエストがあれば、すべてのクライアントが
+同時に落ちます。`gateway/test/server-resilience.test.js` がこれを保護しています。
+通し続けるようにしてください。
+
+routeを追加するときは、failure pathがハンドラの外へ漏れるのではなくエラーを返すように
+してください。
+
+### タイムアウト
+
+`server.timeout`、`headersTimeout`、`requestTimeout` はいずれも3時間
+（`gateway/src/index.js`）です。Nodeの既定の `headersTimeout` は、OpenCode経由の
+長時間コマンドを壊すには短すぎます。下げるとその障害が再発します。
+
+### Hiddenファイル
+
+`gateway/src/hiddenFiles.js` は、ディレクトリ一覧ごとにPowerShellのprobe
+（`Get-ChildItem -Force -Attributes Hidden`）を実行し、結果をフィルタします。
+
+重要な詳細：
+
+- **Windowsのみ。** 他のプラットフォームでは空の集合を返します。
+- **Fail-open。** エラーはすべて空の集合に解決されるので、一覧はフィルタされません。
+  これは意図的です。`powershell.exe` が無いだけでExplorerが使えなくなるのは
+  望ましくありません。代償は、失敗が「Hiddenファイルが表示されている」に
+  見えることです。
+- **アクセス制御ではありません。** パスでHiddenファイルを読み取ることを止めるものが
+  ありません。一覧から隠すだけです。
+- パスはコマンドラインではなく環境変数で渡し、コマンドは `-EncodedCommand` です。
+  スクリプトを文字列連結で作らないでください。意図的なinjection対策であり、
+  `hidden-files.test.js` がそれを検証しています。
+
+probeは `readdir` より前に開始し、後でawaitします。これによりPowerShellの起動と
+ディレクトリ読み込みが重なります。ハンドラを触るときは、この順序を保ってください。
+
+### パスの検証
+
+`pathValidator.js` は相対パスを拒否し、正規化して解決し、rootに対する相対パスを
+確認し、**さらに `realpath` の後に再確認します。** 2回目の確認が、root内の
+シンボリックリンクの脱出を防ぎます。`realpath` の手順は、冗長であるからという理由で
+削除しないでください。
+
+### Upload
+
+Busboyは `files: 100` ですが `fileSize: Infinity` です。uploadに1ファイルあたりの
+サイズ制限はありません。`MAX_FILE_SIZE`（10 MB）が適用されるのはread/write側の
+エンドポイントで、uploadではありません。uploadはroot配下のtempディレクトリに
+ステージし、成功・失敗のどちらもクリーンアップします。
+
+---
+
+# 56. G2の音声入力の制限
+
+両クライアント共通で、異なる場所で強制されています。
+
+| Limit | Value | Enforced in |
+|---|---|---|
+| 録音時間 | 60 s | `useSpeechRecognition.ts`, `g2-agent-controller.ts` |
+| 音声ペイロード | 5 MB | `gateway/src/config.js` |
+| 受け付けるContent-Type | `audio/webm`, `audio/mp4`, `audio/wav` | `gateway/src/speech.js` |
+| Speech Workerタイムアウト | 60 s | `gateway/src/config.js` |
+
+G2はsigned 16-bit PCMを16 kHz monoで録音し、WAV化は自身で行います。PWAは
+`MediaRecorder` を使い、`MediaRecorder.isTypeSupported` でtype交渉するため、実際の
+formatはブラウザに依存します。
+
+`cancelVoiceInput()` はrequest idをインクリメントするので、キャンセルした録音に
+遅れて届いた応答は破棄されます。音声フローを触るときは、このガードを保ってください。
+
+---
+
+# 57. ストレージのキー
+
+HomePilotがブラウザに永続化するものすべてと、その保存先。
+
+| Key | Written by | Scope |
+|---|---|---|
+| `homepilot.localFileSystem` | `LocalFileSystemService` | アプリのファイルシステム |
+| `homepilot.localFileHistory` | `LocalHistoryStore` | アプリ履歴、30件 |
+| `homepilot.localFileViewerPositions` | `LocalReadingPositionStore` | アプリのposition、100件 |
+| `homepilot-connection` | `ConnectionConfig` | GatewayのURLとtoken |
+| `homepilot.g2StartupScreen` | `G2StartupScreenSettings` | `explorer`（既定）, `home`, `agent`, `history` |
+| `homepilot.autoScroll` | `AutoScrollSettings` | 間隔と量 |
+| `homepilot.colorTheme` | `ColorThemeSettings` | `system`, `light`, `dark`（既定 `dark`） |
+| `homepilot-agent-settings` | `useOpenCode` | 選択中のproject, provider, model |
+| `homepilot-session-lastChecked` | `useOpenCode`, G2 agent state store | Unreadの基準、PWA/G2で共有 |
+| `homepilot-processing-sessions` | `useOpenCode`, G2 agent state store | Processing復旧、24 h TTL |
+| `homepilot.fileViewerPositions` | — | **未使用。** [54章](#54-gatewayのviewerstate) を参照 |
+
+意図的に **永続化していない** ものが2つあります。並び順（Reactのstate / class
+フィールドのみ）と、G2のファイルシステムの選択（シャットダウン時に `'gateway'` へ
+戻す）です。どちらもセッションレベルの設定として意図されたものなので、理由なしに
+永続化を追加しないでください。
+
+接続情報が保存されておらず `VITE_FILE_SERVICE_MODE` が `gateway` でもない場合、
+`resolveConfig()` は `{ mode: 'mock' }` にフォールバックします。設定していないPWAで
+「自宅PC」がホーム画面に出てこず、Agentペインが隠れ、自宅PCへのコピーが使えないのは
+このためです。
+
+---
+
+# 58. テストとBuild
+
+| Project | Command | Runner |
+|---|---|---|
+| `gateway` | `npm test` | `node --test` (`gateway/test/*.test.js`) |
+| `explorer/cloudflare` | `npm test` | `vitest` (`src/**/__tests__/*.test.ts`) |
+| `speech-worker` | `npm run test` | `vitest` (watch mode) |
+
+PWAのテストは、対象コードの隣の `__tests__` フォルダに置かれ、名前は対象のmoduleに
+従っています。リポジトリのルートに `tests/` ディレクトリはなく、ルートレベルのnpm
+workspaceもありません。各projectが独立してinstallします。
+
+G2の挙動のうち、静かに壊れやすいものは
+`src/hud/__tests__/g2-home-navigation.test.ts` が固定しています。このテストは
+すべてのG2画面のcontext menu全体を表明します。画面やメニュー項目を追加するときは、
+その期待値も更新してください。
+
+Buildは両フロントエンドで `npm run build`（`tsc -b && vite build`）、EvenHubの
+packageは `npm run pack` です。
+
+---
+
+# 59. 最後に
 
 HomePilot開発で最も重要だったのは、特定のFrameworkやAPIではありません。
 

@@ -2,7 +2,14 @@
 
 This document describes how to prepare, configure, run, test, and deploy HomePilot.
 
+If you only want a working HomePilot and not a full development environment, follow
+[`GETTING_STARTED.md`](GETTING_STARTED.md) instead. It is a shorter, ordered path to the
+same running system.
+
 このドキュメントでは、HomePilotをゼロからセットアップし、起動・動作確認・実機確認・本番デプロイまで行うための手順を説明します。
+
+実際に動かすところまでだけでよい場合は、より短い手順書である
+[`GETTING_STARTED.md`](GETTING_STARTED.md) を参照してください。
 
 ---
 
@@ -156,6 +163,25 @@ OpenCode Server is expected at:
 
 These values are part of the current implementation.
 
+### Gateway environment variables
+
+The Gateway reads these variables from the process environment. The launcher passes
+them to the Gateway process; when starting the Gateway by hand, set them yourself.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HOMEPILOT_ROOT` | `C:\hp1` | The directory exposed as the home PC file system. |
+| `HOMEPILOT_VIEWER_STATE_DIR` | `%LOCALAPPDATA%\HomePilot` | Where the viewer state file is stored. |
+| `HISTORY_MAX_ENTRIES` | `30` | How many view history entries to keep. |
+| `HOMEPILOT_WORKER_URL` | *(empty)* | Speech Worker URL. Required for voice input. |
+| `HOMEPILOT_WORKER_SECRET_TOKEN` | *(empty)* | Secret sent to the Speech Worker. |
+| `HOMEPILOT_POWERSHELL_BIN` | `powershell` | PowerShell executable, used for the hidden file check. |
+
+`ROOT_PATH` is the name used in `launcher/.env`. The launcher reads it and passes it to
+the Gateway as `HOMEPILOT_ROOT`.
+
+See [Section 8](#8-launcher) for the launcher configuration.
+
 ---
 
 ## 5. Home PC Test Directory
@@ -175,6 +201,23 @@ The Gateway must be configured so that this directory becomes the HomePilot file
 Do not use an unrestricted system directory as the Gateway root.
 
 The Gateway explicitly protects access outside the configured root.
+
+### What the user does and does not see
+
+A few things are worth knowing before you start.
+
+The root directory is the **only** home PC directory HomePilot can reach. Paths that
+resolve outside it are rejected, including through symbolic links.
+
+Within the root, entries carrying the Windows **Hidden attribute** are left out of
+directory listings. This is a display filter applied by the Gateway, not an access
+control, and it cannot be switched off. It is based on the Hidden attribute rather
+than on the file name, so `.env` is *not* hidden by this rule while a dotless name
+with the Hidden attribute *is*. On non-Windows hosts no filtering is applied.
+
+HomePilot's own viewer state file is **not** stored in this directory, so it never
+appears in the user's listings. See
+[Section 7.1](#71-viewer-state-file-location).
 
 ---
 
@@ -230,6 +273,12 @@ Verify directory access:
 curl -H "Authorization: Bearer <TOKEN>" "http://127.0.0.1:51887/api/fs/directory?path=C:\HomePilotTest"
 ```
 
+The directory listing can be sorted by modification time by adding `sort`:
+
+```powershell
+curl -H "Authorization: Bearer <TOKEN>" "http://127.0.0.1:51887/api/fs/directory?path=C:\HomePilotTest&sort=modified"
+```
+
 Verify file access:
 
 ```powershell
@@ -251,6 +300,63 @@ curl -H "Authorization: Bearer <TOKEN>" "http://127.0.0.1:51887/api/fs/directory
 ```
 
 The request should not be allowed.
+
+Every endpoint requires the token. There is no unauthenticated route, including
+`/api/health`.
+
+---
+
+### 7.1 Gateway API overview
+
+The commands above cover the read-only endpoints. The Gateway also exposes the write
+and viewer-state endpoints that the PWA and the G2 use.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/health` | Liveness check |
+| `GET` | `/api/fs/root` | The configured root directory |
+| `GET` | `/api/fs/directory` | List a directory (`path`, optional `sort`) |
+| `GET` | `/api/fs/file` | Read a text file (`path`) |
+| `POST` | `/api/fs/file` | Write or overwrite a text file (`path`, `content`) |
+| `POST` | `/api/fs/upload` | Upload files and folders (multipart) |
+| `POST` | `/api/fs/rename` | Rename an item |
+| `POST` | `/api/fs/delete` | Delete one or more items |
+| `POST` | `/api/fs/mkdir` | Create a directory |
+| `POST` | `/api/fs/move` | Move items into a directory |
+| `POST` | `/api/fs/copy` | Copy items into a directory |
+| `GET` | `/api/fs/download` | Download one file |
+| `POST` | `/api/fs/download` | Download several files as a ZIP |
+| `GET` | `/api/viewer-state` | Read the viewer state |
+| `PATCH` | `/api/viewer-state/position` | Record a reading position |
+| `PATCH` / `DELETE` | `/api/viewer-state/history` | Add or remove a history entry |
+| `POST` | `/api/speech/transcribe` | Speech to text |
+| `*` | `/api/opencode/*` | Proxy to the OpenCode server |
+
+The proxy prefix `/api/opencode/` forwards the request to the OpenCode server, so the
+client never talks to port 4096 directly.
+
+---
+
+### 7.2 Viewer state file location
+
+The Gateway stores view history and reading positions in a single file:
+
+```text
+%LOCALAPPDATA%\HomePilot\.HomePilotViewerState.json
+```
+
+The directory comes from `HOMEPILOT_VIEWER_STATE_DIR`, defaulting to
+`%LOCALAPPDATA%\HomePilot`. Set the variable before starting the Gateway to place it
+elsewhere.
+
+Earlier versions stored the same file directly under the exposed root directory. The
+Gateway still reads that older file when it exists, so existing history and reading
+positions carry over. It is not written to, and not deleted, by HomePilot itself; the
+file is simply left as it is.
+
+The number of history entries kept is controlled by `HISTORY_MAX_ENTRIES` (default 30)
+in `launcher/.env`. Reading positions are not limited by that setting and are not
+expired by age.
 
 ---
 
@@ -330,9 +436,17 @@ HOMEPILOT_WORKER_URL=https://<your-worker>.workers.dev
 HOMEPILOT_WORKER_SECRET_TOKEN=<your-secret>
 
 LOCAL_MODEL=<optional-local-model-id>
+
+HISTORY_MAX_ENTRIES=30
 ```
 
 The current launcher validates the Worker URL and Worker secret before starting.
+
+`ROOT_PATH` is the directory exposed as the home PC file system. The launcher passes it
+to the Gateway as `HOMEPILOT_ROOT`.
+
+`HISTORY_MAX_ENTRIES` is optional and sets how many view history entries the Gateway
+keeps. The default is 30.
 
 `LOCAL_MODEL` is optional.
 
@@ -343,6 +457,16 @@ The current implementation expects LM Studio at:
 ```text
 http://127.0.0.1:1234
 ```
+
+### What the launcher exposes to the outside
+
+The launcher starts a Cloudflare Quick Tunnel. It points at the **Gateway**
+(`http://127.0.0.1:51887`), not at the PWA, because that is the address the PWA and the
+G2 need to reach. The URL the launcher prints is the one to put into the PWA's
+connection settings.
+
+The launcher also waits until the tunnel actually answers, so a printed URL means the
+Gateway is reachable through it.
 
 ---
 
@@ -483,8 +607,8 @@ http://localhost:5174
 
 Basic verification:
 
-1. The Explorer loads.
-2. The configured HomePilot root directory is displayed.
+1. The Home screen appears, offering "App" and "Home PC".
+2. Selecting Home PC shows the configured HomePilot root directory.
 3. Directories can be opened.
 4. Files can be selected.
 5. Text files can be viewed.
@@ -494,6 +618,57 @@ Basic verification:
 9. Agent responses are received.
 10. Processing state changes correctly.
 11. Session state updates correctly.
+
+### 14.1 Choosing between App and Home PC
+
+The PWA opens on a Home screen where the user picks which of the two file systems to
+work with. The choice is not remembered, so it is asked again on the next visit.
+
+| | App (Local FileSystem) | Home PC (Gateway) |
+|---|---|---|
+| Where the files are | Inside the browser `localStorage` | On the home PC |
+| Needs the Gateway | No | Yes |
+| Needs the network | No | Yes |
+| Agent | Not available | Available |
+| Copy to the other side | "自宅PCへコピー" | "アプリへコピー" |
+| Size | Bounded by the browser's `localStorage` limit | Bounded by the home PC |
+| Binary files | Not supported | Supported |
+
+The App side keeps file content inline, so it is meant for notes and small text files
+rather than for large storage. When the browser refuses a write because it is full, the
+PWA shows a message instead of silently losing the change.
+
+"自宅PCへコピー" is only offered while the App file system is selected, and only when a
+Gateway connection is configured. Copying to the home PC has to reach the home PC, so it
+cannot work without one.
+
+### 14.2 Settings that are stored on the device
+
+The settings screen is reachable from the gear icon. The following settings are kept in
+the browser, not on the Gateway, so they follow the device rather than the account:
+
+| Setting | Applies to |
+|---|---|
+| Connection info (URL and token) | PWA |
+| G2 startup screen | G2 |
+| Auto-scroll interval and amount | File Viewer |
+| Color theme | PWA |
+
+The G2 startup screen can be Home, Explorer, Agent or History. If the Gateway is not
+available when the app starts, the G2 always opens on the Home screen regardless of this
+setting.
+
+The storage section shows three numbers, and it is worth knowing what they are:
+
+- **App local data** — the size of the stored Local FileSystem data itself
+- **Total file content** — the sum of the contents of the stored files, excluding folders
+- **Site storage usage (browser estimate)** — what the browser reports for the whole
+  origin
+
+These are measured values, not available capacity. The remaining space and the quota are
+not shown, and on some environments the third value cannot be read at all, in which case
+it reads "取得できません". The gateway-side reading position and history are stored on the
+home PC, not in these numbers.
 
 ---
 
@@ -567,6 +742,11 @@ This is useful when testing:
 - HTTPS-dependent browser APIs
 
 The Quick Tunnel URL is temporary and should not be treated as the production URL.
+
+Note which server you are tunnelling. The example above tunnels the **PWA development
+server**, which is what a phone needs to load the UI. In day-to-day use the launcher
+tunnels the **Gateway** instead, and that is the URL the PWA should be configured with.
+See [Section 9](#9-launcher-configuration).
 
 ---
 
@@ -654,23 +834,51 @@ After the simulator works, test on the physical Even Realities G2.
 
 Recommended test order:
 
+### Home screen
+
+The Home screen is the root of the G2 app. It only selects the file system and does not
+browse anything.
+
+- Select App
+- Select Home PC
+- Double Tap asks for exit confirmation
+
 ### Explorer
 
 - Scroll
 - Tap folder
 - Tap file
 - Open File Viewer
-- Double Tap back
+- Double Tap back (at the root, Double Tap goes to Home)
 - Context Menu
 - Return to parent
 - Refresh
+- Sort toggle
+
+### Home navigation
+
+- Context Menu on every screen starts with "ホーム画面へ"
+- Choosing it returns to the Home screen
+- Check that Agent entries disappear while the App file system is selected
+
+### History
+
+- Open History from the Context Menu
+- Open a file from History
+- Double Tap back to where History was opened
+
+### File Viewer
+
+- Tap the body to toggle auto-scroll
+- Context Menu: top, bottom, invert scroll
+- Reading position is restored when reopening a file
 
 ### Agent Session List
 
 - Open Agent
 - Refresh sessions
 - Tap session
-- Double Tap back
+- Double Tap goes to the Home screen
 - Context Menu
 - Processing indicator
 - Unread indicator
@@ -985,10 +1193,14 @@ After deployment, verify:
 - Authentication works
 - Explorer works
 - Agent works
-- SSE works
 - Voice works
 - Smartphone access works
 - G2 bootstrap points to the correct PWA URL
+
+The G2 bootstrap URL is not configured in the portal. The EvenHub application is a thin
+redirector whose PWA URL is written directly in the source, in
+`explorer/evenhub/src/App.tsx`. If you deploy the PWA somewhere else, change it there and
+repackage; deploying the PWA alone is not enough.
 
 ---
 
@@ -1220,6 +1432,18 @@ npm run dev
 
 and verify the API.
 
+### Test suites
+
+All three Node.js projects have tests:
+
+```text
+cd gateway            -> npm test      (node --test)
+cd explorer\cloudflare-> npm test      (vitest)
+cd speech-worker      -> npm run test  (vitest, watch mode)
+```
+
+Run the tests of the project you changed before considering the change done.
+
 ### Speech Worker change
 
 Run:
@@ -1322,9 +1546,22 @@ npm run pack
 
 ### Quick Tunnel
 
+For the PWA development server:
+
 ```powershell
 cd tools
 cloudflared.exe tunnel --url http://192.168.0.2:5174/
+```
+
+The launcher already does this for the Gateway; see
+[Section 9](#9-launcher-configuration).
+
+### Tests
+
+```text
+cd gateway              npm test
+cd explorer\cloudflare  npm test
+cd speech-worker        npm run test
 ```
 
 ---
@@ -1479,6 +1716,25 @@ OpenCode Server：
 
 これらは現在の実装で使用している値です。
 
+### Gatewayの環境変数
+
+Gatewayはプロセス環境から以下の値を読みます。LauncherがGatewayプロセスに渡します。
+Gatewayを手動起動する場合は自身で設定してください。
+
+| 変数 | 既定値 | 用途 |
+|---|---|---|
+| `HOMEPILOT_ROOT` | `C:\hp1` | 自宅PCのファイルシステムとして公開するディレクトリ |
+| `HOMEPILOT_VIEWER_STATE_DIR` | `%LOCALAPPDATA%\HomePilot` | ViewerStateの保存先ディレクトリ |
+| `HISTORY_MAX_ENTRIES` | `30` | 閲覧履歴の保持件数 |
+| `HOMEPILOT_WORKER_URL` | *(空)* | Speech WorkerのURL。音声入力に必須 |
+| `HOMEPILOT_WORKER_SECRET_TOKEN` | *(空)* | Speech Workerへ送るシークレット |
+| `HOMEPILOT_POWERSHELL_BIN` | `powershell` | Hiddenファイル判定に使うPowerShell |
+
+`launcher/.env` での名称は `ROOT_PATH` です。Launcherが読み取り、Gatewayには
+`HOMEPILOT_ROOT` として渡します。
+
+Launcherの設定は [8章](#8-launcher) を参照してください。
+
 ---
 
 ## 5. HomePilot用テストディレクトリ
@@ -1498,6 +1754,21 @@ Gatewayのroot directoryとしてこのディレクトリを指定します。
 システム全体をrootとして指定するような使い方は避けてください。
 
 Gatewayは設定されたrootの外側へのアクセスを制限します。
+
+### 利用者から見えないもの
+
+利用を始める前に知っておくとよい点がいくつかあります。
+
+rootディレクトリは、HomePilotが到達できる**唯一の**自宅PCディレクトリです。シンボリック
+リンクを含め、rootの外に解決されるパスは拒否されます。
+
+rootの中では、Windowsの **Hidden属性** が付いている項目がディレクトリ一覧から除外され
+ます。これはGatewayが表示時に行うフィルタであり、アクセス制御ではなく、切り替えること
+はできません。ファイル名ではなくHidden属性が基準なので、`.env` は対象外ですが、ドット
+で始まらない名前でもHidden属性が付いていれば対象外です。Windows以外では適用されません。
+
+HomePilotのViewerStateファイルは、このディレクトリには保存されません。そのため利用者の
+一覧に混ざりません。[7.2章](#72-viewerstateの保存場所) を参照してください。
 
 ---
 
@@ -1575,6 +1846,60 @@ curl -H "Authorization: Bearer <TOKEN>" "http://127.0.0.1:51887/api/fs/directory
 
 こちらも許可されないことを確認します。
 
+すべてのエンドポイントはTokenを要求します。`/api/health` を含め、認証なしの経路は
+ありません。
+
+---
+
+### 7.1 Gateway API一覧
+
+上のコマンドは読み取り用の確認です。PWAとG2が実際に使用するのは、書き込み用と
+ViewerState用のエンドポイントです。
+
+| Method | Path | 用途 |
+|---|---|---|
+| `GET` | `/api/health` | 生存確認 |
+| `GET` | `/api/fs/root` | 設定されたrootディレクトリ |
+| `GET` | `/api/fs/directory` | ディレクトリ取得（`path`、任意で `sort`） |
+| `GET` | `/api/fs/file` | テキストファイル読み取り（`path`） |
+| `POST` | `/api/fs/file` | テキストファイルの書き込み・上書き（`path`、`content`） |
+| `POST` | `/api/fs/upload` | ファイル・フォルダのアップロード（multipart） |
+| `POST` | `/api/fs/rename` | 名前変更 |
+| `POST` | `/api/fs/delete` | 1つ以上の項目を削除 |
+| `POST` | `/api/fs/mkdir` | フォルダ作成 |
+| `POST` | `/api/fs/move` | 指定ディレクトリへ移動 |
+| `POST` | `/api/fs/copy` | 指定ディレクトリへ複製 |
+| `GET` | `/api/fs/download` | 単一ファイルのダウンロード |
+| `POST` | `/api/fs/download` | 複数ファイルをZIPでダウンロード |
+| `GET` | `/api/viewer-state` | ViewerStateの取得 |
+| `PATCH` | `/api/viewer-state/position` | 既読位置の保存 |
+| `PATCH` / `DELETE` | `/api/viewer-state/history` | 履歴の追加・削除 |
+| `POST` | `/api/speech/transcribe` | 音声の文字起こし |
+| `*` | `/api/opencode/*` | OpenCode Serverへのプロキシ |
+
+`/api/opencode/` 配下はOpenCode Serverへそのまま転送されます。クライアントが4096番へ
+直接接続することはありません。
+
+---
+
+### 7.2 ViewerStateの保存場所
+
+Gatewayは閲覧履歴と既読位置を1つのファイルに保存します。
+
+```text
+%LOCALAPPDATA%\HomePilot\.HomePilotViewerState.json
+```
+
+ディレクトリの指定は `HOMEPILOT_VIEWER_STATE_DIR` で、既定値は
+`%LOCALAPPDATA%\HomePilot` です。別の場所へ移したい場合はGateway起動前に設定します。
+
+従来は公開するrootディレクトリの直下に同じファイルを置いていました。そのファイルが
+残っている場合は読み取るため、既存の履歴と既読位置は引き継がれます。HomePilot自身が
+そこへ書き込むことも、削除することもありません。
+
+履歴の保持件数は `launcher/.env` の `HISTORY_MAX_ENTRIES`（既定30）で決まります。
+既読位置はこの設定では制限されず、経過期間でも削除されません。
+
 ---
 
 ## 8. Launcher
@@ -1651,9 +1976,15 @@ HOMEPILOT_WORKER_URL=https://<your-worker>.workers.dev
 HOMEPILOT_WORKER_SECRET_TOKEN=<your-secret>
 
 LOCAL_MODEL=<optional-local-model-id>
+
+HISTORY_MAX_ENTRIES=30
 ```
 
 現在のLauncherではWorker URLとWorker Secretを必須としてチェックしています。
+
+`ROOT_PATH` は自宅PCのファイルシステムとして公開するディレクトリです。Launcherが読み取り、Gatewayには `HOMEPILOT_ROOT` として渡します。
+
+`HISTORY_MAX_ENTRIES` は任意で、Gatewayが保持する閲覧履歴の件数を決めます。既定値は30です。
 
 `LOCAL_MODEL`は任意です。
 
@@ -1664,6 +1995,15 @@ LOCAL_MODEL=<optional-local-model-id>
 ```text
 http://127.0.0.1:1234
 ```
+
+### Launcherが外部へ公開するもの
+
+LauncherはCloudflare Quick Tunnelを起動します。公開先はPWAではなく **Gateway**
+（`http://127.0.0.1:51887`）です。PWAとG2の接続先はそちらになるためです。
+Launcherが表示するURLを、PWAの接続設定へ登録してください。
+
+Launcherはトンネルが実際に応答するまで待つため、URLが表示された時点でGatewayへ到達
+できる状態です。
 
 ---
 
@@ -1802,8 +2142,8 @@ http://localhost:5174
 
 以下を確認します。
 
-1. Explorerが表示される
-2. HomePilot root directoryが表示される
+1. ホーム画面が表示され、「アプリ」と「自宅PC」が選べる
+2. 自宅PCを選ぶとHomePilot root directoryが表示される
 3. フォルダを開ける
 4. ファイルを選択できる
 5. テキストファイルを閲覧できる
@@ -1813,6 +2153,55 @@ http://localhost:5174
 9. Agent回答を受信できる
 10. Processing状態が変化する
 11. Session状態が更新される
+
+### 14.1 アプリと自宅PCの使い分け
+
+PWAはホーム画面から、2つのファイルシステムのどちらを使うかを選びます。この選択は
+記録されないため、次に開いたときにもう一度選びます。
+
+| | アプリ（Local FileSystem） | 自宅PC（Gateway） |
+|---|---|---|
+| ファイルの場所 | ブラウザの `localStorage` 内 | 自宅PC |
+| Gateway | 不要 | 必要 |
+| ネットワーク | 不要 | 必要 |
+| Agent | 利用不可 | 利用可 |
+| もう一方へのコピー | 「自宅PCへコピー」 | 「アプリへコピー」 |
+| サイズ | ブラウザの `localStorage` 上限まで | 自宅PCの容量 |
+| バイナリファイル | 非対応 | 対応 |
+
+アプリ側はファイルの内容をそのまま保持するため、メモや小さいテキストファイル向けで
+あり、大きな保管用途ではありません。ブラウザの容量が埋まって保存できない場合は、
+変更が失われるのではなくメッセージが表示されます。
+
+「自宅PCへコピー」はアプリのファイルシステムを選択しているときだけ表示され、Gateway
+接続が設定されている場合だけ利用できます。自宅PCへコピーするには自宅PCへ到達する
+必要があるため、Gatewayなしでは利用できません。
+
+### 14.2 端末側に保存される設定
+
+設定画面は歯車アイコンから開きます。以下の設定はGatewayではなくブラウザに保存され、
+端末ごとに持ちます。
+
+| 設定 | 対象 |
+|---|---|
+| 接続情報（URL・Token） | PWA |
+| グラス起動時の画面 | G2 |
+| 自動スクロールの間隔・量 | File Viewer |
+| カラーテーマ | PWA |
+
+グラス起動時の画面は、ホーム・エクスプローラー・エージェント・履歴から選べます。
+Gatewayが利用できない状態で起動した場合、この設定に関わらずG2は必ずホーム画面から
+始まります。
+
+ストレージの欄には3つの数値が表示されますが、それぞれ次の意味です。
+
+- **アプリローカル保存データ** — 保存されているLocal FileSystemデータそのもののサイズ
+- **保存しているファイルの内容合計** — 保存されているファイルの内容の合計（フォルダは含みません）
+- **このサイトのストレージ使用量（ブラウザ概算）** — ブラウザが報告するサイト全体の使用量の概算値
+
+これらは計測値であり、残り容量ではありません。残容量と上限（quota）は表示しません。
+環境によっては3つ目が取得できず、「取得できません」と表示されます。Gateway側の既読
+位置・履歴は自宅PCに保存されるため、ここには含まれません。
 
 ---
 
@@ -1890,6 +2279,10 @@ https://xxxxxxxxxxxxxxxx.trycloudflare.com
 などのテストに利用できます。
 
 Quick TunnelのURLは一時的なものなので、本番URLとして扱わないでください。
+
+どちらのサーバーをトンネルしているかに注意してください。上の例は **PWA開発サーバー**
+（スマートフォンからUIを読み込むため）ですが、実運用ではLauncherが **Gateway** を
+トンネルします。PWAに設定するURLは後者です。[9章](#9-launcher設定) を参照してください。
 
 ---
 
@@ -1977,23 +2370,50 @@ npx evenhub qr --url "https://<your-pwa-url>/"
 
 シミュレータで問題がなければ、Even Realities G2実機で確認します。
 
+### ホーム画面
+
+G2アプリのルート画面です。ファイルを閲覧せず、ファイルシステムの選択だけを行います。
+
+- アプリを選ぶ
+- 自宅PCを選ぶ
+- Double Tapで終了確認が出る
+
 ### Explorer
 
 - Scroll
 - Folder Tap
 - File Tap
 - File Viewer
-- Double Tapで戻る
+- Double Tapで戻る（ルートのときはホームへ）
 - Context Menu
 - Parent移動
 - Refresh
+- 並び順切替
+
+### ホームへの移動
+
+- ホーム画面以外のすべての画面で、Context Menuの先頭が「ホーム画面へ」
+- 選ぶとホーム画面へ戻る
+- アプリを選んでいる間はAgentの項目が表示されていないことを確認
+
+### 履歴
+
+- Context Menuから履歴を開く
+- 履歴からファイルを開く
+- Double Tapで履歴を開いた元画面へ戻る
+
+### File Viewer
+
+- 本文のTapで自動スクロールのON/OFF
+- Context Menu：先頭、末尾、スクロール反転
+- ファイルを開き直すと既読位置が復元される
 
 ### Agent Session List
 
 - Agentを開く
 - Session Refresh
 - Session Tap
-- Double Tapで戻る
+- Double Tapでホーム画面へ
 - Context Menu
 - Processing表示
 - Unread表示
@@ -2316,12 +2736,16 @@ explorer\cloudflare\dist
 - 認証
 - Explorer
 - Agent
-- SSE
 - Voice
 - Smartphone
 - G2 bootstrap
 
 を確認します。
+
+G2 bootstrapのURLはポータル側で設定するものではなく、EvenHubアプリはリダイレクトだけの
+薄い構成で、PWAのURLはソース（`explorer/evenhub/src/App.tsx`）に直接書かれています。
+PWAを別の場所へデプロイする場合は、そこを変更して再パッケージしてください。PWAだけを
+デプロイしても反映されません。
 
 ---
 
@@ -2569,6 +2993,18 @@ npm run dev
 
 で起動してAPIを確認します。
 
+### テスト
+
+3つのNode.jsプロジェクトにはそれぞれテストがあります。
+
+```text
+cd gateway              -> npm test      (node --test)
+cd explorer\cloudflare  -> npm test      (vitest)
+cd speech-worker        -> npm run test  (vitest, watch mode)
+```
+
+変更したプロジェクトのテストを実行してから、変更が完了したと判断してください。
+
 ### Speech Worker変更
 
 ```text
@@ -2669,7 +3105,19 @@ npm run pack
 
 ### Quick Tunnel
 
+PWA開発サーバーへ一時URLを付ける場合：
+
 ```powershell
 cd tools
 cloudflared.exe tunnel --url http://192.168.0.2:5174/
+```
+
+実運用ではLauncherがGatewayをトンネルします。[9章](#9-launcher設定) を参照してください。
+
+### テスト
+
+```text
+cd gateway              npm test
+cd explorer\cloudflare  npm test
+cd speech-worker        npm run test
 ```

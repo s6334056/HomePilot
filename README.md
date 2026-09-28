@@ -39,15 +39,67 @@ The project was developed with a strong emphasis on:
 
 ### 2.1 File Explorer
 
-HomePilot provides a file explorer for files stored on the home PC.
+HomePilot exposes two file systems, and both are browsable from the PC browser, the
+Smartphone browser / PWA and the G2.
 
-The Explorer can be used from:
+#### Home PC files (through the Gateway)
 
-- PC browser
-- Smartphone browser / PWA
-- Even Realities G2
+Files stored on the home PC are exposed through the HomePilot Gateway. The Gateway runs
+on the home PC and restricts access to a configured root directory.
 
-The home PC filesystem is accessed through the HomePilot Gateway.
+On this side, HomePilot can:
+
+- Browse folders and files
+- View text files, with reading position restored
+- Create folders and new text files
+- Rename, move, copy and delete items
+- Upload files and folders, including whole folders
+- Download a single file, several files, or a folder as a ZIP archive
+- Edit a text file in the viewer and save it back in place
+
+#### Local FileSystem (inside the app)
+
+The Local FileSystem is a small file system that lives inside the app itself. It is
+stored in browser `localStorage` under the key `homepilot.localFileSystem` and needs no
+Gateway and no network connection.
+
+It supports the same basic operations: browsing, viewing, creating folders and files,
+renaming, moving, copying, editing, uploading and deleting.
+
+It is intentionally different from the home PC side:
+
+- It is **text-oriented**. File content is stored inline, so binary files are not
+  supported.
+- Its capacity is bounded by the browser's `localStorage` limit, which is small. It is
+  meant for notes and small files, not for large storage.
+- It cannot reach the Agent. The Agent is only available while the home PC file system
+  is selected.
+
+#### Copying between the two
+
+The two file systems can be copied to each other from the PWA:
+
+- **"アプリへコピー"** — copy from the home PC to this device
+- **"自宅PCへコピー"** — copy from this device to the home PC
+
+Both are available from the Explorer list (for the selected items) and from the
+File Viewer (for the file currently being viewed).
+
+"アプリへコピー" is only offered while browsing the home PC file system.
+"自宅PCへコピー" is only offered while browsing the Local FileSystem, and requires a
+Gateway connection to be configured, because the home PC has to be reached.
+
+#### Hidden files on the home PC
+
+When HomePilot lists the home PC directories through the Gateway, entries carrying the
+Windows **Hidden attribute** are filtered out of the listing.
+
+This is a display filter applied by the Gateway, not an access control. Removing the
+Hidden attribute makes an entry appear again as usual.
+
+Note that this is based on the Windows Hidden attribute, not on the file name. A file
+named `.env` is *not* hidden by this rule, and a file without a leading dot *is* hidden
+if it carries the Hidden attribute. On non-Windows hosts the filter does not apply.
 
 ---
 
@@ -62,7 +114,6 @@ The Agent supports:
 - Message history
 - Model selection
 - Agent responses
-- Streaming updates through SSE
 - Permission requests
 - Question requests
 - Processing state
@@ -94,8 +145,10 @@ HomePilot includes an EvenHub application for Even Realities G2 smart glasses.
 
 The G2 application provides:
 
+- Home screen (chooses between the two file systems)
 - Explorer
 - File Viewer
+- History
 - Agent Session List
 - Model selection
 - Agent Chat
@@ -103,7 +156,7 @@ The G2 application provides:
 - Processing state
 - Unread state
 - Context-aware Agent interaction
-- Navigation between Explorer and Agent screens
+- Navigation between Explorer, History and Agent screens
 
 The G2 UI is designed around the interaction capabilities of the glasses, including:
 
@@ -112,6 +165,11 @@ The G2 UI is designed around the interaction capabilities of the glasses, includ
 - Long Press
 - Scroll
 - Context Menu
+
+The Context Menu is the main way to move between G2 screens. Every screen except the
+Home screen offers a **"ホーム画面へ"** entry as the **first** item, which returns to the
+Home screen. This is independent from the Double Tap navigation described in
+[Section 7](#7-g2-navigation-concept).
 
 ---
 
@@ -235,6 +293,10 @@ The HomePilot Gateway runs on the home PC and provides controlled access to:
 
 The Gateway is intentionally kept separate from the frontend.
 
+The Local FileSystem is the exception: it is implemented entirely inside the client and
+stored in browser `localStorage`, so it works without the Gateway and without a network
+connection.
+
 ---
 
 ## 4. Main Components
@@ -273,6 +335,10 @@ The `explorer/evenhub` application is the EvenHub-side bootstrap/package for G2.
 
 ### 5.1 File Access
 
+Two independent paths exist.
+
+Home PC files:
+
 ```text
 PC / Smartphone / G2
         ↓
@@ -282,6 +348,22 @@ PC / Smartphone / G2
         ↓
    Home PC filesystem
 ```
+
+Local FileSystem (no Gateway, no network):
+
+```text
+PC / Smartphone / G2
+        ↓
+    HomePilot
+        ↓
+Browser localStorage
+        ↓
+  homepilot.localFileSystem
+```
+
+Copying between the two is not a third path: the client performs the copy, reading from
+one side and writing to the other. A copy into the home PC therefore still needs the
+Gateway.
 
 The Gateway currently listens on:
 
@@ -336,6 +418,34 @@ The Gateway exposes the speech endpoint:
 ```text
 /api/speech/transcribe
 ```
+
+---
+
+### 5.4 Reading Position and View History
+
+Each file system keeps its own view history and reading position, so that reopening a
+file returns the user to roughly where they left off.
+
+- For the **home PC** files, this state belongs to the Gateway, which means the PWA and
+  the G2 see the same history and the same reading position for the same file.
+- For the **Local FileSystem**, this state belongs to the app, in `localStorage`, and is
+  therefore per device.
+
+The Gateway persists this state in a single JSON file:
+
+```text
+%LOCALAPPDATA%\HomePilot\.HomePilotViewerState.json
+```
+
+It is deliberately kept outside the directory that HomePilot exposes, so the internal
+file never shows up in the user's own file listing.
+
+Earlier versions stored the same file directly under the exposed root directory. That
+file is still read when present, so existing history and reading positions survive the
+upgrade, but nothing is written back to it.
+
+`SETUP.md` documents the exact settings, including the environment variable that
+overrides the storage location.
 
 ---
 
@@ -397,25 +507,52 @@ G2
 
 The G2 application is designed around the limited interaction model of smart glasses.
 
-Typical navigation is:
+The Home screen is the root. It does not browse anything itself; it only asks which of
+the two file systems the user wants to work with.
 
 ```text
-Explorer
+Home
    │
-   ├─ Tap ───────────────→ Folder / File
+   ├─ Tap → choose App or Home PC
    │
-   ├─ File Viewer
+   ▼
+Explorer ──Tap──→ Folder / File
+   │                  │
+   │                  └──Tap──→ File Viewer
    │
-   └─ Agent
-         │
-         ├─ Session List
-         │      │
-         │      └─ Tap → Chat
-         │
-         └─ Chat
+   ├─ Context Menu → History
+   ├─ Context Menu → Agent
+   └─ Context Menu → Home
+
+Agent
+   │
+   ├─ Tap (first entry) ──→ Model Select ──Tap──→ Chat
+   └─ Tap (a session)  ────────────────────────→ Chat
 ```
 
+Navigation is provided by two separate mechanisms.
+
+**Context Menu** — the general way to move between screens. Every screen except Home
+offers "ホーム画面へ" as its first entry, and each screen also offers entries for the
+screens reachable from it (History, Explorer, Agent, and so on).
+
+**Double Tap** — screen-specific shortcuts:
+
+| Screen | Double Tap |
+|---|---|
+| Home | Exit confirmation (closes the app) |
+| Explorer | Go to the parent folder; at the root, go to Home |
+| File Viewer | Back to Explorer |
+| History | Back to where History was opened from; if there is none, go to Home |
+| Agent Session List | Go to Home |
+| Model Select | Back to Session List |
+| Agent Chat | Back to Session List |
+
 Agent navigation preserves the previous Explorer/File Viewer page so that the user can return to the context from which the Agent was opened.
+
+Reaching Home clears the stored return pages, so the next screen entered starts from a
+clean state. The choice made on the Home screen is not remembered: the next launch
+starts again from the home PC side if a Gateway connection is configured.
 
 ---
 
@@ -428,15 +565,22 @@ Current major capabilities include:
 - PC Explorer
 - Smartphone/PWA Explorer
 - G2 Explorer
+- G2 Home screen
 - File Viewer
+- View history
+- File create / rename / move / copy / delete
+- Upload and download (including folder ZIP)
+- Text file editing
+- Local FileSystem
+- Copying between home PC and Local FileSystem
 - OpenCode Agent integration
 - Agent sessions
 - Agent messages
-- SSE updates
 - Permission handling
 - Question handling
 - Context-aware Agent interaction
 - Responsive PWA UI
+- Reading position restore
 - G2 Agent UI
 - G2 navigation
 - Processing state
@@ -445,6 +589,9 @@ Current major capabilities include:
 - Cross-device unread synchronization
 - PWA voice input
 - G2 voice input
+- Color theme and auto-scroll settings
+- G2 startup screen setting
+- Local storage usage display
 - Cloud LLM usage
 - Local LLM usage through OpenCode
 
@@ -469,6 +616,7 @@ Typical development tools include:
 - TypeScript
 - Cloudflare
 - Cloudflare Tunnel
+- Kilo
 - OpenCode
 - EvenHub
 - Even Realities G2
@@ -505,10 +653,9 @@ The Gateway connects HomePilot to the local filesystem and OpenCode Server.
 
 Detailed setup instructions are documented separately.
 
-See:
-
-- [`SETUP.md`](SETUP.md)
-- [`DEVELOPMENT.md`](DEVELOPMENT.md)
+If you want a working HomePilot rather than a development environment, start with
+[`GETTING_STARTED.md`](GETTING_STARTED.md). For the full environment, see
+[`SETUP.md`](SETUP.md) and [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
 ---
 
@@ -599,7 +746,14 @@ Detailed deployment procedures are documented in `SETUP.md`.
 
 ## 13. Repository Documentation
 
-The repository documentation is divided into three documents.
+The repository documentation is split by audience.
+
+### GETTING_STARTED.md
+
+Start here if you want to get HomePilot running.
+
+It is a single ordered path from a clean Windows PC to a working HomePilot, covering
+the required software, the launcher configuration, the Speech Worker and a local LLM.
 
 ### README.md
 
@@ -642,7 +796,7 @@ It covers:
 - Architecture decisions
 - Important technical findings
 - AI-assisted development
-- ChatGPT / OpenCode / MiMo roles
+- ChatGPT / Kilo roles, and the separate role of OpenCode inside HomePilot
 - Zero-cost development methodology
 - Lessons learned
 - Known limitations
@@ -668,14 +822,25 @@ ChatGPT was primarily used as:
 - Debugging / analysis partner
 - Implementation planner
 
-### OpenCode / MiMo
+### Kilo
 
-OpenCode / MiMo was primarily used as:
+Kilo is the current main coding agent for developing this repository, and is primarily
+used as:
 
 - Implementation agent
 - Code modification agent
-- Build/debug assistant
+- Test and build assistant
 - Refactoring assistant
+
+### OpenCode
+
+OpenCode is **not** the coding agent used to develop this repository. It has a different,
+separate role: OpenCode is the Agent execution layer that HomePilot itself runs on. HomePilot
+talks to an OpenCode server at runtime, through the Gateway, in order to execute an Agent
+session. In that sense OpenCode is part of the product, not part of the development toolchain.
+
+For historical context, OpenCode and MiMo were the main coding agents during the earlier
+phases of this project, and Kilo replaced them as the main coding agent later on.
 
 ### Human
 
@@ -686,7 +851,8 @@ The human developer remained responsible for:
 - Real-device testing
 - Evaluating behavior
 - Confirming implementation results
-- Git commits
+- Git commits and pushes
+- Deployment
 - Deciding what should and should not be changed
 
 The basic development loop was:
@@ -746,7 +912,12 @@ HomePilot is a personal experimental system and therefore has several limitation
 
 Examples include:
 
-- The Gateway must be running on the home PC for filesystem and Agent access.
+- The home PC file system, the Agent and voice input all require the Gateway to be
+  running on the home PC. The Local FileSystem works without it.
+- The Local FileSystem is limited to the browser's `localStorage` capacity, holds text
+  content, and cannot be used with the Agent.
+- The storage figures shown in the settings screen are measured values, not available
+  capacity. The remaining space and the quota are not shown.
 - OpenCode availability depends on the local OpenCode environment.
 - Local LLM behavior depends heavily on the selected model and local inference environment.
 - Smart-glasses behavior can be affected by the G2 / EvenHub environment.
@@ -771,8 +942,9 @@ Do not expose the HomePilot Gateway directly to the public Internet without appr
 
 ## 18. Related Documentation
 
-- `SETUP.md` — Environment setup, operation, testing and deployment
-- `DEVELOPMENT.md` — Development history, architecture decisions and AI-assisted development methodology
+- [`GETTING_STARTED.md`](GETTING_STARTED.md) — Shortest path from a clean PC to a running HomePilot
+- [`SETUP.md`](SETUP.md) — Environment setup, operation, testing and deployment
+- [`DEVELOPMENT.md`](DEVELOPMENT.md) — Development history, architecture decisions and AI-assisted development methodology
 
 ---
 
@@ -813,15 +985,53 @@ HomePilotは、一般向けSaaSではなく、主に個人利用を目的とし�
 
 ### 2.1 ファイルExplorer
 
-自宅PCに保存されているファイルをExplorerから閲覧できます。
+HomePilotは2つのファイルシステムを提供しており、どちらもPCブラウザ・スマートフォンブラウザ / PWA・Even Realities G2から閲覧できます。
 
-利用可能な環境：
+#### 自宅PCのファイル（Gateway経由）
 
-- PCブラウザ
-- スマートフォンブラウザ / PWA
-- Even Realities G2
+自宅PCに保存されているファイルはHomePilot Gateway経由で参照します。Gatewayは自宅PC上で動作し、設定されたルートディレクトリの外へはアクセスできません。
 
-自宅PCのファイルシステムにはHomePilot Gatewayを経由してアクセスします。
+この側では、以下ができます。
+
+- フォルダ・ファイルの閲覧
+- テキストファイルの閲覧（既読位置を復元）
+- フォルダと新規テキストファイルの作成
+- 名前変更・移動・複製・削除
+- ファイル・フォルダのアップロード（フォルダ単位も含む）
+- 単一ファイル・複数ファイル・フォルダ（ZIP）のダウンロード
+- テキストファイルをビューア上で編集し、そのまま保存
+
+#### アプリ内Local FileSystem
+
+Local FileSystemは、アプリ本体の中だけに存在する小さなファイルシステムです。ブラウザの `localStorage` の `homepilot.localFileSystem` というキーに保存され、Gatewayもネットワークも不要で動作します。
+
+閲覧・表示・フォルダ/ファイル作成・名前変更・移動・複製・編集・アップロード・削除の基本操作は自宅PC側と同じです。
+
+ただし自宅PC側とは、次の違いがあります。
+
+- **テキスト中心**です。内容をそのまま保持するため、バイナリファイルには対応しません。
+- 容量はブラウザの `localStorage` 上限に制約されます。大きな保管用途ではなく、メモや小さいファイル向けです。
+- Agentは利用できません。Agentは自宅PCのファイルシステムを選択しているときだけ表示されます。
+
+#### 2つのファイルシステム間のコピー
+
+PWAでは、2つのファイルシステム間でコピーできます。
+
+- **「アプリへコピー」** — 自宅PC → この端末
+- **「自宅PCへコピー」** — この端末 → 自宅PC
+
+いずれも、Explorerの一覧で選択した項目に対して行えます。FileViewerでも、現在開いているファイルを対象に同じ操作が行えます。
+
+「アプリへコピー」は自宅PCのファイルシステムを閲覧しているときだけ表示されます。
+「自宅PCへコピー」はLocal FileSystemを閲覧しているときだけ表示され、自宅PCへ到達する必要があるためGateway接続の設定が必要です。
+
+#### 自宅PC側のHiddenファイル
+
+Gateway経由で自宅PCのフォルダを一覧取得すると、Windowsの **Hidden属性** が付いているファイル／フォルダは一覧から除外されます。
+
+これはGatewayが表示時に行うフィルタであり、アクセス制御ではありません。Hidden属性を解除すると通常どおり表示されます。
+
+この仕様はファイル名ではなくWindowsのHidden属性に基づくものです。`.env` のようにドットで始まる名前は対象外であり、逆にドットで始まらない名前でもHidden属性が付いていれば非表示になります。Windows以外ではこのフィルタは適用されません。
 
 ---
 
@@ -836,7 +1046,6 @@ OpenCodeと連携してAI Agentを利用できます。
 - メッセージ履歴
 - モデル選択
 - Agent回答
-- SSEによるストリーミング更新
 - Permission要求
 - Question要求
 - Processing状態
@@ -874,8 +1083,10 @@ EvenHubを利用してEven Realities G2に対応しています。
 
 G2では、
 
+- ホーム画面（2つのファイルシステムの選択）
 - Explorer
 - File Viewer
+- 履歴
 - Agent Session List
 - Model Select
 - Agent Chat
@@ -883,7 +1094,7 @@ G2では、
 - Processing表示
 - Unread表示
 - コンテキスト付きAgent
-- Explorer / Agent間のナビゲーション
+- Explorer / 履歴 / Agent間のナビゲーション
 
 を利用できます。
 
@@ -896,6 +1107,10 @@ G2固有の操作体系に合わせ、
 - Context Menu
 
 を利用しています。
+
+画面間を移動する主な手段がコンテキストメニューです。ホーム画面以外のすべての画面で、
+コンテキストメニューの **先頭** に「ホーム画面へ」が並びます。これを選ぶとホーム画面へ
+戻ります。[7章](#7-g2ナビゲーション) で説明するDouble Tapによる移動とは別の操作です。
 
 ---
 
@@ -1027,6 +1242,9 @@ HomePilot Gatewayは自宅PC上で動作し、
 
 FrontendとGatewayを分離することで、自宅PC上の機能とWeb/G2側のUIを分離しています。
 
+例外はLocal FileSystemです。こちらはクライアント内で完結し、ブラウザの `localStorage` に
+保存されるため、Gatewayもネットワークも不要で動作します。
+
 ---
 
 ## 4. 主なコンポーネント
@@ -1074,6 +1292,21 @@ PC / Smartphone / G2
         ↓
    自宅PCファイル
 ```
+
+Local FileSystem（Gatewayもネットワークも不要）：
+
+```text
+PC / スマートフォン / G2
+        ↓
+    HomePilot
+        ↓
+ブラウザ localStorage
+        ↓
+  homepilot.localFileSystem
+```
+
+2つのファイルシステム間のコピーは3つ目の経路ではありません。クライアントがコピー元の
+側を読み、コピー先の側へ書き込みます。自宅PCへのコピーはGatewayが必要です。
 
 Gatewayの開発環境での待受ポートは、
 
@@ -1130,6 +1363,33 @@ Gatewayには以下の音声文字起こしエンドポイントがあります�
 ```text
 /api/speech/transcribe
 ```
+
+---
+
+### 5.4 既読位置と閲覧履歴
+
+各ファイルシステムは、それぞれ独自の閲覧履歴と既読位置を保持します。ファイルを
+開き直すと、続き的位置から表示が再開されます。
+
+- **自宅PC**のファイルでは、この状態はGatewayが持ちます。そのためPWAとG2は、
+  同じファイルについて同じ履歴・同じ既読位置を共有します。
+- **Local FileSystem**では、この状態はアプリの `localStorage` に保存されるため、
+  端末ごとに独立します。
+
+Gatewayはこの状態を1つのJSONファイルに保存します。
+
+```text
+%LOCALAPPDATA%\HomePilot\.HomePilotViewerState.json
+```
+
+HomePilotが公開するディレクトリの外に置くことで、内部管理用ファイルがユーザーの
+ファイル一覧に混ざらないようにしています。
+
+従来は、公開ルートディレクトリの直下に同じ名前のファイルを置いていました。その
+ファイルが残っている場合は読み取るため、アップグレード後も既存の履歴・既読位置
+は失われません。ただし、そこへは書き込みません。
+
+保存先の変更方法は `SETUP.md` を参照してください。
 
 ---
 
@@ -1207,27 +1467,51 @@ G2
 
 G2ではスマートグラス固有の操作体系に合わせて画面遷移を設計しています。
 
-概念的には、
+ルートはホーム画面です。ホーム画面自体はファイル閲覧などを直接行わず、2つのファイルシステムのどちらを使うかを選ぶだけです。
 
 ```text
-Explorer
+ホーム
    │
-   ├─ Tap ───────────────→ Folder / File
+   ├─ Tap → アプリ / 自宅PC を選択
    │
-   ├─ File Viewer
+   ▼
+Explorer ──Tap──→ Folder / File
+   │                  │
+   │                  └──Tap──→ File Viewer
    │
-   └─ Agent
-         │
-         ├─ Session List
-         │      │
-         │      └─ Tap → Chat
-         │
-         └─ Chat
+   ├─ Context Menu → 履歴
+   ├─ Context Menu → Agent
+   └─ Context Menu → ホーム
+
+Agent
+   │
+   ├─ Tap（先頭項目）──→ Model Select ──Tap──→ Chat
+   └─ Tap（Session）  ──────────────────────→ Chat
 ```
 
-となっています。
+画面間の移動は2つの独立した仕組みで提供されています。
+
+**コンテキストメニュー** — 画面間を移動する主な手段です。ホーム画面以外のすべての画面で、
+「ホーム画面へ」が先頭項目として並び、その先頭以外にも、その画面から到達できる画面
+（履歴、エクスプローラー、エージェントなど）への項目が並びます。
+
+**Double Tap** — 画面ごとのショートカットです。
+
+| 画面 | Double Tap |
+|---|---|
+| ホーム | 終了確認（アプリを閉じる） |
+| Explorer | 親フォルダへ／ルートのときはホームへ |
+| File Viewer | Explorerへ戻る |
+| 履歴 | 履歴を開いた元画面へ／元が無い場合はホームへ |
+| Agent Session List | ホームへ |
+| Model Select | Session Listへ戻る |
+| Agent Chat | Session Listへ戻る |
 
 Agentを起動する前のExplorer / File Viewerを保持し、Agent利用後に元のコンテキストへ戻れるようにしています。
+
+ホームへ戻ると保持していた戻り先の情報はクリアされます。ホーム画面で選んだファイル
+システムも記録されません（Gateway接続が設定されていれば、次回起動時は再び自宅PC側が
+選ばれます）。
 
 ---
 
@@ -1240,15 +1524,22 @@ HomePilotで当初想定していた主要機能は、現在ほぼ実装完了�
 - PC Explorer
 - Smartphone/PWA Explorer
 - G2 Explorer
+- G2 ホーム画面
 - File Viewer
+- 閲覧履歴
+- ファイルの作成 / 名前変更 / 移動 / 複製 / 削除
+- アップロード・ダウンロード（フォルダのZIPを含む）
+- テキストファイルの編集
+- Local FileSystem
+- 自宅PCとLocal FileSystem間のコピー
 - OpenCode Agent連携
 - Agent Session
 - Agent Message
-- SSE
 - Permission処理
 - Question処理
 - Context付きAgent
 - レスポンシブPWA UI
+- 既読位置の復元
 - G2 Agent UI
 - G2ナビゲーション
 - Processing状態
@@ -1257,6 +1548,9 @@ HomePilotで当初想定していた主要機能は、現在ほぼ実装完了�
 - PWA / G2間Unread同期
 - PWA音声入力
 - G2音声入力
+- カラーテーマと自動スクロールの設定
+- G2の起動画面設定
+- ローカルストレージ使用量の表示
 - Cloud LLM利用
 - OpenCode経由のLocal LLM利用
 
@@ -1281,6 +1575,7 @@ HomePilotで当初想定していた主要機能は、現在ほぼ実装完了�
 - TypeScript
 - Cloudflare
 - Cloudflare Tunnel
+- Kilo
 - OpenCode
 - EvenHub
 - Even Realities G2
@@ -1319,8 +1614,9 @@ Gatewayは自宅PCのファイルシステムおよびOpenCode Serverとの接�
 
 詳細なセットアップ方法は以下を参照してください。
 
-- [`SETUP.md`](SETUP.md)
-- [`DEVELOPMENT.md`](DEVELOPMENT.md)
+開発環境ではなく、実際に動くHomePilotを手に入れたい場合は
+[`GETTING_STARTED.md`](GETTING_STARTED.md) から始めてください。全体の環境は
+[`SETUP.md`](SETUP.md) と [`DEVELOPMENT.md`](DEVELOPMENT.md) に記載しています。
 
 ---
 
@@ -1413,7 +1709,14 @@ HomePilotExplorer.ehpk
 
 ## 13. ドキュメント構成
 
-リポジトリ直下の主要ドキュメントは以下の3つです。
+リポジトリ直下のドキュメントは、読み手ごとに役割を分けて構成しています。
+
+### GETTING_STARTED.md
+
+HomePilotを動かしたいときの入口です。
+
+Windows PCの初期状態から、動く状態のHomePilotまでを一続きの手順として説明します。
+必要なソフトウェア、launcherの設定、Speech Worker、ローカルLLMを含みます。
 
 ### README.md
 
@@ -1456,7 +1759,7 @@ HomePilotの開発記録・開発方法・技術的判断をまとめます。
 - アーキテクチャ上の判断
 - 重要な技術的発見
 - AIを利用した開発
-- ChatGPT / OpenCode / MiMoの役割
+- ChatGPT / Kilo の役割、およびHomePilot内部でのOpenCodeの位置づけ
 - ゼロ円開発の方法
 - 開発中に得た知見
 - 既知の制約
@@ -1485,16 +1788,26 @@ AIツールには役割を分担させています。
 
 として利用しました。
 
-### OpenCode / MiMo
+### Kilo
 
-主に、
+Kiloは、このリポジトリを開発する現在のメインCoding Agentで、主に、
 
 - 実装
 - コード修正
-- ビルド・デバッグ支援
+- テスト・ビルド支援
 - リファクタリング
 
-を担当させました。
+を担当します。
+
+### OpenCode
+
+OpenCodeは、このリポジトリを開発するCoding Agentではありません。役割が明確に
+分かれています。OpenCodeは、HomePilot自身がAgentを実行するために内部で利用する
+実行基盤です。HomePilotは実行時にGateway経由でOpenCodeサーバーと通信し、Agent
+Sessionを実行します。つまりOpenCodeは開発ツールではなくプロダクトの一部です。
+
+歴史的には、初期のPhaseではOpenCodeとMiMoが主要的Coding Agentとして使用されて
+いましたが、現在はKiloがメインCoding Agentとして置き換わっています。
 
 ### 人間
 
@@ -1505,7 +1818,8 @@ AIツールには役割を分担させています。
 - 実機テスト
 - 動作評価
 - 実装結果の確認
-- Git commit
+- Git commit・push
+- デプロイ
 - 変更範囲の判断
 
 を担当します。
@@ -1579,7 +1893,9 @@ HomePilotは個人利用を前提とした実験的なシステムであるた�
 
 例えば、
 
-- ファイルやAgentを利用するには自宅PC上のGatewayが必要
+- 自宅PCのファイルシステム・Agent・音声入力を利用するには、自宅PC上のGatewayが必要（Local FileSystemはGatewayなしで動作します）
+- Local FileSystemはブラウザの `localStorage` 容量が上限で、テキストのみを扱い、Agentとは併用できません
+- 設定画面に表示されるストレージの数値は計測値であり、残り容量ではありません。残容量と上限（quota）は表示しません
 - OpenCodeの利用可否はローカルのOpenCode環境に依存
 - Local LLMの挙動は利用するモデルや推論環境に大きく依存
 - G2 / EvenHub環境によってスマートグラス側の挙動が変化する可能性がある
@@ -1614,5 +1930,6 @@ HomePilotは個人利用を前提とした実験的なシステムであるた�
 
 ## 18. 関連ドキュメント
 
-- `SETUP.md` — 環境構築・起動・動作確認・デプロイ
-- `DEVELOPMENT.md` — 開発経緯・設計判断・AI支援開発の方法
+- [`GETTING_STARTED.md`](GETTING_STARTED.md) — 初期状態のPCから動くHomePilotまでの最短手順
+- [`SETUP.md`](SETUP.md) — 環境構築・起動・動作確認・デプロイ
+- [`DEVELOPMENT.md`](DEVELOPMENT.md) — 開発経緯・設計判断・AI支援開発の方法
