@@ -1,3 +1,4 @@
+import { zipSync } from 'fflate';
 import { FileSystemItem } from '../domain/types';
 import {
   FileSystemService,
@@ -10,6 +11,11 @@ import {
 /** localStorage key that holds the whole Local FileSystem JSON. */
 export const LOCAL_FS_STORAGE_KEY = 'homepilot.localFileSystem';
 const ROOT_PATH = '/';
+
+/** Blob type used when a local file has no known MIME type. */
+const DEFAULT_MIME_TYPE = 'application/octet-stream';
+/** Blob type of every ZIP this service produces. */
+const ZIP_MIME_TYPE = 'application/zip';
 
 /** Shown to the user when the browser refuses the write because localStorage is full. */
 export const LOCAL_FS_QUOTA_MESSAGE =
@@ -410,12 +416,82 @@ export class LocalFileSystemService implements FileSystemService {
     return { processed, skipped, failed, results };
   }
 
+  /**
+   * Local files never leave the browser, so there is no HTTP endpoint to hand
+   * out. `downloadItems()` builds the Blob in the browser instead.
+   */
   public getDownloadUrl(_path: string): string | null {
     return null;
   }
 
-  public async downloadItems(_paths: string[], _hasDirectory: boolean): Promise<{ blob?: Blob; url?: string }> {
-    return {};
+  /**
+   * Mirrors the Gateway download contract: a single file is returned as-is,
+   * anything else (folder, multiple selection, file + folder) is returned as a
+   * ZIP built in the browser from the localStorage content.
+   */
+  public async downloadItems(paths: string[], hasDirectory: boolean): Promise<{ blob?: Blob; url?: string }> {
+    if (paths.length === 0) {
+      throw new Error('No items to download.');
+    }
+
+    const targets = paths.map((p) => {
+      const normalized = normalizePath(p);
+      const entry = this.entries[normalized];
+      if (!entry) {
+        throw new Error(`File not found: ${p}`);
+      }
+      return { path: normalized, entry };
+    });
+
+    const [first] = targets;
+    if (targets.length === 1 && !hasDirectory && first.entry.type === 'file') {
+      return { blob: this.createFileBlob(first.entry) };
+    }
+    return { blob: this.createZipBlob(targets) };
+  }
+
+  /** One local file → a Blob carrying the entry's MIME type when it is known. */
+  private createFileBlob(entry: LocalEntry): Blob {
+    return new Blob([entry.content ?? ''], { type: entry.mimeType || DEFAULT_MIME_TYPE });
+  }
+
+  /**
+   * Selected items → a ZIP. Entry names are the basenames of the selected
+   * paths (the Gateway zips the same way), and folder contents keep their
+   * structure below that name, so `/docs` becomes `docs/a.txt`, `docs/sub/c.txt`.
+   */
+  private createZipBlob(targets: Array<{ path: string; entry: LocalEntry }>): Blob {
+    const files: Record<string, Uint8Array> = {};
+    const encoder = new TextEncoder();
+
+    for (const { path, entry } of targets) {
+      if (entry.type === 'directory') {
+        files[`${entry.name}/`] = new Uint8Array(0);
+        this.collectDirectory(files, path, `${entry.name}/`, encoder);
+      } else {
+        files[entry.name] = encoder.encode(entry.content ?? '');
+      }
+    }
+
+    return new Blob([zipSync(files, { level: 6 })], { type: ZIP_MIME_TYPE });
+  }
+
+  /** Walks a local directory into the flat ZIP entry map. */
+  private collectDirectory(
+    files: Record<string, Uint8Array>,
+    dirPath: string,
+    prefix: string,
+    encoder: TextEncoder,
+  ): void {
+    const children = this.childrenOf(this.entries, dirPath).sort(([a], [b]) => a.localeCompare(b));
+    for (const [childPath, child] of children) {
+      if (child.type === 'directory') {
+        files[`${prefix}${child.name}/`] = new Uint8Array(0);
+        this.collectDirectory(files, childPath, `${prefix}${child.name}/`, encoder);
+      } else {
+        files[`${prefix}${child.name}`] = encoder.encode(child.content ?? '');
+      }
+    }
   }
 
   public async uploadItems(

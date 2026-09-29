@@ -852,6 +852,9 @@ export function App() {
         const url = URL.createObjectURL(result.blob);
         const a = document.createElement('a');
         a.href = url;
+        // blob: URL にはファイル名が無いため明示する（Gateway の URL 経路は
+        // 別オリジンのため download 属性は無視され、Content-Disposition が優先される）。
+        a.download = downloadFilename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

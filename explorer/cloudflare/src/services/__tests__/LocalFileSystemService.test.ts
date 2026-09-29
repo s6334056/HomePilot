@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { strFromU8, unzipSync } from 'fflate';
 import { LocalFileSystemService } from '../LocalFileSystemService';
 
 const STORAGE_KEY = 'homepilot.localFileSystem';
@@ -261,5 +262,134 @@ describe('LocalFileSystemService 容量超過', () => {
 
     await expect(service.writeFile('/ok.txt', 'after')).rejects.toThrow();
     expect(store.get(STORAGE_KEY)).toContain('before');
+  });
+});
+
+describe('LocalFileSystemService downloadItems', () => {
+  async function blobBytes(blob: Blob | undefined): Promise<Uint8Array> {
+    expect(blob).toBeInstanceOf(Blob);
+    return new Uint8Array(await blob!.arrayBuffer());
+  }
+
+  async function unzip(blob: Blob | undefined): Promise<Record<string, string>> {
+    const entries = unzipSync(await blobBytes(blob));
+    const out: Record<string, string> = {};
+    for (const [name, data] of Object.entries(entries)) {
+      out[name] = strFromU8(data);
+    }
+    return out;
+  }
+
+  async function seedDownloadFixture(): Promise<void> {
+    await service.createFolder('/', 'docs');
+    await service.writeFile('/docs/a.txt', 'a-body');
+    await service.writeFile('/docs/b.txt', 'b-body');
+    await service.createFolder('/docs', 'sub');
+    await service.writeFile('/docs/sub/c.txt', 'c-body');
+  }
+
+  it('returns a single file as a Blob with its MIME type and no url', async () => {
+    await service.writeFile('/memo.txt', 'こんにちは世界');
+
+    const result = await service.downloadItems(['/memo.txt'], false);
+
+    expect(result.url).toBeUndefined();
+    expect(result.blob).toBeInstanceOf(Blob);
+    expect(result.blob!.type).toBe('text/plain');
+    expect(result.blob!.size).toBe(new TextEncoder().encode('こんにちは世界').length);
+    expect(strFromU8(await blobBytes(result.blob))).toBe('こんにちは世界');
+  });
+
+  it('falls back to application/octet-stream when the MIME type is unknown', async () => {
+    await service.writeFile('/data.unknown-ext', 'binary-ish');
+
+    const result = await service.downloadItems(['/data.unknown-ext'], false);
+
+    expect(result.blob!.type).toBe('application/octet-stream');
+  });
+
+  it('zips a single folder and keeps the folder structure', async () => {
+    await seedDownloadFixture();
+
+    const result = await service.downloadItems(['/docs'], true);
+
+    expect(result.url).toBeUndefined();
+    expect(result.blob).toBeInstanceOf(Blob);
+    expect(result.blob!.type).toBe('application/zip');
+    expect(await unzip(result.blob)).toEqual({
+      'docs/': '',
+      'docs/a.txt': 'a-body',
+      'docs/b.txt': 'b-body',
+      'docs/sub/': '',
+      'docs/sub/c.txt': 'c-body',
+    });
+  });
+
+  it('zips multiple selected files at the archive root', async () => {
+    await service.writeFile('/a.txt', 'a');
+    await service.writeFile('/b.txt', 'b');
+
+    const result = await service.downloadItems(['/a.txt', '/b.txt'], false);
+
+    expect(result.blob!.type).toBe('application/zip');
+    expect(await unzip(result.blob)).toEqual({ 'a.txt': 'a', 'b.txt': 'b' });
+  });
+
+  it('zips a mixed file + folder selection', async () => {
+    await service.writeFile('/a.txt', 'a');
+    await seedDownloadFixture();
+
+    const result = await service.downloadItems(['/a.txt', '/docs'], true);
+
+    expect(result.blob!.type).toBe('application/zip');
+    expect(await unzip(result.blob)).toEqual({
+      'a.txt': 'a',
+      'docs/': '',
+      'docs/a.txt': 'a-body',
+      'docs/b.txt': 'b-body',
+      'docs/sub/': '',
+      'docs/sub/c.txt': 'c-body',
+    });
+  });
+
+  it('zips an empty folder as a directory entry', async () => {
+    await service.createFolder('/', 'empty');
+
+    const result = await service.downloadItems(['/empty'], true);
+
+    expect(result.blob!.type).toBe('application/zip');
+    expect(await unzip(result.blob)).toEqual({ 'empty/': '' });
+  });
+
+  it('zips a folder even when the caller forgets to flag hasDirectory', async () => {
+    await service.createFolder('/', 'docs');
+    await service.writeFile('/docs/a.txt', 'a');
+
+    const result = await service.downloadItems(['/docs'], false);
+
+    expect(result.blob!.type).toBe('application/zip');
+    expect(await unzip(result.blob)).toEqual({ 'docs/': '', 'docs/a.txt': 'a' });
+  });
+
+  it('rejects a path that does not exist', async () => {
+    await expect(service.downloadItems(['/missing.txt'], false)).rejects.toThrow(
+      'File not found: /missing.txt',
+    );
+  });
+
+  it('rejects a multi selection when one of the paths does not exist', async () => {
+    await service.writeFile('/a.txt', 'a');
+
+    await expect(service.downloadItems(['/a.txt', '/nope.txt'], false)).rejects.toThrow(
+      'File not found: /nope.txt',
+    );
+  });
+
+  it('rejects an empty selection', async () => {
+    await expect(service.downloadItems([], false)).rejects.toThrow('No items to download.');
+  });
+
+  it('has no HTTP download url', () => {
+    expect(service.getDownloadUrl('/memo.txt')).toBeNull();
   });
 });

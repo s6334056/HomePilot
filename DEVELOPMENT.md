@@ -2042,8 +2042,15 @@ There is no IndexedDB anywhere in the project. A file entry carries its content 
 - **A corrupt or unrecognized payload resets to an empty root only.** `isEntries()` is
   strict, so a partially written value will not half-load.
 - **Text only.** `readFile` returns `''` for content-less entries and uploads go through
-  `File.text()`. `getDownloadUrl` and `downloadItems` are stubs returning `null` / `{}`.
-  If you implement downloads here, remember there is no binary to download.
+  `File.text()`. There is no binary to download: `getDownloadUrl` stays `null` and
+  `downloadItems` builds everything in the browser.
+- **Downloads mirror the Gateway contract without the network.** A single file is
+  returned as a Blob carrying the entry's MIME type (falling back to
+  `application/octet-stream`); a folder, a multi-selection, or a file + folder
+  selection is returned as a `fflate`-generated ZIP whose entries are named after
+  the basename of each selected path, with folder contents kept below that name.
+  Because a `blob:` URL carries no filename, `App.handleDownloadForPaths` sets
+  `a.download` before clicking.
 - **MIME is a fixed 8-entry extension table.** Unknown extensions get `undefined`.
 
 ### Reading the size back out
@@ -4448,9 +4455,14 @@ value:  a flat JSON map keyed by absolute '/' separated path
 - **壊れた、または認識できないpayloadは、空のrootへリセットするだけ。**
   `isEntries()` は厳格なので、一部だけ書き込まれた値は中途半端に読み込まれません。
 - **テキストのみ。** `readFile` は内容を持たないエントリに対して `''` を返し、
-  uploadは `File.text()` を通します。`getDownloadUrl` と `downloadItems` は
-  `null` / `{}` を返すスタブです。ここにdownloadを実装する場合も、
-  ダウンロードすべきバイナリは存在しないことを覚えておいてください。
+  uploadは `File.text()` を通します。ダウンロードすべきバイナリは存在しません。
+  `getDownloadUrl` は `null` のままで、`downloadItems` がブラウザ内で組み立てます。
+- **downloadはGatewayと同じ契約だがネットワークを使わない。** 単一ファイルは
+  エントリのMIME typeを持つBlob（取得できない場合は `application/octet-stream`）を、
+  フォルダ・複数選択・ファイル＋フォルダは `fflate` で生成したZIPを返します。
+  ZIP内のエントリ名は選択したパスのbasenameで、フォルダの中身はその名前配下に
+  維持されます。`blob:` URLにはファイル名が無いため、`App.handleDownloadForPaths`
+  がクリック前に `a.download` を設定します。
 - **MIMEは8項目の拡張子テーブルの固定です。** 未知の拡張子は `undefined` になります。
 
 ### 使用量を取り出す
