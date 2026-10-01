@@ -1933,3 +1933,9 @@ HomePilotは個人利用を前提とした実験的なシステムであるた�
 - [`GETTING_STARTED.md`](GETTING_STARTED.md) — 初期状態のPCから動くHomePilotまでの最短手順
 - [`SETUP.md`](SETUP.md) — 環境構築・起動・動作確認・デプロイ
 - [`DEVELOPMENT.md`](DEVELOPMENT.md) — 開発経緯・設計判断・AI支援開発の方法
+
+## License
+
+HomePilot is licensed under the MIT License.
+
+See the [LICENSE](LICENSE) file for the full license text.

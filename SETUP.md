@@ -127,6 +127,38 @@ HomePilot/
 └── tools/
 ```
 
+### About `tools/cloudflared`
+
+HomePilot has a configuration that uses Cloudflare Tunnel to provide external access to the PWA.
+
+`cloudflared.exe` is not included in the HomePilot repository. If you need it, download it yourself from the official Cloudflare distribution source.
+
+#### Installation on Windows
+
+1. Open the official Cloudflare download page.
+
+   https://developers.cloudflare.com/tunnel/downloads/
+
+2. Download `cloudflared` for Windows.
+
+   For 64-bit Windows, use the Windows 64-bit version.
+
+3. Rename the downloaded executable to `cloudflared.exe`.
+
+4. Place it in the following location in the HomePilot repository.
+
+   `tools/cloudflared.exe`
+
+5. Run the following command from Command Prompt to verify that it starts correctly.
+
+   ```bat
+   tools\cloudflared.exe --version
+   ```
+
+The official Windows version of `cloudflared` does not update automatically, so download the latest version from the official distribution source as needed.
+
+> `cloudflared.exe` is third-party software provided by Cloudflare. It is not included in the HomePilot repository; users are expected to obtain it themselves from the official Cloudflare distribution source.
+
 ---
 
 ## 4. Recommended Directory Layout
@@ -1679,6 +1711,38 @@ HomePilot/
 ├── speech-worker/
 └── tools/
 ```
+
+### tools/cloudflaredについて
+
+HomePilotでは、外部からPWAへアクセスするためにCloudflare Tunnelを使用する構成があります。
+
+`cloudflared.exe` はHomePilotリポジトリには含めていません。必要な場合は、Cloudflare公式の配布元から各自ダウンロードしてください。
+
+#### Windowsへのインストール
+
+1. Cloudflare公式のダウンロードページを開く。
+
+   https://developers.cloudflare.com/tunnel/downloads/
+
+2. Windows用の `cloudflared` をダウンロードする。
+
+   64-bit Windowsの場合は、Windows 64-bit版を使用します。
+
+3. ダウンロードした実行ファイルを `cloudflared.exe` にリネームする。
+
+4. HomePilotリポジトリの以下の場所に配置する。
+
+   `tools/cloudflared.exe`
+
+5. コマンドプロンプトから以下を実行し、正常に起動できることを確認する。
+
+   ```bat
+   tools\cloudflared.exe --version
+   ```
+
+Cloudflare公式のWindows版は自動更新されないため、必要に応じて公式配布元から最新版を取得してください。
+
+> `cloudflared.exe` はCloudflareが提供する外部ソフトウェアです。HomePilotリポジトリには同梱せず、利用者自身が公式配布元から取得する方式としています。
 
 ---
 
