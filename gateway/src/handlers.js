@@ -21,6 +21,43 @@ function ts() {
   return new Date().toISOString().slice(11, 23);
 }
 
+/**
+ * Builds a `Content-Disposition` header value for a download.
+ *
+ * HTTP header field values are restricted to ASCII; putting a Japanese,
+ * accented or otherwise non-ASCII filename straight into `filename="..."`
+ * makes Node throw `ERR_INVALID_CHAR` (the failure reported for
+ * `深呼吸の方法_ストレス対策まとめ.md`). RFC 6266 defines `filename*` with
+ * percent-encoded UTF-8 for exactly this case, while `filename=` keeps a
+ * plain ASCII fallback for older user agents.
+ *
+ * The fallback name is derived from the original by keeping only characters
+ * that are safe inside a quoted-string header value (`A-Z a-z 0-9 - _ .`),
+ * so the header itself never becomes malformed even when the real name
+ * cannot be expressed in ASCII. `filename*` always carries the real name.
+ */
+export function buildContentDisposition(filename) {
+  if (typeof filename !== 'string' || filename.length === 0) {
+    filename = 'download';
+  }
+
+  // Characters that must not appear unescaped inside a quoted-string.
+  const sanitized = filename.replace(/[\\"]/g, '_');
+  const isAscii = /^[\x00-\x7f]+$/.test(sanitized);
+
+  if (isAscii) {
+    return `attachment; filename="${sanitized}"`;
+  }
+
+  // Build an ASCII-only fallback for `filename=`. Keep only characters that
+  // are safe inside an HTTP quoted-string: alphanumerics, `-`, `_`, `.`.
+  // Everything else (Japanese, accents, emoji, spaces, `#`, `?`, `&`, …)
+  // is replaced with `_` so the header value stays ASCII-clean.
+  const asciiFallback = sanitized.replace(/[^A-Za-z0-9.\-]/g, '_');
+  const encoded = encodeURIComponent(sanitized);
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+}
+
 export function json(response, statusCode, data) {
   response.writeHead(statusCode, {
     ...CORS_HEADERS,
@@ -834,7 +871,7 @@ export async function handleDownloadGet(request, response, url) {
   response.writeHead(200, {
     ...CORS_HEADERS,
     'Content-Type': 'application/octet-stream',
-    'Content-Disposition': `attachment; filename="${filename}"`,
+    'Content-Disposition': buildContentDisposition(filename),
     'Content-Length': stats.size,
   });
 
@@ -919,7 +956,7 @@ export async function handleDownloadPost(request, response) {
   response.writeHead(200, {
     ...CORS_HEADERS,
     'Content-Type': 'application/zip',
-    'Content-Disposition': `attachment; filename="${filename}"`,
+    'Content-Disposition': buildContentDisposition(filename),
   });
 
   archive.pipe(response);
